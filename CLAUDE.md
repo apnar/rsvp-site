@@ -36,10 +36,11 @@ before 7:30 never gets its on/off email. That is why `DEFAULT_START_TIME` in
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
 | D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0009 applied |
 | R2 | `rsvp-site-permits` |
-| Secrets set | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET` |
-| Secrets not yet set | `BREVO_API_KEY`, so production logs mail instead of sending it |
-| GitHub | `apnar/rsvp-site`, public; CI `CLOUDFLARE_API_TOKEN` not yet set, so the deploy job skips |
-| Sender | `info@rsvp.botch.com`, in this site's own Brevo account, which is not pickup-bball's |
+| Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
+| GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
+| Sender | `"RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
+| Brevo webhook | id 2217340, posting to `https://rsvp.botch.com/api/brevo/webhook` |
+| Replies | Cloudflare Email Routing on the `rsvp.botch.com` subdomain; `info@` forwards to `jlukens@fastmail.com`, the inbox `jlukens@botch.com` itself forwards to |
 
 The Cloudflare account (`b38725df...`) is shared with pickup-bball and other
 sites. Everything else is separate. Brevo applies blocklists and webhooks
@@ -48,47 +49,15 @@ silence the other.
 
 Private local files in `~/.config/rsvp-site/` (mode 600, never commit or
 print them): `brevo-webhook-secret` (the value set on the Worker),
-`admin-link` (the first admin's sign-in link), and, once the user provides
-them, `brevo-key` and possibly `cf-dns-token`. Read them into commands with
-`$(cat ...)` and never echo them.
+`admin-link` (the first admin's sign-in link) and `brevo-key`. Read them into
+commands with `$(cat ...)` and never echo them. A secret the user types goes
+in from a real terminal or a web UI: the `!` prefix has no TTY, so a hidden
+prompt there reads nothing.
+
+The wrangler OAuth login can't read or write DNS records in the botch.com
+zone, so DNS changes go through the user in the dashboard.
 
 The first admin is `jlukens@botch.com`, inserted by SQL into the empty D1.
-
-### Setup still to do
-
-1. **Brevo** (needs `~/.config/rsvp-site/brevo-key` from the user's new
-   account):
-   - Set the key on the Worker:
-     `tr -d '\n' < ~/.config/rsvp-site/brevo-key | wrangler secret put BREVO_API_KEY`.
-   - Register the domain: `POST https://api.brevo.com/v3/senders/domains`
-     with `{"name":"rsvp.botch.com"}`. The response lists the DNS records.
-   - Add those DNS records (step 2), then
-     `PUT /v3/senders/domains/rsvp.botch.com/authenticate`.
-   - Create the sender `info@rsvp.botch.com`, named "RSVP".
-   - Register the webhook with the curl in README "Email", using URL
-     `https://rsvp.botch.com/api/brevo/webhook` and the token from
-     `~/.config/rsvp-site/brevo-webhook-secret`.
-2. **DNS** in the botch.com zone:
-   - Replace the existing TXT `brevo-code:392afc66...` on `rsvp.botch.com`.
-     It belongs to pickup-bball's Brevo account (moco-pickup.com has the same
-     code).
-   - Add the new account's brevo-code, the DKIM records
-     (`brevo1/brevo2._domainkey.rsvp`) and `_dmarc.rsvp` (`p=none`).
-   - The wrangler OAuth login has only `zone (read)`, so use a DNS-edit token
-     in `~/.config/rsvp-site/cf-dns-token` if there is one. Otherwise give
-     the user the exact records to add in the dashboard.
-3. **Replies:** Cloudflare Email Routing for the `rsvp.botch.com` subdomain,
-   forwarding `info@` to `jlukens@botch.com`. The wrangler login has
-   `email_routing (write)`.
-4. **CI:** the user runs
-   `gh secret set CLOUDFLARE_API_TOKEN -R apnar/rsvp-site` with a token from
-   the "Edit Cloudflare Workers" template plus D1 Edit and R2 Storage Edit.
-   Then confirm that a push to `main` runs the deploy job green.
-5. **Verify:**
-   - Brevo shows the domain authenticated.
-   - "Send to me first" on `/admin/email` arrives from `info@rsvp.botch.com`
-     with DKIM and DMARC pass.
-   - A reply reaches `jlukens@botch.com`.
 
 ### Don't cross the streams
 
