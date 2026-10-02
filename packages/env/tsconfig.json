@@ -1,0 +1,3 @@
+{
+	"extends": "@rsvp-site/config/tsconfig.base.json"
+}

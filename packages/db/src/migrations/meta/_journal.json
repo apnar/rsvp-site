@@ -1,0 +1,76 @@
+{
+	"version": "7",
+	"dialect": "sqlite",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "6",
+			"when": 1788807605374,
+			"tag": "0000_init",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "6",
+			"when": 1788808839565,
+			"tag": "0001_rsvp",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "6",
+			"when": 1788811594969,
+			"tag": "0002_games_permits",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "6",
+			"when": 1788817779662,
+			"tag": "0003_email",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "6",
+			"when": 1788990309891,
+			"tag": "0004_link_token",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "6",
+			"when": 1789004209569,
+			"tag": "0005_unify_people",
+			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "6",
+			"when": 1789006359146,
+			"tag": "0006_gyms",
+			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "6",
+			"when": 1789039837083,
+			"tag": "0007_rsvp_cycle",
+			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "6",
+			"when": 1789922103047,
+			"tag": "0008_contributions",
+			"breakpoints": true
+		},
+		{
+			"idx": 9,
+			"version": "6",
+			"when": 1790081953344,
+			"tag": "0009_game_invite",
+			"breakpoints": true
+		}
+	]
+}

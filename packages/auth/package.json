@@ -1,0 +1,24 @@
+{
+	"name": "@rsvp-site/auth",
+	"type": "module",
+	"exports": {
+		".": {
+			"default": "./src/index.ts"
+		},
+		"./*": {
+			"default": "./src/*.ts"
+		}
+	},
+	"scripts": {},
+	"dependencies": {
+		"@rsvp-site/db": "workspace:*",
+		"@rsvp-site/email": "workspace:*",
+		"@rsvp-site/env": "workspace:*",
+		"better-auth": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@rsvp-site/config": "workspace:*",
+		"typescript": "catalog:"
+	}
+}

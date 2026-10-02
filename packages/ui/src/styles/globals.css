@@ -1,0 +1,232 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@source "../../../apps/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx}";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Industry design system tokens (from the Claude Design export).
+ * Steel-blue on a light technical ground, Barlow Condensed headings over
+ * Barlow, square corners, hairline borders. Colors are exposed as Tailwind
+ * utilities: bg-ground, text-ink, border-divider, bg-steel, text-steel-700,
+ * bg-neutral-200, font-heading, shadow-md ...
+ */
+@theme static {
+	--color-ground: #f2f2f3;
+	--color-surface: #e9e9ea;
+	--color-ink: #1d1f20;
+	--color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+
+	--color-steel: #5980a6;
+	--color-steel-100: #eef6ff;
+	--color-steel-200: #d6ebff;
+	--color-steel-300: #b5d9fd;
+	--color-steel-400: #94bce3;
+	--color-steel-500: #749dc4;
+	--color-steel-600: #597ea3;
+	--color-steel-700: #416180;
+	--color-steel-800: #2c455d;
+	--color-steel-900: #1d2d3d;
+
+	--color-neutral-100: #f5f5f8;
+	--color-neutral-200: #e7e7ea;
+	--color-neutral-300: #d4d4d7;
+	--color-neutral-400: #b7b7ba;
+	--color-neutral-500: #98989b;
+	--color-neutral-600: #7a7a7d;
+	--color-neutral-700: #5d5d60;
+	--color-neutral-800: #424244;
+	--color-neutral-900: #2b2b2d;
+
+	--font-sans: "Barlow", system-ui, sans-serif;
+	--font-heading: "Barlow Condensed", system-ui, sans-serif;
+
+	--shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+	--shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+	--shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+}
+
+/* shadcn role variables, mapped onto the Industry tokens so the shared
+   primitives (dropdown, toasts, inputs) pick up the same palette. */
+:root {
+	--background: var(--color-ground);
+	--foreground: var(--color-ink);
+	--card: var(--color-ground);
+	--card-foreground: var(--color-ink);
+	--popover: var(--color-ground);
+	--popover-foreground: var(--color-ink);
+	--primary: var(--color-steel);
+	--primary-foreground: var(--color-ground);
+	--secondary: var(--color-surface);
+	--secondary-foreground: var(--color-ink);
+	--muted: var(--color-surface);
+	--muted-foreground: var(--color-neutral-700);
+	--accent: var(--color-steel-100);
+	--accent-foreground: var(--color-steel-800);
+	--destructive: oklch(0.58 0.22 27);
+	--border: var(--color-divider);
+	--input: var(--color-divider);
+	--ring: var(--color-steel);
+	--chart-1: var(--color-steel-300);
+	--chart-2: var(--color-steel-500);
+	--chart-3: var(--color-steel-600);
+	--chart-4: var(--color-steel-700);
+	--chart-5: var(--color-steel-900);
+	--radius: 0px;
+	--sidebar: var(--color-surface);
+	--sidebar-foreground: var(--color-ink);
+	--sidebar-primary: var(--color-steel);
+	--sidebar-primary-foreground: var(--color-ground);
+	--sidebar-accent: var(--color-steel-100);
+	--sidebar-accent-foreground: var(--color-steel-800);
+	--sidebar-border: var(--color-divider);
+	--sidebar-ring: var(--color-steel);
+}
+
+@theme inline {
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--radius-sm: 0px;
+	--radius-md: 0px;
+	--radius-lg: 0px;
+	--radius-xl: 0px;
+	--radius-2xl: 0px;
+	--radius-3xl: 0px;
+	--radius-4xl: 0px;
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	html {
+		@apply bg-ground font-sans text-ink;
+		color-scheme: light;
+	}
+	body {
+		@apply bg-ground font-sans text-[15px] text-ink leading-[1.55];
+		text-wrap: pretty;
+	}
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		@apply font-heading font-semibold;
+	}
+	a {
+		@apply text-steel-700 underline-offset-[3px] hover:text-steel-900;
+	}
+	:focus {
+		outline: none;
+	}
+	:focus-visible {
+		outline: 2px solid var(--color-steel);
+		outline-offset: 2px;
+	}
+	::selection {
+		background: color-mix(in srgb, var(--color-steel) 30%, transparent);
+	}
+}
+
+@layer components {
+	/* The wireframe frame every card, plate and primary button wears:
+	   square, hairline-bordered, with "+" registration marks at the corners.
+	   Use the <Blueprint> / <Corners> components rather than hand-writing it. */
+	.blueprint {
+		position: relative;
+		border: 1px solid var(--color-divider);
+		border-radius: 0;
+	}
+	.blueprint > .corner {
+		position: absolute;
+		width: 11px;
+		height: 11px;
+		pointer-events: none;
+		color: color-mix(in srgb, var(--color-ink) 55%, transparent);
+	}
+	.blueprint > .corner::before,
+	.blueprint > .corner::after {
+		content: "";
+		position: absolute;
+		background: currentColor;
+	}
+	.blueprint > .corner::before {
+		left: 5px;
+		top: 0;
+		width: 1px;
+		height: 100%;
+	}
+	.blueprint > .corner::after {
+		top: 5px;
+		left: 0;
+		width: 100%;
+		height: 1px;
+	}
+	.blueprint > .corner.tl {
+		top: -6px;
+		left: -6px;
+	}
+	.blueprint > .corner.tr {
+		top: -6px;
+		right: -6px;
+	}
+	.blueprint > .corner.bl {
+		bottom: -6px;
+		left: -6px;
+	}
+	.blueprint > .corner.br {
+		bottom: -6px;
+		right: -6px;
+	}
+
+	/* Provisional. Blueprint hatching reads as drawn but not built, which is
+	   exactly what a maybe is. */
+	.hatch {
+		background-image: repeating-linear-gradient(
+			45deg,
+			color-mix(in srgb, var(--color-steel) 30%, transparent) 0 2px,
+			color-mix(in srgb, var(--color-steel) 8%, transparent) 2px 6px
+		);
+	}
+
+	/* Small uppercase label used for numbered section headers and metadata. */
+	.kicker {
+		@apply font-semibold text-[13px] uppercase tracking-[0.08em];
+	}
+	.tnum {
+		font-feature-settings: "tnum" 1;
+	}
+}

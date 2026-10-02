@@ -1,0 +1,28 @@
+{
+	"name": "@rsvp-site/db",
+	"type": "module",
+	"exports": {
+		".": {
+			"default": "./src/index.ts"
+		},
+		"./*": {
+			"default": "./src/*.ts"
+		}
+	},
+	"scripts": {
+		"db:generate": "drizzle-kit generate",
+		"test": "vitest run",
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@rsvp-site/env": "workspace:*",
+		"drizzle-orm": "^0.45.2",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@rsvp-site/config": "workspace:*",
+		"drizzle-kit": "^0.31.10",
+		"typescript": "catalog:",
+		"vitest": "^4.1.4"
+	}
+}

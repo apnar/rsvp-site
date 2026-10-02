@@ -1,0 +1,38 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"ui": "tui",
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", ".dev.vars", "wrangler.jsonc"],
+			"outputs": ["dist/**"]
+		},
+		"check-types": {
+			"dependsOn": ["^check-types"]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true
+		},
+		"db:generate": {
+			"cache": false,
+			"interactive": true
+		},
+		"db:migrate:local": {
+			"cache": false,
+			"interactive": true
+		},
+		"db:migrate:remote": {
+			"cache": false,
+			"interactive": true
+		},
+		"deploy": {
+			"dependsOn": ["build"],
+			"cache": false,
+			"interactive": true
+		},
+		"test": {
+			"dependsOn": ["^build"]
+		}
+	}
+}

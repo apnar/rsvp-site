@@ -1,0 +1,45 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "rsvp-site",
+	"account_id": "b38725df47a7614f19cefb7a2b466711",
+	"main": "./src/server.ts",
+	"compatibility_date": "2026-09-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"workers_dev": true,
+	"preview_urls": false,
+	// A custom domain on the botch.com zone. Wrangler creates the DNS record
+	// and certificate on deploy. The Worker redirects every other host
+	// (workers.dev) to BETTER_AUTH_URL; see src/server.ts.
+	"routes": [{ "pattern": "rsvp.botch.com", "custom_domain": true }],
+	"observability": {
+		"enabled": true
+	},
+	// Every half hour, because the verdict falls at 7:30. Nothing else about
+	// the schedule lives here: the handler in src/server.ts derives every
+	// moment from the venue's clock, so this only has to be frequent enough,
+	// never correct, and daylight saving never touches it.
+	"triggers": {
+		"crons": ["0,30 * * * *"]
+	},
+	"vars": {
+		// Canonical public origin of the site. Better Auth uses it for cookies
+		// and callbacks, and src/server.ts redirects other hosts to it.
+		"BETTER_AUTH_URL": "https://rsvp.botch.com"
+	},
+	"r2_buckets": [
+		{
+			"binding": "PERMITS",
+			// Create once per account: `pnpm exec wrangler r2 bucket create rsvp-site-permits`
+			"bucket_name": "rsvp-site-permits"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "rsvp-site-db",
+			// Run `pnpm exec wrangler d1 create rsvp-site-db` from apps/web and paste the id here.
+			"database_id": "d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3",
+			"migrations_dir": "../../packages/db/src/migrations"
+		}
+	]
+}

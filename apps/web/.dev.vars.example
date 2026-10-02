@@ -1,0 +1,10 @@
+# Copy to .dev.vars for local development (wrangler and vite dev read it).
+# Generate a secret with: openssl rand -base64 32
+BETTER_AUTH_SECRET=replace-with-a-random-string-of-at-least-32-chars
+BETTER_AUTH_URL=http://localhost:3001
+# Brevo v3 API key (Account > SMTP & API > API keys). Leave empty to log
+# emails to the console instead of sending them.
+BREVO_API_KEY=
+# Bearer token for the Brevo transactional webhook (/api/brevo/webhook).
+# See README "Email". Leave empty locally unless you are testing the webhook.
+BREVO_WEBHOOK_SECRET=

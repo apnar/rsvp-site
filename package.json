@@ -1,0 +1,32 @@
+{
+	"name": "rsvp-site",
+	"private": true,
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "turbo run dev",
+		"build": "turbo run build",
+		"check-types": "turbo run check-types",
+		"check": "biome check --write .",
+		"db:generate": "turbo run db:generate -F @rsvp-site/db --",
+		"db:migrate:local": "turbo run db:migrate:local -F web --",
+		"db:migrate:remote": "turbo run db:migrate:remote -F web --",
+		"deploy": "turbo run deploy -F web --",
+		"test": "turbo run test"
+	},
+	"dependencies": {
+		"@rsvp-site/env": "workspace:*",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.11",
+		"@rsvp-site/config": "workspace:*",
+		"@types/node": "catalog:",
+		"turbo": "^2.10.12",
+		"typescript": "catalog:"
+	},
+	"packageManager": "pnpm@10.32.1"
+}

@@ -1,0 +1,24 @@
+{
+	"name": "@rsvp-site/email",
+	"type": "module",
+	"exports": {
+		".": {
+			"default": "./src/index.ts"
+		},
+		"./*": {
+			"default": "./src/*.ts"
+		}
+	},
+	"scripts": {
+		"test": "vitest run",
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@rsvp-site/env": "workspace:*"
+	},
+	"devDependencies": {
+		"@rsvp-site/config": "workspace:*",
+		"typescript": "catalog:",
+		"vitest": "^4.1.4"
+	}
+}
