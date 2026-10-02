@@ -2,6 +2,104 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## What this is, and where it stands
+
+rsvp-site is meant to become a party/event invitation and RSVP site, roughly
+in the spirit of Evite, at https://rsvp.botch.com. It was copied on 2026-10-02
+from pickup-bball (`~/src/pickup-bball`, github `apnar/pickup-bball`), the app
+behind a weekly basketball run. The history starts fresh; pickup-bball's
+`git log` is still the design record for the inherited code.
+
+**Only the words have changed so far.** Visible copy says event, venue,
+guest, host and plus-one (game, gym, player, Sean and guest before). The
+model underneath is still the inherited one: one standing guest list
+(`user`), recurring `game`s at `gym`s, the `CONFIRM_AT` / `PLAY_AT`
+thresholds and fixed-clock stages in `cycle.ts`, permits, and gym money.
+Identifiers, tables, routes (`/rsvp/$gameId`, `/admin/gyms`) and the
+migrations are unrenamed on purpose, so the schema is the one the code was
+tested against. The architecture notes below describe that model as it is.
+**The next piece of work** is to reshape it into per-event invitations:
+events with their own guest lists, hosts and plus-ones, and an email
+schedule tied to each event's start. That means dropping or reworking the
+thresholds, permits and contributions, and renaming game/gym in the schema.
+Plan it as its own change.
+
+A known wrinkle: the cycle still calls its verdict at a fixed 7:30 PM on the
+day. A verdict due after the start is resolved silently, so an event starting
+before 7:30 never gets its on/off email. That is why `DEFAULT_START_TIME` in
+`apps/web/src/content/run.ts` is 20:00, and it goes away with the reshape.
+
+### Infrastructure
+
+| What | Value |
+|---|---|
+| Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0009 applied |
+| R2 | `rsvp-site-permits` |
+| Secrets set | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET` |
+| Secrets not yet set | `BREVO_API_KEY`, so production logs mail instead of sending it |
+| GitHub | `apnar/rsvp-site`, public; CI `CLOUDFLARE_API_TOKEN` not yet set, so the deploy job skips |
+| Sender | `info@rsvp.botch.com`, in this site's own Brevo account, which is not pickup-bball's |
+
+The Cloudflare account (`b38725df...`) is shared with pickup-bball and other
+sites. Everything else is separate. Brevo applies blocklists and webhooks
+across a whole account, so sharing one would let an unsubscribe on one site
+silence the other.
+
+Private local files in `~/.config/rsvp-site/` (mode 600, never commit or
+print them): `brevo-webhook-secret` (the value set on the Worker),
+`admin-link` (the first admin's sign-in link), and, once the user provides
+them, `brevo-key` and possibly `cf-dns-token`. Read them into commands with
+`$(cat ...)` and never echo them.
+
+The first admin is `jlukens@botch.com`, inserted by SQL into the empty D1.
+
+### Setup still to do
+
+1. **Brevo** (needs `~/.config/rsvp-site/brevo-key` from the user's new
+   account):
+   - Set the key on the Worker:
+     `tr -d '\n' < ~/.config/rsvp-site/brevo-key | wrangler secret put BREVO_API_KEY`.
+   - Register the domain: `POST https://api.brevo.com/v3/senders/domains`
+     with `{"name":"rsvp.botch.com"}`. The response lists the DNS records.
+   - Add those DNS records (step 2), then
+     `PUT /v3/senders/domains/rsvp.botch.com/authenticate`.
+   - Create the sender `info@rsvp.botch.com`, named "RSVP".
+   - Register the webhook with the curl in README "Email", using URL
+     `https://rsvp.botch.com/api/brevo/webhook` and the token from
+     `~/.config/rsvp-site/brevo-webhook-secret`.
+2. **DNS** in the botch.com zone:
+   - Replace the existing TXT `brevo-code:392afc66...` on `rsvp.botch.com`.
+     It belongs to pickup-bball's Brevo account (moco-pickup.com has the same
+     code).
+   - Add the new account's brevo-code, the DKIM records
+     (`brevo1/brevo2._domainkey.rsvp`) and `_dmarc.rsvp` (`p=none`).
+   - The wrangler OAuth login has only `zone (read)`, so use a DNS-edit token
+     in `~/.config/rsvp-site/cf-dns-token` if there is one. Otherwise give
+     the user the exact records to add in the dashboard.
+3. **Replies:** Cloudflare Email Routing for the `rsvp.botch.com` subdomain,
+   forwarding `info@` to `jlukens@botch.com`. The wrangler login has
+   `email_routing (write)`.
+4. **CI:** the user runs
+   `gh secret set CLOUDFLARE_API_TOKEN -R apnar/rsvp-site` with a token from
+   the "Edit Cloudflare Workers" template plus D1 Edit and R2 Storage Edit.
+   Then confirm that a push to `main` runs the deploy job green.
+5. **Verify:**
+   - Brevo shows the domain authenticated.
+   - "Send to me first" on `/admin/email` arrives from `info@rsvp.botch.com`
+     with DKIM and DMARC pass.
+   - A reply reaches `jlukens@botch.com`.
+
+### Don't cross the streams
+
+- The Brevo MCP server registered on this machine belongs to
+  **pickup-bball's** Brevo account. Never use it here. Use curl against
+  `api.brevo.com` with `-H "api-key: $(cat ~/.config/rsvp-site/brevo-key)"`.
+- Before any `wrangler ... --remote` command, run it from `~/src/rsvp-site`
+  and check that `apps/web/wrangler.jsonc` says `rsvp-site` /
+  `rsvp-site-db`. The copy started out pointing at pickup-bball's production
+  D1 id.
+
 ## Commands
 
 pnpm + Turborepo. Run these from the repo root.
@@ -14,8 +112,14 @@ pnpm run check            # biome check --write .  (format + lint + organize imp
 pnpm exec biome ci .      # what CI runs; stricter than check (lints SVGs too)
 pnpm run check-types      # tsc --noEmit across the workspace
 pnpm run test             # vitest run in packages/db, packages/email, packages/api
-pnpm run deploy           # build + wrangler deploy
+pnpm run deploy           # build + wrangler deploy (needs a TTY; see below)
 ```
+
+`pnpm run deploy` and the `db:migrate:*` scripts go through turbo, which
+marks those tasks interactive and refuses them without a terminal UI (so they
+fail from Claude's shell). Run the underlying commands from `apps/web`:
+`pnpm run deploy` there (`vite build && wrangler deploy`), and
+`pnpm exec wrangler d1 migrations apply DB --local` or `--remote`.
 
 Typecheck needs a build first: `apps/web/src/routeTree.gen.ts` is generated by the
 TanStack Start Vite plugin and gitignored, so on a fresh clone run
@@ -53,19 +157,11 @@ curl "http://localhost:3001/cdn-cgi/local/scheduled?cron=0+*+*+*+*"
 Local setup needs `apps/web/.dev.vars` (copy `.dev.vars.example`, set a random
 `BETTER_AUTH_SECRET`). Leave `BREVO_API_KEY` unset locally: the mailer then prints
 each email to the dev console with the placeholders filled in from the first
-recipient, so the sign-in link in the log is clickable. If it *is* set (the
-maintainer's machine has the real key, and the local D1 holds the real
-roster), strip it and restart before exercising any send; check that
-`mail.status` reports `dryRun: true` first. A local "test" send is otherwise
-a real one to everybody.
-
-This repo was copied from pickup-bball, and the two sites share a Cloudflare
-account but **not** a Brevo account. The Brevo MCP server registered on the
-maintainer's machine points at pickup-bball's account. Never use it for
-anything here: use curl against `api.brevo.com` with this site's
-`BREVO_API_KEY`. The same caution applies to `wrangler`: check that
-`apps/web/wrangler.jsonc` says `rsvp-site` / `rsvp-site-db` before any
-`--remote` command, and run it from this checkout.
+recipient, so the sign-in link in the log is clickable.
+Here `.dev.vars` was created without one, and the local D1 holds no real
+people. If a key is ever added, strip it and restart before exercising any
+send, and check first that `mail.status` reports `dryRun: true`. Otherwise a
+local "test" send is a real one to everybody on the list.
 
 ## Architecture
 
