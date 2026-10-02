@@ -1,11 +1,10 @@
-import { Blueprint } from "@rsvp-site/ui/components/blueprint";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
-import { Label } from "@rsvp-site/ui/components/label";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Field } from "@/components/controls";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -33,21 +32,18 @@ function ForgotPasswordPage() {
 	};
 
 	return (
-		<section className="pt-18 pb-15">
-			<Blueprint className="mx-auto w-full max-w-md p-6">
-				<span className="kicker mb-3 block text-steel-700">Password</span>
-				<h1 className="mb-6 font-heading text-[32px] uppercase leading-9 tracking-[0.02em]">
-					Forgot it. Happens.
-				</h1>
+		<div className="mx-auto w-full max-w-[560px] px-[clamp(16px,4vw,40px)] pt-[clamp(12px,3vw,40px)] pb-20">
+			<div className="flex flex-col gap-5 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
+				<span className="kicker text-lime">Password</span>
+				<h1 className="m-0 text-[30px]">Forgot it. Happens.</h1>
 				{sent ? (
-					<p className="text-[15px] leading-6">
+					<p className="m-0 text-[15px] text-soft">
 						If that address is on file, a link is on its way. It works for an
-						hour. Check spam before you check with the host.
+						hour. Check spam if it doesn't show.
 					</p>
 				) : (
-					<form onSubmit={submit} className="space-y-4">
-						<div className="space-y-2">
-							<Label htmlFor="email">Email</Label>
+					<form onSubmit={submit} className="flex flex-col gap-4">
+						<Field label="Email" htmlFor="email">
 							<Input
 								id="email"
 								type="email"
@@ -56,18 +52,18 @@ function ForgotPasswordPage() {
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 							/>
-						</div>
+						</Field>
 						<Button type="submit" className="w-full" disabled={busy}>
 							{busy ? "Sending..." : "Send me a reset link"}
 						</Button>
 					</form>
 				)}
-				<div className="mt-4">
-					<Link to="/login" className="text-[13px] text-steel-700 leading-6">
+				<div>
+					<Link to="/login" className="text-[14px]">
 						Back to sign in
 					</Link>
 				</div>
-			</Blueprint>
-		</section>
+			</div>
+		</div>
 	);
 }

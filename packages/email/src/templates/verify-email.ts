@@ -13,7 +13,7 @@ export function verifyEmail(input: VerifyEmailInput): Rendered {
 			`<p style="margin:0 0 14px; font-size:16px; line-height:1.5;">${escapeHtml(input.name)}, click this so we know the address works. Nothing else to it.</p>`,
 			button("Verify my email", input.url),
 			muted(
-				`If the button is being difficult, paste this into a browser:<br><a href="${escapeHtml(input.url)}" style="color:#2f5f86; word-break:break-all;">${escapeHtml(input.url)}</a>`,
+				`If the button is being difficult, paste this into a browser:<br><a href="${escapeHtml(input.url)}" style="color:#B0236C; word-break:break-all;">${escapeHtml(input.url)}</a>`,
 			),
 			muted("Didn't sign up? Ignore this and nothing happens."),
 		].join("\n"),

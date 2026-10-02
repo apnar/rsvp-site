@@ -39,12 +39,11 @@ export function emailLink({ db }: { db: Db }) {
 						throw ctx.redirect(`${site}/login?error=link`);
 					}
 
-					// Being suspended stops the emails and the headcount, not the
-					// sign-in: getting back in is exactly how somebody comes back.
-					// Deactivated is the other story, and this endpoint has to say
-					// so itself -- it mints its own session, so the admin plugin's
-					// ban check is not the thing standing between a revoked guest
-					// and the venue address.
+					// Unsubscribing stops the email, not the sign-in. Deactivated is
+					// the other story, and this endpoint has to say so itself -- it
+					// mints its own session, so the admin plugin's ban check is not
+					// the thing standing between a revoked guest and the address of
+					// the party.
 					if (person.status === "deactivated") {
 						throw ctx.redirect(`${site}/login?error=revoked`);
 					}

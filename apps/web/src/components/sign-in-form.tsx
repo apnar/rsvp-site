@@ -1,8 +1,6 @@
 import { safeReturnPath } from "@rsvp-site/email/links";
-import { Blueprint } from "@rsvp-site/ui/components/blueprint";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
-import { Label } from "@rsvp-site/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import {
 	Link,
@@ -14,6 +12,8 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+
+import { Field } from "./controls";
 
 export default function SignInForm() {
 	const navigate = useNavigate();
@@ -54,11 +54,11 @@ export default function SignInForm() {
 	});
 
 	return (
-		<Blueprint className="mx-auto w-full max-w-md p-6">
-			<span className="kicker mb-3 block text-steel-700">Sign in</span>
-			<h1 className="mb-6 font-heading text-[32px] uppercase leading-9 tracking-[0.02em]">
-				Back for more.
-			</h1>
+		<div className="flex flex-col gap-5 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
+			<div>
+				<span className="kicker text-lime">Sign in</span>
+				<h1 className="mt-1.5 mb-0 text-[30px]">Back for more?</h1>
+			</div>
 
 			<form
 				onSubmit={(e) => {
@@ -66,27 +66,30 @@ export default function SignInForm() {
 					e.stopPropagation();
 					form.handleSubmit();
 				}}
-				className="space-y-4"
+				className="flex flex-col gap-4"
 			>
 				<div>
 					<form.Field name="email">
 						{(field) => (
-							<div className="space-y-2">
-								<Label htmlFor={field.name}>Email</Label>
+							<Field label="Email" htmlFor={field.name}>
 								<Input
 									id={field.name}
 									name={field.name}
 									type="email"
+									autoComplete="email"
 									value={field.state.value}
 									onBlur={field.handleBlur}
 									onChange={(e) => field.handleChange(e.target.value)}
 								/>
 								{field.state.meta.errors.map((error) => (
-									<p key={error?.message} className="text-destructive text-xs">
+									<p
+										key={error?.message}
+										className="m-0 text-destructive text-sm"
+									>
 										{error?.message}
 									</p>
 								))}
-							</div>
+							</Field>
 						)}
 					</form.Field>
 				</div>
@@ -94,22 +97,25 @@ export default function SignInForm() {
 				<div>
 					<form.Field name="password">
 						{(field) => (
-							<div className="space-y-2">
-								<Label htmlFor={field.name}>Password</Label>
+							<Field label="Password" htmlFor={field.name}>
 								<Input
 									id={field.name}
 									name={field.name}
 									type="password"
+									autoComplete="current-password"
 									value={field.state.value}
 									onBlur={field.handleBlur}
 									onChange={(e) => field.handleChange(e.target.value)}
 								/>
 								{field.state.meta.errors.map((error) => (
-									<p key={error?.message} className="text-destructive text-xs">
+									<p
+										key={error?.message}
+										className="m-0 text-destructive text-sm"
+									>
 										{error?.message}
 									</p>
 								))}
-							</div>
+							</Field>
 						)}
 					</form.Field>
 				</div>
@@ -126,23 +132,18 @@ export default function SignInForm() {
 							className="w-full"
 							disabled={!canSubmit || isSubmitting}
 						>
-							{isSubmitting ? "Submitting..." : "Sign In"}
+							{isSubmitting ? "Signing in..." : "Sign in"}
 						</Button>
 					)}
 				</form.Subscribe>
 			</form>
 
-			<div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-				<span className="text-[13px] text-neutral-700 leading-6">
-					No account? The host makes those.
+			<div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+				<span className="text-haze">
+					No password? Most people don't. Use the link below.
 				</span>
-				<Link
-					to="/forgot-password"
-					className="text-[13px] text-steel-700 leading-6"
-				>
-					Forgot it? Happens to the best of us.
-				</Link>
+				<Link to="/forgot-password">Forgot it?</Link>
 			</div>
-		</Blueprint>
+		</div>
 	);
 }

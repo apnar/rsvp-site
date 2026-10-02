@@ -1,4 +1,4 @@
-import { isAdmin } from "@rsvp-site/api/run";
+import { isAdmin } from "@rsvp-site/db/roles";
 import {
 	createFileRoute,
 	Link,
@@ -6,15 +6,17 @@ import {
 	redirect,
 } from "@tanstack/react-router";
 
-import PageTitle from "@/components/page-title";
+import { Page, PageHead } from "@/components/page";
 
 export const Route = createFileRoute("/_admin")({
+	// The cookie's role decides only whether to show the page; every admin
+	// procedure re-reads the role from D1.
 	beforeLoad: ({ context, location }) => {
 		if (!context.session) {
 			throw redirect({ to: "/login", search: { redirect: location.href } });
 		}
 		if (!isAdmin(context.session.user)) {
-			throw redirect({ to: "/" });
+			throw redirect({ to: "/events" });
 		}
 		return { session: context.session };
 	},
@@ -22,40 +24,24 @@ export const Route = createFileRoute("/_admin")({
 });
 
 const tabClass =
-	"kicker border-b-2 border-transparent pb-2 text-ink no-underline hover:text-steel-700 aria-[current=page]:border-steel aria-[current=page]:text-steel-700";
+	"rounded-full px-4 py-2 font-bold text-[14px] text-soft no-underline hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-night";
 
 function AdminLayout() {
 	return (
-		<section className="pt-18 pb-15">
-			<PageTitle line1="Host desk." line2="Book the venue. Send the invites." />
-			<p className="mt-7 mb-10 max-w-[60ch] text-base leading-6">
-				Events only exist once a venue is booked. Add the venue once, put the
-				date in, attach any permit, and the headcount opens on the home page.
-			</p>
-			<nav className="mb-8 flex gap-6 border-divider border-b">
-				<Link to="/admin" activeOptions={{ exact: true }} className={tabClass}>
-					Events
-				</Link>
-				<Link to="/admin/gyms" className={tabClass}>
-					Venues
-				</Link>
-				<Link to="/admin/permits" className={tabClass}>
-					Permits
-				</Link>
+		<Page className="gap-7">
+			<PageHead kicker="Admin" title="The whole site." />
+			<nav className="flex flex-wrap gap-0.5 self-start rounded-full bg-panel p-[5px]">
 				<Link to="/admin/users" className={tabClass}>
-					Users
+					People
 				</Link>
 				<Link to="/admin/email" className={tabClass}>
 					Email
 				</Link>
-				<Link to="/admin/contributions" className={tabClass}>
-					Contributions
-				</Link>
-				<Link to="/admin/cycle" className={tabClass}>
-					Cycle
+				<Link to="/events" search={{ all: true }} className={tabClass}>
+					Every event
 				</Link>
 			</nav>
 			<Outlet />
-		</section>
+		</Page>
 	);
 }

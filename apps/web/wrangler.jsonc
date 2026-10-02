@@ -14,10 +14,10 @@
 	"observability": {
 		"enabled": true
 	},
-	// Every half hour, because the verdict falls at 7:30. Nothing else about
-	// the schedule lives here: the handler in src/server.ts derives every
-	// moment from the venue's clock, so this only has to be frequent enough,
-	// never correct, and daylight saving never touches it.
+	// Every half hour. Nothing about the schedule lives here: the handler in
+	// src/server.ts asks @rsvp-site/api/schedule what each event has due, on
+	// the site's clock, so this only has to be frequent enough, never
+	// correct, and daylight saving never touches it.
 	"triggers": {
 		"crons": ["0,30 * * * *"]
 	},
@@ -28,9 +28,20 @@
 	},
 	"r2_buckets": [
 		{
-			"binding": "PERMITS",
-			// Create once per account: `pnpm exec wrangler r2 bucket create rsvp-site-permits`
-			"bucket_name": "rsvp-site-permits"
+			"binding": "MEDIA",
+			// Event cover photos. Create once per account:
+			// `pnpm exec wrangler r2 bucket create rsvp-site-media`
+			"bucket_name": "rsvp-site-media"
+		}
+	],
+	// Throttles the share-link email form by IP, so a public page cannot mail
+	// strangers in bulk. The namespace id is per account, which this site
+	// shares with others: keep it unique.
+	"ratelimits": [
+		{
+			"name": "JOIN_LIMITER",
+			"namespace_id": "4207",
+			"simple": { "limit": 5, "period": 60 }
 		}
 	],
 	"d1_databases": [

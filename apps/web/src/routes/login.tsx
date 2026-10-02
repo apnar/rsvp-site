@@ -1,7 +1,5 @@
-import { Blueprint } from "@rsvp-site/ui/components/blueprint";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
-import { Label } from "@rsvp-site/ui/components/label";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -19,7 +17,10 @@ export const Route = createFileRoute("/login")({
 	component: RouteComponent,
 });
 
-/** For guests with no password: mail them their link again. */
+/**
+ * The usual way in: every email we send signs you in, and this sends one.
+ * Says the same thing whether or not the address is on the site.
+ */
 function RequestLink() {
 	const [email, setEmail] = useState("");
 	const [asked, setAsked] = useState(false);
@@ -32,41 +33,50 @@ function RequestLink() {
 	);
 
 	return (
-		<Blueprint className="mx-auto mt-6 w-full max-w-md p-6">
-			<span className="kicker mb-3 block text-steel-700">No password?</span>
-			<p className="text-[15px] text-neutral-700 leading-6">
-				Most people never set one. Every link we email you signs you in. Lost
-				the email and we will send another.
+		<div className="flex flex-col gap-4 rounded-[28px] bg-lime p-[clamp(20px,3vw,32px)] text-night">
+			<div>
+				<span className="kicker">No password needed</span>
+				<h2 className="mt-1.5 mb-0 text-[26px]">Email me a link</h2>
+			</div>
+			<p className="m-0 text-[15px]">
+				Every invitation signs you in. Lost it? We'll send a fresh link.
 			</p>
 			{asked ? (
-				<p className="mt-4 text-[15px] leading-6">
-					If that address is on the list, a link is on its way.
+				<p className="m-0 font-bold text-[16px]">
+					If that address is on the site, a link is on its way.
 				</p>
 			) : (
 				<form
-					className="mt-4 flex flex-wrap items-end gap-3"
+					className="flex flex-wrap gap-2"
 					onSubmit={(e) => {
 						e.preventDefault();
 						request.mutate({ email });
 					}}
 				>
-					<div className="min-w-[200px] flex-1 space-y-1.5">
-						<Label htmlFor="link-email">Email</Label>
-						<Input
-							id="link-email"
-							type="email"
-							required
-							autoComplete="email"
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
-						/>
-					</div>
-					<Button type="submit" variant="outline" disabled={request.isPending}>
-						{request.isPending ? "Sending..." : "Email me my link"}
+					<label htmlFor="link-email" className="sr-only">
+						Email
+					</label>
+					<Input
+						id="link-email"
+						type="email"
+						required
+						autoComplete="email"
+						placeholder="you@example.com"
+						value={email}
+						onChange={(e) => setEmail(e.target.value)}
+						className="min-w-[200px] flex-1 border-night/30 bg-ink text-night placeholder:text-night/50 hover:border-night focus-visible:border-night"
+					/>
+					<Button
+						type="submit"
+						variant="light"
+						disabled={request.isPending}
+						className="border-night bg-night text-ink hover:border-panel-2 hover:bg-panel-2 hover:text-ink"
+					>
+						{request.isPending ? "Sending..." : "Send it"}
 					</Button>
 				</form>
 			)}
-		</Blueprint>
+		</div>
 	);
 }
 
@@ -74,21 +84,28 @@ function RouteComponent() {
 	const { error } = Route.useSearch();
 
 	return (
-		<section className="pt-18 pb-15">
+		<div className="mx-auto flex w-full max-w-[560px] flex-col gap-4 px-[clamp(16px,4vw,40px)] pt-[clamp(12px,3vw,40px)] pb-20">
 			{error === "link" ? (
-				<p className="mx-auto mb-6 w-full max-w-md border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 leading-5">
-					That link is not on the sheet. Ask the host for a fresh one, or use
-					the form below.
-				</p>
+				<Notice>
+					That link doesn't work any more. Ask for a fresh one below.
+				</Notice>
 			) : null}
 			{error === "revoked" ? (
-				<p className="mx-auto mb-6 w-full max-w-md border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 leading-5">
-					That account is deactivated, so its links no longer work. If that is
-					news to you, talk to the host.
-				</p>
+				<Notice>
+					That account is deactivated, so its links no longer work. If that's
+					news to you, talk to whoever invited you.
+				</Notice>
 			) : null}
-			<SignInForm />
 			<RequestLink />
-		</section>
+			<SignInForm />
+		</div>
+	);
+}
+
+function Notice({ children }: { children: React.ReactNode }) {
+	return (
+		<p className="m-0 rounded-[18px] border border-pink bg-pink/14 px-4 py-3 text-[14px] text-ink">
+			{children}
+		</p>
 	);
 }

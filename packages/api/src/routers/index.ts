@@ -2,26 +2,22 @@ import type { RouterClient } from "@orpc/server";
 
 import { publicProcedure } from "../index";
 import { accountRouter } from "./account";
-import { contributionsRouter } from "./contributions";
-import { gamesRouter } from "./games";
-import { gymsRouter } from "./gyms";
+import { contactsRouter } from "./contacts";
+import { eventsRouter } from "./events";
+import { guestsRouter } from "./guests";
 import { mailRouter } from "./mail";
 import { peopleRouter } from "./people";
-import { permitsRouter } from "./permits";
-import { rsvpRouter } from "./rsvp";
 
 export const appRouter = {
 	healthCheck: publicProcedure.handler(() => {
 		return "OK";
 	}),
 	account: accountRouter,
-	games: gamesRouter,
-	gyms: gymsRouter,
-	permits: permitsRouter,
-	rsvp: rsvpRouter,
+	events: eventsRouter,
+	guests: guestsRouter,
+	contacts: contactsRouter,
 	people: peopleRouter,
 	mail: mailRouter,
-	contributions: contributionsRouter,
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;

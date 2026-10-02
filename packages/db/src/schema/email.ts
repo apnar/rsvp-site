@@ -2,37 +2,37 @@ import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { user } from "./auth";
-import { game } from "./game";
+import { event } from "./event";
 
 export const EMAIL_KINDS = [
-	/** The five stages of the RSVP cycle, in the order they can fire. */
-	"rsvp_call",
-	"rsvp_nudge",
-	"rsvp_confirmed",
-	"rsvp_last_call",
-	"rsvp_final",
+	/** The invitation itself, sent when a host publishes or adds people. */
+	"invite",
+	/** To people who have not answered, a set number of days before the deadline. */
+	"deadline_reminder",
+	/** To yeses and maybes, the day before. */
+	"day_before",
+	/** Date, time or place changed; to everyone who has not said no. */
+	"update",
+	"cancel",
+	/** A host pressing "Nudge" on the people who have not answered. */
+	"nudge",
+	/** To an event's hosts: one reply, or the day's replies. */
+	"host_alert",
+	"host_digest",
+	/** The sign-in link somebody asked for on a share-link page. */
+	"join_link",
+	"welcome",
 	/** Anything an admin types on /admin/email. */
 	"message",
-	/** Contributions toward the costs: the call and the nag, both sent by hand from
-	 *  /admin/contributions. */
-	"contribution_call",
-	"contribution_reminder",
-	/**
-	 * Legacy. Nothing writes these any more -- the RSVP cycle replaced the
-	 * announce-on-booking email and the 9 AM reminder -- but rows from before
-	 * it still carry them and the admin log renders them, so the union has to
-	 * admit they exist.
-	 */
-	"announcement",
-	"reminder",
 ] as const;
 export type EmailKind = (typeof EMAIL_KINDS)[number];
 
 /**
- * Who a send went to. `active` is everybody on the list; `everyone` adds the
- * people who have stepped away for a while. Nobody deactivated is in either.
+ * Who a send went to. `guests` is some or all of one event's list; `everyone`
+ * is every active person who has not unsubscribed. `active` is the old name
+ * for `everyone`, kept because the column's default and old rows use it.
  */
-export const EMAIL_AUDIENCES = ["active", "everyone"] as const;
+export const EMAIL_AUDIENCES = ["guests", "everyone", "active"] as const;
 export type EmailAudience = (typeof EMAIL_AUDIENCES)[number];
 
 /** One row per list send (not per recipient), for the admin log and debugging. */
@@ -41,13 +41,13 @@ export const emailSend = sqliteTable(
 	{
 		id: text("id").primaryKey(),
 		kind: text("kind", { enum: EMAIL_KINDS }).notNull(),
-		gameId: text("game_id").references(() => game.id, {
+		eventId: text("event_id").references(() => event.id, {
 			onDelete: "set null",
 		}),
 		subject: text("subject").notNull(),
 		audience: text("audience", { enum: EMAIL_AUDIENCES })
 			.notNull()
-			.default("active"),
+			.default("everyone"),
 		recipientCount: integer("recipient_count").notNull(),
 		failedCount: integer("failed_count").notNull().default(0),
 		/** JSON array of Brevo message ids, one per batch. */
@@ -61,5 +61,5 @@ export const emailSend = sqliteTable(
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),
 	},
-	(table) => [index("email_send_game_idx").on(table.gameId)],
+	(table) => [index("email_send_event_idx").on(table.eventId)],
 );

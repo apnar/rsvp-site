@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<title>RSVP</title>
-<rect width="64" height="64" fill="#2c455d"/>
-<path d="M3.5 7.5h8M7.5 3.5v8M52.5 7.5h8M56.5 3.5v8M3.5 56.5h8M7.5 52.5v8M52.5 56.5h8M56.5 52.5v8" stroke="#f2f2f3" stroke-width="2" fill="none"/>
-<path d="M14.5 19.5h35v25h-35z" stroke="#f2f2f3" stroke-width="3" fill="none"/>
-<path d="M14.5 19.5 32 33l17.5-13.5" stroke="#f2f2f3" stroke-width="3" fill="none"/>
+<title>Botch RSVP</title>
+<rect width="64" height="64" rx="16" fill="#14101F"/>
+<path d="M17 22h30v22H17z" stroke="#F5F0FF" stroke-width="3.5" stroke-linejoin="round" fill="none"/>
+<path d="M17 22l15 12 15-12" stroke="#F5F0FF" stroke-width="3.5" stroke-linejoin="round" fill="none"/>
+<circle cx="47" cy="44" r="8" fill="#C6FF3D" stroke="#14101F" stroke-width="3"/>
 </svg>

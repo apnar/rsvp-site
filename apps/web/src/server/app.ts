@@ -6,10 +6,7 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createContext } from "@rsvp-site/api/context";
 import { appRouter } from "@rsvp-site/api/routers/index";
 import { createAuth } from "@rsvp-site/auth";
-import { createDb } from "@rsvp-site/db";
-import { permit } from "@rsvp-site/db/schema/permit";
 import { env } from "@rsvp-site/env/server";
-import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 
@@ -71,34 +68,28 @@ app.all("/reference/*", async (c, next) => {
 });
 
 /**
- * Streams a permit PDF from R2. Readable by anyone with the link, by design:
- * the point is to show it to venue staff from whatever phone is handy.
- * Add `?download=1` to get an attachment instead of an inline view.
+ * Streams an event's cover photo from R2. Public and token-free by design:
+ * the same URL goes into emails, where mail proxies fetch it. Keys are
+ * random and never reused -- a new photo gets a new key -- so the response
+ * can be cached for good.
  */
-app.get("/permits/:id/file", async (c) => {
-	const row = await createDb()
-		.select({
-			r2Key: permit.r2Key,
-			fileName: permit.fileName,
-			contentType: permit.contentType,
-		})
-		.from(permit)
-		.where(eq(permit.id, c.req.param("id")))
-		.get();
-	if (!row) return c.text("No such permit.", 404);
-
-	const object = await env.PERMITS.get(row.r2Key);
-	if (!object) return c.text("Permit file is missing.", 404);
-
-	const disposition = c.req.query("download") ? "attachment" : "inline";
-	const safeName = row.fileName.replace(/[^\w.\- ]+/g, "_");
+app.get("/covers/:name", async (c) => {
+	const name = c.req.param("name");
+	if (!/^[\w-]+\.(jpg|png|webp)$/.test(name)) {
+		return c.text("No such cover.", 404);
+	}
+	const key = `covers/${name}`;
+	const etag = c.req.header("if-none-match");
+	const object = await env.MEDIA.get(key, {
+		onlyIf: etag ? { etagDoesNotMatch: etag.replaceAll('"', "") } : undefined,
+	});
+	if (!object) return c.text("No such cover.", 404);
 	const headers = new Headers();
 	object.writeHttpMetadata(headers);
-	headers.set("content-type", row.contentType);
-	headers.set("content-length", String(object.size));
 	headers.set("etag", object.httpEtag);
-	headers.set("cache-control", "public, max-age=3600");
-	headers.set("content-disposition", `${disposition}; filename="${safeName}"`);
+	headers.set("cache-control", "public, max-age=31536000, immutable");
+	if (!("body" in object)) return new Response(null, { status: 304, headers });
+	headers.set("content-length", String(object.size));
 	return new Response(object.body, { headers });
 });
 

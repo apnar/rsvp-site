@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { emailLink, safeReturnPath } from "./links";
+import { coverUrl, emailLink, rsvpLink, safeReturnPath } from "./links";
 import { PARAM } from "./render";
 
 describe("emailLink", () => {
@@ -12,9 +12,25 @@ describe("emailLink", () => {
 	});
 });
 
+describe("rsvpLink", () => {
+	it("lands on the event page with the answer picked, signed in", () => {
+		expect(rsvpLink("https://rsvp.botch.com", "ev1", "yes")).toBe(
+			`https://rsvp.botch.com/api/auth/link?k=${PARAM.key}&to=%2Fe%2Fev1%3Fa%3Dyes`,
+		);
+	});
+});
+
+describe("coverUrl", () => {
+	it("carries no sign-in key", () => {
+		const url = coverUrl("https://rsvp.botch.com", "covers/abc.jpg");
+		expect(url).toBe("https://rsvp.botch.com/api/covers/abc.jpg");
+		expect(url).not.toContain("params.key");
+	});
+});
+
 describe("safeReturnPath", () => {
 	it("keeps paths on this site", () => {
-		for (const path of ["/", "/#rsvp", "/schedule", "/admin/email"]) {
+		for (const path of ["/", "/events", "/e/abc?a=yes", "/admin/email"]) {
 			expect(safeReturnPath(path)).toBe(path);
 		}
 	});

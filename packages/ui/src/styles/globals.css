@@ -7,82 +7,74 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Industry design system tokens (from the Claude Design export).
- * Steel-blue on a light technical ground, Barlow Condensed headings over
- * Barlow, square corners, hairline borders. Colors are exposed as Tailwind
- * utilities: bg-ground, text-ink, border-divider, bg-steel, text-steel-700,
- * bg-neutral-200, font-heading, shadow-md ...
+ * After Dark (from the Claude Design export): deep plum night, electric lime
+ * and hot pink, Unbounded headings over Manrope, pills and soft cards.
+ * Colors are exposed as Tailwind utilities: bg-night, bg-panel, border-line,
+ * text-ink, text-soft, text-haze, bg-lime, text-pink, font-heading ...
+ *
+ * Lime is the "yes" and the main action; pink is "maybe", the send button
+ * and anything that wants a second look. Nothing else gets a color.
  */
 @theme static {
-	--color-ground: #f2f2f3;
-	--color-surface: #e9e9ea;
-	--color-ink: #1d1f20;
-	--color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+	--color-night: #14101f;
+	--color-panel: #1f1930;
+	--color-panel-2: #2b2342;
+	/* A guest who said no: one step quieter than a panel. */
+	--color-panel-dim: #1a1528;
+	--color-line: #362c52;
+	--color-line-strong: #4a3f6b;
 
-	--color-steel: #5980a6;
-	--color-steel-100: #eef6ff;
-	--color-steel-200: #d6ebff;
-	--color-steel-300: #b5d9fd;
-	--color-steel-400: #94bce3;
-	--color-steel-500: #749dc4;
-	--color-steel-600: #597ea3;
-	--color-steel-700: #416180;
-	--color-steel-800: #2c455d;
-	--color-steel-900: #1d2d3d;
+	--color-ink: #f5f0ff;
+	--color-soft: #d9d2ea;
+	--color-haze: #b9afd0;
 
-	--color-neutral-100: #f5f5f8;
-	--color-neutral-200: #e7e7ea;
-	--color-neutral-300: #d4d4d7;
-	--color-neutral-400: #b7b7ba;
-	--color-neutral-500: #98989b;
-	--color-neutral-600: #7a7a7d;
-	--color-neutral-700: #5d5d60;
-	--color-neutral-800: #424244;
-	--color-neutral-900: #2b2b2d;
+	--color-lime: #c6ff3d;
+	--color-lime-soft: #e2ff9a;
+	--color-pink: #ff4fa3;
+	--color-pink-soft: #ff8cc4;
 
-	--font-sans: "Barlow", system-ui, sans-serif;
-	--font-heading: "Barlow Condensed", system-ui, sans-serif;
+	--font-sans: "Manrope", system-ui, sans-serif;
+	--font-heading: "Unbounded", system-ui, sans-serif;
 
-	--shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
-	--shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
-	--shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+	--shadow-lime: 0 0 28px rgb(198 255 61 / 0.35);
+	--shadow-float: 0 24px 48px rgb(0 0 0 / 0.45);
 }
 
-/* shadcn role variables, mapped onto the Industry tokens so the shared
-   primitives (dropdown, toasts, inputs) pick up the same palette. */
+/* shadcn role variables, mapped onto After Dark so the shared primitives
+   (dropdown, toasts, inputs) pick up the same palette. */
 :root {
-	--background: var(--color-ground);
+	--background: var(--color-night);
 	--foreground: var(--color-ink);
-	--card: var(--color-ground);
+	--card: var(--color-panel);
 	--card-foreground: var(--color-ink);
-	--popover: var(--color-ground);
+	--popover: var(--color-panel);
 	--popover-foreground: var(--color-ink);
-	--primary: var(--color-steel);
-	--primary-foreground: var(--color-ground);
-	--secondary: var(--color-surface);
+	--primary: var(--color-lime);
+	--primary-foreground: var(--color-night);
+	--secondary: var(--color-panel-2);
 	--secondary-foreground: var(--color-ink);
-	--muted: var(--color-surface);
-	--muted-foreground: var(--color-neutral-700);
-	--accent: var(--color-steel-100);
-	--accent-foreground: var(--color-steel-800);
-	--destructive: oklch(0.58 0.22 27);
-	--border: var(--color-divider);
-	--input: var(--color-divider);
-	--ring: var(--color-steel);
-	--chart-1: var(--color-steel-300);
-	--chart-2: var(--color-steel-500);
-	--chart-3: var(--color-steel-600);
-	--chart-4: var(--color-steel-700);
-	--chart-5: var(--color-steel-900);
-	--radius: 0px;
-	--sidebar: var(--color-surface);
+	--muted: var(--color-panel);
+	--muted-foreground: var(--color-haze);
+	--accent: var(--color-panel-2);
+	--accent-foreground: var(--color-ink);
+	--destructive: #ff6b6b;
+	--border: var(--color-line);
+	--input: var(--color-line-strong);
+	--ring: var(--color-lime);
+	--chart-1: var(--color-lime);
+	--chart-2: var(--color-pink);
+	--chart-3: var(--color-line-strong);
+	--chart-4: var(--color-haze);
+	--chart-5: var(--color-soft);
+	--radius: 14px;
+	--sidebar: var(--color-panel);
 	--sidebar-foreground: var(--color-ink);
-	--sidebar-primary: var(--color-steel);
-	--sidebar-primary-foreground: var(--color-ground);
-	--sidebar-accent: var(--color-steel-100);
-	--sidebar-accent-foreground: var(--color-steel-800);
-	--sidebar-border: var(--color-divider);
-	--sidebar-ring: var(--color-steel);
+	--sidebar-primary: var(--color-lime);
+	--sidebar-primary-foreground: var(--color-night);
+	--sidebar-accent: var(--color-panel-2);
+	--sidebar-accent-foreground: var(--color-ink);
+	--sidebar-border: var(--color-line);
+	--sidebar-ring: var(--color-lime);
 }
 
 @theme inline {
@@ -117,13 +109,13 @@
 	--color-card: var(--card);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
-	--radius-sm: 0px;
-	--radius-md: 0px;
-	--radius-lg: 0px;
-	--radius-xl: 0px;
-	--radius-2xl: 0px;
-	--radius-3xl: 0px;
-	--radius-4xl: 0px;
+	--radius-sm: 10px;
+	--radius-md: 14px;
+	--radius-lg: 18px;
+	--radius-xl: 20px;
+	--radius-2xl: 26px;
+	--radius-3xl: 32px;
+	--radius-4xl: 40px;
 }
 
 @layer base {
@@ -131,11 +123,11 @@
 		@apply border-border outline-ring/50;
 	}
 	html {
-		@apply bg-ground font-sans text-ink;
-		color-scheme: light;
+		@apply bg-night font-sans text-ink;
+		color-scheme: dark;
 	}
 	body {
-		@apply bg-ground font-sans text-[15px] text-ink leading-[1.55];
+		@apply bg-night font-sans text-[16px] text-ink leading-[1.55];
 		text-wrap: pretty;
 	}
 	h1,
@@ -144,89 +136,35 @@
 	h4,
 	h5,
 	h6 {
-		@apply font-heading font-semibold;
+		@apply font-heading font-bold tracking-[-0.03em];
+		text-wrap: balance;
 	}
 	a {
-		@apply text-steel-700 underline-offset-[3px] hover:text-steel-900;
+		@apply text-lime underline-offset-[3px] hover:text-lime-soft;
 	}
 	:focus {
 		outline: none;
 	}
 	:focus-visible {
-		outline: 2px solid var(--color-steel);
+		outline: 2px solid var(--color-lime);
 		outline-offset: 2px;
 	}
 	::selection {
-		background: color-mix(in srgb, var(--color-steel) 30%, transparent);
+		background: rgb(198 255 61 / 0.3);
 	}
 }
 
 @layer components {
-	/* The wireframe frame every card, plate and primary button wears:
-	   square, hairline-bordered, with "+" registration marks at the corners.
-	   Use the <Blueprint> / <Corners> components rather than hand-writing it. */
-	.blueprint {
-		position: relative;
-		border: 1px solid var(--color-divider);
-		border-radius: 0;
-	}
-	.blueprint > .corner {
-		position: absolute;
-		width: 11px;
-		height: 11px;
-		pointer-events: none;
-		color: color-mix(in srgb, var(--color-ink) 55%, transparent);
-	}
-	.blueprint > .corner::before,
-	.blueprint > .corner::after {
-		content: "";
-		position: absolute;
-		background: currentColor;
-	}
-	.blueprint > .corner::before {
-		left: 5px;
-		top: 0;
-		width: 1px;
-		height: 100%;
-	}
-	.blueprint > .corner::after {
-		top: 5px;
-		left: 0;
-		width: 100%;
-		height: 1px;
-	}
-	.blueprint > .corner.tl {
-		top: -6px;
-		left: -6px;
-	}
-	.blueprint > .corner.tr {
-		top: -6px;
-		right: -6px;
-	}
-	.blueprint > .corner.bl {
-		bottom: -6px;
-		left: -6px;
-	}
-	.blueprint > .corner.br {
-		bottom: -6px;
-		right: -6px;
-	}
-
-	/* Provisional. Blueprint hatching reads as drawn but not built, which is
-	   exactly what a maybe is. */
-	.hatch {
-		background-image: repeating-linear-gradient(
-			45deg,
-			color-mix(in srgb, var(--color-steel) 30%, transparent) 0 2px,
-			color-mix(in srgb, var(--color-steel) 8%, transparent) 2px 6px
-		);
-	}
-
-	/* Small uppercase label used for numbered section headers and metadata. */
+	/* Small uppercase label above a heading: "RSVP by Oct 17". */
 	.kicker {
-		@apply font-semibold text-[13px] uppercase tracking-[0.08em];
+		@apply font-bold text-[13px] uppercase tracking-[0.1em];
 	}
 	.tnum {
+		font-feature-settings: "tnum" 1;
+	}
+	/* The big condensed number in a stat tile or countdown. */
+	.numeral {
+		@apply font-heading font-bold leading-none tracking-[-0.03em];
 		font-feature-settings: "tnum" 1;
 	}
 }

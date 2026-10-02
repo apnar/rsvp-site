@@ -4,41 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is, and where it stands
 
-rsvp-site is meant to become a party/event invitation and RSVP site, roughly
-in the spirit of Evite, at https://rsvp.botch.com. It was copied on 2026-10-02
-from pickup-bball (`~/src/pickup-bball`, github `apnar/pickup-bball`), the app
-behind a weekly basketball run. The history starts fresh; pickup-bball's
-`git log` is still the design record for the inherited code.
+rsvp-site is Botch RSVP, a party invitation and RSVP site in the spirit of
+Evite, at https://rsvp.botch.com. It was copied on 2026-10-02 from
+pickup-bball (`~/src/pickup-bball`, github `apnar/pickup-bball`), the app
+behind a weekly basketball run, and reshaped the same day into per-event
+invitations (migration 0010). pickup-bball's `git log` is still the design
+record for the infrastructure it kept: the email-link sign-in, the Brevo
+batching, the unsubscribe and webhook handling, the claim-before-send
+pattern.
 
-**Only the words have changed so far.** Visible copy says event, venue,
-guest, host and plus-one (game, gym, player, Sean and guest before). The
-model underneath is still the inherited one: one standing guest list
-(`user`), recurring `game`s at `gym`s, the `CONFIRM_AT` / `PLAY_AT`
-thresholds and fixed-clock stages in `cycle.ts`, permits, and gym money.
-Identifiers, tables, routes (`/rsvp/$gameId`, `/admin/gyms`) and the
-migrations are unrenamed on purpose, so the schema is the one the code was
-tested against. The architecture notes below describe that model as it is.
-**The next piece of work** is to reshape it into per-event invitations:
-events with their own guest lists, hosts and plus-ones, and an email
-schedule tied to each event's start. That means dropping or reworking the
-thresholds, permits and contributions, and renaming game/gym in the schema.
-Plan it as its own change.
-
-A known wrinkle: the cycle still calls its verdict at a fixed 7:30 PM on the
-day. A verdict due after the start is resolved silently, so an event starting
-before 7:30 never gets its on/off email. That is why `DEFAULT_START_TIME` in
-`apps/web/src/content/run.ts` is 20:00, and it goes away with the reshape.
+The look is "After Dark" from a Claude Design export (`~/rsvp.zip`): plum
+night, lime and hot pink, Unbounded over Manrope, pills. Its screens map to
+routes: landing `/`, guest invite `/e/$eventId`, host dashboard `/events`,
+guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 
 ### Infrastructure
 
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0009 applied |
-| R2 | `rsvp-site-permits` |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0010 applied |
+| R2 | `rsvp-site-media` (event cover photos, binding `MEDIA`) |
+| Rate limit | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
-| Sender | `"RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
+| Sender | `"Botch RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
 | Brevo webhook | id 2217340, posting to `https://rsvp.botch.com/api/brevo/webhook` |
 | Replies | Cloudflare Email Routing on the `rsvp.botch.com` subdomain; `info@` forwards to `jlukens@fastmail.com`, the inbox `jlukens@botch.com` itself forwards to |
 
@@ -98,15 +88,13 @@ Single test file / single test:
 
 ```bash
 pnpm --filter @rsvp-site/email exec vitest run src/links.test.ts
-pnpm --filter @rsvp-site/db exec vitest run -t "effectiveStatus"
+pnpm --filter @rsvp-site/api exec vitest run -t "dueEmails"
 ```
 
 Only `packages/db`, `packages/email` and `packages/api` have tests — pure
-functions (templates, Brevo request shaping, link paths, status arithmetic,
-the RSVP cycle's timezone and stage maths). Nothing in the test run touches D1
-or the network. `packages/api` has no `check-types` script: adding one surfaces
-a pre-existing `File`/`Blob` mismatch in `routers/permits.ts` under the Workers
-lib. The `apps/web` build typechecks that source anyway.
+functions (templates, Brevo request shaping, link paths, address parsing,
+roles, headcount and potluck arithmetic, the email schedule's timezone maths).
+Nothing in the test run touches D1 or the network.
 
 Database:
 
@@ -122,6 +110,18 @@ Exercise the cron handler against the running dev server:
 ```bash
 curl "http://localhost:3001/cdn-cgi/local/scheduled?cron=0+*+*+*+*"
 ```
+
+It runs at the real clock (a `time` parameter is ignored), so to make an
+email due, move the local event's `date` / `rsvp_deadline` / `published_at`
+in D1 instead.
+
+`drizzle-kit generate` asks "created or renamed?" for every new table or
+column next to a dropped one, and refuses without a TTY. Run it under
+`script -qec "pnpm exec drizzle-kit generate --name x" /dev/null`, feeding
+carriage returns (the default is "create"), then hand-edit the SQL: D1 runs a
+migration in one transaction, where `PRAGMA foreign_keys=OFF` does nothing,
+and the generated drop order ignores foreign keys. 0010's header lists what
+had to change.
 
 Local setup needs `apps/web/.dev.vars` (copy `.dev.vars.example`, set a random
 `BETTER_AUTH_SECRET`). Leave `BREVO_API_KEY` unset locally: the mailer then prints
@@ -144,12 +144,15 @@ pages and API share an origin: no CORS, ordinary same-site cookies.
 Packages (all consumed as raw TypeScript source via `exports` — no build step for
 libraries; only `apps/web` builds):
 
-- `packages/db` — Drizzle schema (`src/schema/*`), D1 migrations, and
-  `src/people.ts`, which owns every read and write of a person's state.
+- `packages/db` — Drizzle schema (`src/schema/*`), D1 migrations,
+  `src/people.ts`, which owns every read and write of a person's state, and
+  `src/roles.ts` (pure; the web app imports it too).
 - `packages/auth` — Better Auth factory (`createAuth()`) plus the custom
   `email-link` plugin in `src/link.ts`.
-- `packages/api` — oRPC routers (`src/routers/*`), shared business logic
-  (`games.ts`, `mail.ts`, `run.ts`), and the cron job in `src/jobs/reminders.ts`.
+- `packages/api` — oRPC routers (`src/routers/*`), event reads and access
+  (`events.ts`), sending (`mail.ts`), pure arithmetic the web app also
+  bundles (`time.ts`, `headcount.ts`, `schedule.ts` -- keep those free of
+  drizzle and `cloudflare:workers`), and the cron pass in `src/jobs/event-mail.ts`.
 - `packages/email` — pure template/Brevo code (`src/index.ts`) plus
   `src/worker.ts`, the only file there that touches the Worker env.
 - `packages/env` — `env` re-exported from `cloudflare:workers`; the binding types
@@ -165,125 +168,87 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
 - Browser → `/api/rpc` via the oRPC client in `apps/web/src/utils/orpc.ts`.
   That file is isomorphic: during SSR it calls `createRouterClient(appRouter)`
   directly (no HTTP hop), in the browser it uses an `RPCLink`.
-- oRPC procedures come from `packages/api/src/index.ts`:
-  `publicProcedure` / `protectedProcedure` / `adminProcedure`. `games.*` and
-  `rsvp.*` reads are protected on purpose — a stranger must not learn the gym
-  address or the tip-off time. `gyms.*` and `permits.*` are admin-only; players
-  see a gym only through the game it is attached to. `people.roster` is the
-  player-facing view of the `user` table and returns strictly less than the
-  admin `people.list` — no addresses, tokens, or break reasons.
+- oRPC procedures come from `packages/api/src/index.ts`: `publicProcedure`,
+  `protectedProcedure` (a session), `personProcedure` (the caller re-read
+  from D1 as `context.me`), `hostProcedure` and `adminProcedure`. Roles are
+  checked against `context.me`, never `session.user`: the cookie caches the
+  user for five minutes, and a demoted host must stop hosting now.
+- Event access is `accessTo` / `hostAccessTo` in `api/src/events.ts`. A
+  stranger to an event gets the same NOT_FOUND as a wrong id, guests never
+  see drafts, and admins pass everywhere.
 - The session is read once in `apps/web/src/routes/__root.tsx` `beforeLoad`
   (through the `getUser` server function) and flows down as router context.
   `routes/_auth/route.tsx` and `routes/_admin/route.tsx` are the guards.
-- The half-hourly Cron Trigger calls `runRsvpCycle` and `sweepExpiredSuspensions`.
+- The half-hourly Cron Trigger calls `runEventMail`.
 
-### Gyms, games and permits
+### Events, guests and roles
 
-`gym` is the one place a court is written down (name, address, and the parking
-/ which-door notes). `game.gym_id` is NOT NULL with `on delete restrict`, so a
-game always has a gym and a gym with games cannot be deleted — `gyms.remove`
-counts the games first and says so in words rather than letting D1 answer with
-a constraint error. `decorateGame` joins the gym with `innerJoin` for the same
-reason, and derives `location` (`"Name, Address"`) so the email templates keep
-taking one string.
+- `user.role` is `admin`, `host` or `user` (null = `user`); read it with
+  `roleOf` / `canHost` / `isAdmin` from `@rsvp-site/db/roles`. Better Auth's
+  admin plugin knows only admin/user and refuses `host`, so roles are written
+  by `setRole` in `people.ts`, never `authClient.admin.setRole`.
+- Accounts are made by `findOrCreatePeople` (hosts inviting, groups, admins,
+  the share link). It inserts directly with both tokens in the insert --
+  Better Auth's `createUser` is admin-only -- and is `onConflictDoNothing`
+  on email, then re-reads, so two hosts adding one stranger is fine.
+  Deactivated people come back as found and callers skip them.
+- `event_guest` is the invitation and the answer in one row; `response IS
+  NULL` is "no reply" and `invited_at IS NULL` is "not emailed yet".
+  `sendInvites` claims rows (`UPDATE ... SET invited_at WHERE invited_at IS
+  NULL RETURNING`) before sending and gives them back if nothing left, so
+  Send cannot invite anybody twice.
+- Potluck claims are guarded in the INSERT itself (`guests.respond`), written
+  in plain SQL names: see the Drizzle note under Conventions.
+- `/e/$eventId` **reads and does not write**; `?a=` only preselects. Mail
+  clients prefetch link targets. The one GET that writes is `/i/$token` for
+  somebody already signed in (it joins them), which only a person with a
+  session and the link can trigger.
+- `headcount.ts` is the only arithmetic for totals; pages and emails must
+  not count on their own.
 
-Permit-to-gym coverage is many-to-many in `permit_gym`, written by
-`setCoverage` in `routers/permits.ts` as delete-then-insert. It is paperwork
-only: it sorts the permit dropdown when booking and never gates anything.
+### The email schedule
 
-### The RSVP cycle
+`packages/api/src/schedule.ts` is pure: `dueEmails(event, now)` says which of
+the deadline reminder, day-before reminder and host digest are due, at 10:00
+/ 10:00 / 08:00 on the site's clock. `jobs/event-mail.ts` executes: read →
+decide → claim → send.
 
-`packages/api/src/cycle.ts` is the single source of truth for the schedule and
-the thresholds (`CONFIRM_AT` 10, `PLAY_AT` 8). The job reads it, `/admin/cycle`
-renders the same array as prose, so the documentation cannot drift. Keep that
-file free of drizzle and `cloudflare:workers` — the web app bundles it.
-
-- `jobs/plan.ts` is a **pure** `planStage()`: given stamps and a clock it says
-  which stage to run. Its rules (opening call never skipped, one stage per pass
-  and it is the latest due, 90-minute cooldown that the verdict ignores) are
-  the interesting part and are unit-tested without a database.
-- `jobs/rsvp-cycle.ts` executes: read → decide → claim → send, in that order,
-  so a stage that turns out to have nothing to say is never recorded as an
-  email. The claim is a conditional `UPDATE ... WHERE col IS NULL` with
-  `result.meta.changes === 1`.
-- **A stage stamp means resolved, not sent.** Skipped stages stamp too, or the
-  job retries them every half hour. `email_send` is the record of real sends.
-- `jobs/stage-render.ts` is shared by the job and the admin preview, so a
-  preview cannot show an email different from the one that goes out.
-- The tenth yes fires stage 03 inline from the rsvp mutations *and* from the
-  cron. The shared claim makes double-sending impossible; nothing plumbs an
-  `ExecutionContext` to oRPC, so it is awaited rather than deferred.
-- `runInstant(date, time)` in `run.ts` converts the gym's wall clock to a UTC
-  instant with a two-pass offset fix. That second pass is what survives the
-  week after a DST switch, when the evening-before call and the game itself sit
-  on different offsets. Tested; do not "simplify" it to one pass.
-- **Stage 01 snapshots the roster** into `game_invite` before the ask goes
-  out -- one row per person still in the group, `on_break` for the ones it
-  skipped. `user` keeps one status and no history, so this is the only thing
-  that can still tell a break from silence months later, and the "Last 10"
-  column on /admin/users counts against it (`api/src/responses.ts` for the
-  arithmetic, `api/src/invites.ts` for the reading and writing). The insert is
-  `on conflict do nothing`: a send Brevo rejects outright gives the stage back
-  and the next pass comes through again. A game whose call never went out has
-  no rows, which is right -- nobody was asked, so nobody's record moves.
-- Every link in a cycle email lands on `/rsvp/$gameId`, which **reads and does
-  not write**. Mail clients prefetch link targets — the same reason
-  `server/unsubscribe.ts` stopped acting on a GET.
-
-### Gym money
-
-`contribution_call` is one ask (subject, body, whole-dollar `amount`, one-line
-`instructions`); `contribution` is its ledger, one row per person billed, with
-`status` unpaid / paid / excused. `packages/db/src/contributions.ts` owns every
-read and write, and the pure `tally` / `tallyLine` there are what the admin
-page and the history show. Things that are easy to get wrong:
-
-- **The ledger is a snapshot** of `listRecipients(db, "active")` at send time,
-  never a live view of the roster. Reminders go to unpaid ∩ active, computed
-  the same way in the preview count and in `sendToList`'s `onlyPersonIds`, so
-  the number on the button is the number that gets mail.
-- **One open call at a time** (`closed_at IS NULL`). The router refuses in
-  words first; `contribution_call_open_uidx` is a partial unique index on the
-  *expression* `(closed_at is null)` for the double-click the words miss. It
-  cannot be on the column: NULLs are distinct in a unique index.
-- `sendCall` is read → decide → claim → send: the call and its ledger go in
-  (one `db.batch`, chunked twenty rows a statement for D1's parameter cap)
-  *before* the email leaves, and a send that never left discards the call.
-  The other order asks people for money nothing tracks. `send_id` points at
-  the `email_send` row, which stays the record of what went out.
-- `contributions.mine` is the only player read and returns the caller's own
-  row or null. Both emails link to `/dashboard`, a GET that writes nothing;
-  there is no "mark me paid" link and there never can be.
-- `packages/api/src/contributions-render.ts` reaches `siteUrl()`, so the web
-  app must not import it; stock copy reaches the page via `contributions.current`.
+- **A stamp means resolved, not sent.** A reminder whose moment passed (the
+  deadline went by, the party started, or the event was published after it
+  was due) is stamped and skipped; `email_send` is the record of real sends.
+- The claim is `UPDATE event SET col = now WHERE col IS NULL` with
+  `result.meta.changes === 1`; the repeating digest claims "older than this
+  morning's slot" instead. `events.update` nulls the stamps that belonged to
+  a moved date or deadline.
+- `siteInstant(date, time)` in `time.ts` converts the wall clock to a UTC
+  instant with a two-pass offset fix. The second pass is what survives a
+  daylight-saving weekend. Tested; do not "simplify" it to one pass.
+- Host alerts for each reply are sent inline from `guests.respond`, awaited
+  (nothing plumbs an `ExecutionContext` to oRPC), and never fail the answer.
 
 ### The one-table people model
 
-`user` is simultaneously the roster, the mailing list and the accounts. A person
-is `active`, `suspended` or `deactivated`; `packages/db/src/people.ts` is the only
-place that decides what that means. Things that are easy to get wrong:
+`user` is the accounts, the guests and the mailing list. A person is
+`active` or `deactivated`, and separately may be unsubscribed
+(`unsubscribed_at` + `unsubscribe_reason`).
 
-- A suspension with `suspended_until` in the past **is already over**.
-  Use `effectiveStatus` / `activeWhere` / `audienceWhere`, never a bare
-  `status = 'active'`. The cron sweep is cosmetic housekeeping.
-- `banned` is a mirror of `status = 'deactivated'`, written in the same statement
-  so Better Auth blocks the password door. It is nullable (migration 0000 lacked
-  NOT NULL) — never compare it with `= 0`.
-- Self-service paths (`unsuspend`, the unsubscribe form, the Brevo webhook) must
-  never touch a deactivated row; the guards are in the `where` clauses.
-- The session cookie caches the user for five minutes. Anything that grants
-  access to a spot or the gym address re-reads D1 (`findPersonState`) rather than
-  trusting `session.user`. A role changed by SQL takes up to five minutes to show.
-- `link_token` and `unsubscribe_token` are stamped by the Better Auth
-  `databaseHooks.user.create.after` hook (`stampTokens`), so no code path can
-  create a person with no way in. Better Auth drops unknown fields on insert,
-  which is why this is a hook and not part of the insert.
+- `listRecipients` is the only query behind list sends and excludes
+  deactivated and unsubscribed people whatever ids are passed. Use it.
+- `banned` is a mirror of `status = 'deactivated'`, written in the same
+  statement so Better Auth blocks the password door. It is nullable
+  (migration 0000 lacked NOT NULL) — never compare it with `= 0`.
+- Self-service paths (`resubscribe`, the unsubscribe form, the Brevo
+  webhook) never touch a deactivated row; the guards are in the `where`
+  clauses. Turning email back on also calls `getMailer().unblock`.
+- `link_token` and `unsubscribe_token` are stamped at insert by
+  `findOrCreatePeople`, and by the Better Auth `user.create.after` hook
+  (`stampTokens`) for rows it makes, so nobody exists with no way in.
 
 ### Email and sign-in links
 
 `link_token` is a bearer credential: every link in every list email is
 `/api/auth/link?k=<token>&to=<path>`, and clicking it opens a session. Never put
-one on a URL meant to be shown around (the permit PDF URL deliberately carries
+one on a URL meant to be shown around (cover photo URLs deliberately carry
 nothing), and never hand it to Better Auth as an additional user field — those get
 base64'd into a browser-readable cookie. `safeReturnPath` sanitizes `to`.
 
@@ -292,7 +257,9 @@ batches up to 99 personalised copies per Brevo request using `messageVersions`;
 templates therefore contain the `PARAM` placeholders from
 `packages/email/src/render.ts` (`{{ params.key }}`, `{{ params.unsubscribeUrl }}`)
 rather than concrete URLs, and their output must never be run through
-`escapeHtml`. Every list send writes one `email_send` row. Announcement and reminder always go to the `active` audience only.
+`escapeHtml`. Every list send writes one `email_send` row. Email bodies stay
+light (dark backgrounds get mangled by mail clients' dark modes); the brand is
+the plum band, the cover and the lime buttons.
 
 ## Conventions
 
@@ -305,28 +272,33 @@ rather than concrete URLs, and their output must never be run through
 - Imports: `@/*` inside `apps/web/src`, `@rsvp-site/<pkg>` across packages.
   Subpath imports are the norm (`@rsvp-site/db/people`,
   `@rsvp-site/ui/components/button`).
-- Design system lives in `packages/ui/src/styles/globals.css`: Barlow Condensed
-  headings over Barlow, steel-blue on a light ground, square corners
-  (`--radius: 0px`), hairline `border-divider`. Use the token utilities
-  (`bg-ground`, `text-ink`, `text-steel-700`, `font-heading`, `.kicker`, `.tnum`)
-  rather than raw Tailwind colors, and the `<Blueprint>` component rather than
-  hand-writing the framed/corner-marked look.
-- Standing copy and defaults (site name, tip-off, rules, conditions) live in
-  `apps/web/src/content/run.ts`; the numbers the API needs
-  (`CAPACITY`, `RUN_TIMEZONE`, date/time formatting) live in
-  `packages/api/src/run.ts`.
-- Game `date` is a `YYYY-MM-DD` string and `start_time` an `HH:MM` string, both in
-  `America/New_York`. Compare with `todayInRunTimezone()`, not with `Date`.
+- Design system lives in `packages/ui/src/styles/globals.css`: After Dark,
+  dark only. Unbounded headings (`font-heading`) over Manrope; tokens
+  `bg-night`, `bg-panel`, `bg-panel-2`, `border-line`, `text-ink`,
+  `text-soft`, `text-haze`, `bg-lime`, `text-pink`, plus `.kicker` and
+  `.numeral`. Lime is yes and the main action, pink is maybe and "send";
+  nothing else gets a color. Pills (`rounded-full`) for buttons and chips,
+  ~26px radius for panels. Shared pieces: `components/page.tsx` (`Page`,
+  `PageHead`, `Panel`), `controls.tsx` (answer picker, stepper, switch,
+  field), `response-bar.tsx`, `event-card.tsx`. Button variants: default
+  (lime), `send` (pink), `light`, `outline`, `pink`, `ghost`.
+- `cn()` is tailwind-merge: a `leading-*` placed before a `text-*` size in
+  the same `cn()` is dropped. Put leading after the size.
+- Copy lives in `apps/web/src/content/site.ts`; time and formatting in
+  `packages/api/src/time.ts` (`SITE_TIMEZONE`, `todayOnSite`, `formatDate`).
+- Event `date` is a `YYYY-MM-DD` string and times `HH:MM`, both in
+  `America/New_York`. Compare with `todayOnSite()`, not with `Date`.
 - The countdown is the app's only ticking UI. Seed its clock from the payload's
-  `now`, never `Date.now()` in render or a `useState` initializer, or the SSR
-  markup and the hydration markup disagree. Every `toLocale*` call on a date
+  `now` (and "today" from the payload's `today`), never `Date.now()` in render
+  or a `useState` initializer, or the SSR markup and the hydration markup
+  disagree. Every `toLocale*` call on a date
   passes `timeZone: "America/New_York"` for the same reason.
 - **Drizzle only writes table-qualified column names when a query has a join.**
   A correlated subquery inside a `sql` template on a single-table `from` comes
-  out as `where "gym_id" = "id"` — both resolve against the subquery's own
-  table, and it silently returns zeros. Either join and aggregate (what
-  `gyms.list` does) or make sure the outer query already has a join (what the
-  `inCount` subquery in `games.ts` relies on).
+  out as `where "event_id" = "id"` — both resolve against the subquery's own
+  table, and it silently returns zeros. Either join and aggregate, or write
+  the raw SQL with plain aliased names (what the potluck claim in
+  `guests.respond` does).
 - Comments here explain *why* a thing is the way it is (the security or
   operational reason), not what the code does. Match that when editing.
 - **Commit and push straight to `main`.** No feature branches, no pull

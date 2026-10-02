@@ -7,93 +7,114 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-/** How somebody first landed on the list. */
-export const PERSON_SOURCES = ["site", "admin", "signup"] as const;
+/**
+ * How somebody first landed on the list. `host` is an address a host typed
+ * into an event or a contact group; `link` is somebody who came in through
+ * an event's share link. The rest predate events.
+ */
+export const PERSON_SOURCES = [
+	"admin",
+	"host",
+	"link",
+	"site",
+	"signup",
+] as const;
 export type PersonSource = (typeof PERSON_SOURCES)[number];
 
 /**
- * The three states a person can be in.
- *
- * - `active` — gets the emails, holds a spot, signs in.
- * - `suspended` — stepped away. No game email unless an admin deliberately
- *   picks the "everyone" audience, and no RSVP, but they can still sign in,
- *   which is how they come back. Set by the person themselves or an admin,
- *   and lifts on its own date when there is one.
- * - `deactivated` — out of the group. No email of any kind, no way in. Only
- *   an admin can put somebody here, and only an admin can undo it.
+ * What somebody may do. A `user` answers invitations; a `host` also makes
+ * events and keeps contact groups; an `admin` also manages people and roles.
+ * Null in the column counts as `user` -- Better Auth's admin plugin writes
+ * "user" itself, and rows from before roles mattered have nothing.
  */
-export const PERSON_STATUSES = ["active", "suspended", "deactivated"] as const;
+export const ROLES = ["admin", "host", "user"] as const;
+export type Role = (typeof ROLES)[number];
+
+/**
+ * - `active` -- signs in, can be invited.
+ * - `deactivated` -- out. No email of any kind, no way in. Only an admin can
+ *   put somebody here, and only an admin can undo it.
+ *
+ * Not wanting email is not a status: that is `unsubscribed_at`, which leaves
+ * the account working.
+ */
+export const PERSON_STATUSES = ["active", "deactivated"] as const;
 export type PersonStatus = (typeof PERSON_STATUSES)[number];
 
-/** Who moved somebody off active. `mail` is Brevo telling us through the webhook. */
+/** Who last moved somebody between statuses. Only an admin does now. */
 export const STATUS_ACTORS = ["self", "admin", "mail"] as const;
 export type StatusActor = (typeof STATUS_ACTORS)[number];
 
 /**
- * Everybody. This one table is the roster, the mailing list and the accounts:
- * there is no second list of people to keep in step with it.
+ * Why somebody stopped getting email: they said so (the footer link or the
+ * account page), or Brevo told us through the webhook that mail to them
+ * bounces, was reported as spam, or cannot be delivered.
  */
-export const user = sqliteTable(
-	"user",
-	{
-		id: text("id").primaryKey(),
-		name: text("name").notNull(),
-		email: text("email").notNull().unique(),
-		emailVerified: integer("email_verified", { mode: "boolean" })
-			.default(false)
-			.notNull(),
-		image: text("image"),
-		/** Better Auth admin plugin: "admin" or "user" (null counts as user). */
-		role: text("role"),
-		/**
-		 * Better Auth's own gate, which it checks on its sign-in routes. We do
-		 * not set it by hand: it is a mirror of `status = 'deactivated'`, written
-		 * in the same statement, so the framework blocks the password door while
-		 * `status` stays the one thing the app reads. Nullable, because 0000
-		 * created it without NOT NULL — never compare it with `= 0`.
-		 */
-		banned: integer("banned", { mode: "boolean" }).default(false),
-		banReason: text("ban_reason"),
-		banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
+export const UNSUBSCRIBE_REASONS = [
+	"self",
+	"bounce",
+	"spam",
+	"invalid",
+] as const;
+export type UnsubscribeReason = (typeof UNSUBSCRIBE_REASONS)[number];
 
-		/**
-		 * Random token in every link we email this person. Clicking one signs
-		 * them in, so it is a bearer credential: never put it on a permit URL,
-		 * and never hand it to Better Auth as an additional field — those get
-		 * base64'd into a cookie the browser can read.
-		 * Nullable only because SQLite cannot add a NOT NULL unique column.
-		 */
-		linkToken: text("link_token").unique(),
-		/** When the last sign-in link was emailed, for the request cooldown. */
-		linkSentAt: integer("link_sent_at", { mode: "timestamp_ms" }),
-		/** Random token in the footer link of every list email. Same warning. */
-		unsubscribeToken: text("unsubscribe_token").unique(),
-		source: text("source", { enum: PERSON_SOURCES }).notNull().default("admin"),
+/**
+ * Everybody, whatever their role: this one table is the people, the mailing
+ * list and the accounts.
+ */
+export const user = sqliteTable("user", {
+	id: text("id").primaryKey(),
+	name: text("name").notNull(),
+	email: text("email").notNull().unique(),
+	emailVerified: integer("email_verified", { mode: "boolean" })
+		.default(false)
+		.notNull(),
+	image: text("image"),
+	/** One of ROLES, or null for `user`. Read it through `roleOf`. */
+	role: text("role"),
+	/**
+	 * Better Auth's own gate, which it checks on its sign-in routes. We do
+	 * not set it by hand: it is a mirror of `status = 'deactivated'`, written
+	 * in the same statement, so the framework blocks the password door while
+	 * `status` stays the one thing the app reads. Nullable, because 0000
+	 * created it without NOT NULL -- never compare it with `= 0`.
+	 */
+	banned: integer("banned", { mode: "boolean" }).default(false),
+	banReason: text("ban_reason"),
+	banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
 
-		status: text("status", { enum: PERSON_STATUSES })
-			.notNull()
-			.default("active"),
-		/**
-		 * Only read while suspended. Null then means "until they say otherwise";
-		 * a date in the past means the suspension is already over, which is why
-		 * nothing has to run for somebody to come back.
-		 */
-		suspendedUntil: integer("suspended_until", { mode: "timestamp_ms" }),
-		/** Their own words, usually an injury. Ours when Brevo told us. */
-		statusReason: text("status_reason"),
-		statusChangedAt: integer("status_changed_at", { mode: "timestamp_ms" }),
-		statusChangedBy: text("status_changed_by", { enum: STATUS_ACTORS }),
+	/**
+	 * Random token in every link we email this person. Clicking one signs
+	 * them in, so it is a bearer credential: never put it on a cover-photo
+	 * URL, and never hand it to Better Auth as an additional field -- those
+	 * get base64'd into a cookie the browser can read.
+	 * Nullable only because SQLite cannot add a NOT NULL unique column.
+	 */
+	linkToken: text("link_token").unique(),
+	/** When the last sign-in link was emailed, for the request cooldown. */
+	linkSentAt: integer("link_sent_at", { mode: "timestamp_ms" }),
+	/** Random token in the footer link of every list email. Same warning. */
+	unsubscribeToken: text("unsubscribe_token").unique(),
+	source: text("source", { enum: PERSON_SOURCES }).notNull().default("admin"),
 
-		createdAt: integer("created_at", { mode: "timestamp_ms" })
-			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-			.notNull(),
-		updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-			.$onUpdate(() => /* @__PURE__ */ new Date())
-			.notNull(),
-	},
-	(table) => [index("user_status_idx").on(table.status)],
-);
+	status: text("status", { enum: PERSON_STATUSES }).notNull().default("active"),
+	statusChangedAt: integer("status_changed_at", { mode: "timestamp_ms" }),
+	statusChangedBy: text("status_changed_by", { enum: STATUS_ACTORS }),
+
+	/** Set while they want no email. Invitations still list them. */
+	unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp_ms" }),
+	unsubscribeReason: text("unsubscribe_reason", {
+		enum: UNSUBSCRIBE_REASONS,
+	}),
+
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.$onUpdate(() => /* @__PURE__ */ new Date())
+		.notNull(),
+});
 
 export const session = sqliteTable(
 	"session",

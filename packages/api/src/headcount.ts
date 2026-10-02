@@ -1,0 +1,100 @@
+/**
+ * The numbers every screen and email about an event shows. Pure, so the
+ * dashboard card, the guest list, the invite page and the host digest
+ * cannot disagree about how many people are coming.
+ */
+
+export type Answer = "yes" | "maybe" | "no";
+
+export type GuestCounts = {
+	response: Answer | null;
+	adults: number;
+	kids: number;
+};
+
+export type Totals = {
+	/** Households invited, answered or not. */
+	invited: number;
+	yes: number;
+	maybe: number;
+	no: number;
+	/** Invited and not answered yet. */
+	waiting: number;
+	/** People coming: adults and kids on every yes. Maybes count for nothing. */
+	adults: number;
+	kids: number;
+};
+
+export function tally(guests: readonly GuestCounts[]): Totals {
+	const t: Totals = {
+		invited: guests.length,
+		yes: 0,
+		maybe: 0,
+		no: 0,
+		waiting: 0,
+		adults: 0,
+		kids: 0,
+	};
+	for (const g of guests) {
+		if (g.response === null) {
+			t.waiting++;
+			continue;
+		}
+		t[g.response]++;
+		if (g.response === "yes") {
+			t.adults += Math.max(1, g.adults);
+			t.kids += Math.max(0, g.kids);
+		}
+	}
+	return t;
+}
+
+/** Everybody expected through the door. */
+export function headcount(t: Totals): number {
+	return t.adults + t.kids;
+}
+
+export type PotluckLine = {
+	id: string;
+	label: string;
+	quantity: number;
+	claimed: number;
+	/** Never negative, even if a host lowers the quantity after claims. */
+	left: number;
+};
+
+export function potluckLines(
+	items: readonly { id: string; label: string; quantity: number }[],
+	claims: readonly { itemId: string }[],
+): PotluckLine[] {
+	const counts = new Map<string, number>();
+	for (const c of claims) counts.set(c.itemId, (counts.get(c.itemId) ?? 0) + 1);
+	return items.map((item) => {
+		const claimed = counts.get(item.id) ?? 0;
+		return { ...item, claimed, left: Math.max(0, item.quantity - claimed) };
+	});
+}
+
+/** Open slots across every item, for the dashboard tile. */
+export function openSlots(lines: readonly PotluckLine[]): number {
+	return lines.reduce((sum, line) => sum + line.left, 0);
+}
+
+/**
+ * Clamp what a guest sent to what the event allows. The form enforces the
+ * same limits; this is what makes them true. `maxPlusOnes` 0 means the
+ * guest comes alone; kids are dropped when the event does not ask.
+ */
+export function clampParty(
+	input: { adults: number; kids: number },
+	rules: { maxPlusOnes: number; askKids: boolean },
+): { adults: number; kids: number } {
+	const adults = Math.min(
+		Math.max(1, Math.trunc(input.adults)),
+		1 + Math.max(0, rules.maxPlusOnes),
+	);
+	const kids = rules.askKids
+		? Math.min(Math.max(0, Math.trunc(input.kids)), 20)
+		: 0;
+	return { adults, kids };
+}

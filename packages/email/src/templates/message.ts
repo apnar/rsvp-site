@@ -19,7 +19,7 @@ export function messageEmail(input: MessageInput): Rendered {
 	const siteLink = emailLink(input.siteUrl, "/");
 	const html = layout({
 		title: input.subject,
-		kicker: "From the host",
+		kicker: "From Botch RSVP",
 		heading: input.subject,
 		bodyHtml: [paragraphs(input.body), button("Open the site", siteLink)].join(
 			"\n",

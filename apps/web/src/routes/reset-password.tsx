@@ -1,12 +1,11 @@
-import { Blueprint } from "@rsvp-site/ui/components/blueprint";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
-import { Label } from "@rsvp-site/ui/components/label";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { Field } from "@/components/controls";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/reset-password")({
@@ -52,31 +51,26 @@ function ResetPasswordPage() {
 	};
 
 	return (
-		<section className="pt-18 pb-15">
-			<Blueprint className="mx-auto w-full max-w-md p-6">
-				<span className="kicker mb-3 block text-steel-700">Password</span>
-				<h1 className="mb-6 font-heading text-[32px] uppercase leading-9 tracking-[0.02em]">
+		<div className="mx-auto w-full max-w-[560px] px-[clamp(16px,4vw,40px)] pt-[clamp(12px,3vw,40px)] pb-20">
+			<div className="flex flex-col gap-5 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
+				<span className="kicker text-lime">Password</span>
+				<h1 className="m-0 text-[30px]">
 					{dead ? "That link is dead." : "Pick a new one."}
 				</h1>
 				{dead ? (
 					<>
-						<p className="text-[15px] leading-6">
-							Reset links last an hour and work once. Ask for another and move
-							faster this time.
+						<p className="m-0 text-[15px] text-soft">
+							Reset links last an hour and work once. Ask for another.
 						</p>
-						<div className="mt-4">
-							<Link
-								to="/forgot-password"
-								className="text-[13px] text-steel-700 leading-6"
-							>
+						<div>
+							<Link to="/forgot-password" className="text-[14px]">
 								Send a new link
 							</Link>
 						</div>
 					</>
 				) : (
-					<form onSubmit={submit} className="space-y-4">
-						<div className="space-y-2">
-							<Label htmlFor="password">New password</Label>
+					<form onSubmit={submit} className="flex flex-col gap-4">
+						<Field label="New password" htmlFor="password">
 							<Input
 								id="password"
 								type="password"
@@ -86,9 +80,8 @@ function ResetPasswordPage() {
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
 							/>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="confirm">Same again</Label>
+						</Field>
+						<Field label="Same again" htmlFor="confirm">
 							<Input
 								id="confirm"
 								type="password"
@@ -98,13 +91,13 @@ function ResetPasswordPage() {
 								value={confirm}
 								onChange={(e) => setConfirm(e.target.value)}
 							/>
-						</div>
+						</Field>
 						<Button type="submit" className="w-full" disabled={busy}>
 							{busy ? "Saving..." : "Change password"}
 						</Button>
 					</form>
 				)}
-			</Blueprint>
-		</section>
+			</div>
+		</div>
 	);
 }

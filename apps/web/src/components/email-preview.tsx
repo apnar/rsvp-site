@@ -1,12 +1,10 @@
-import { Blueprint } from "@rsvp-site/ui/components/blueprint";
 import { Button } from "@rsvp-site/ui/components/button";
 import { useState } from "react";
 import { toast } from "sonner";
 
 /**
- * Shared by the cycle email admin page and the contributions page: both
- * preview and send email the same way, and a preview that differs between
- * pages would be a preview of nothing.
+ * The admin email page's preview and send report. The preview renders the
+ * same HTML the send would, in a sandboxed frame.
  */
 
 export type Preview = { subject: string; html: string; text: string };
@@ -36,9 +34,9 @@ export function PreviewPanel({
 }) {
 	const [showText, setShowText] = useState(false);
 	return (
-		<Blueprint className="p-5">
+		<div className="flex flex-col rounded-[26px] border border-line bg-panel p-5">
 			<div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-				<span className="kicker text-steel-700">
+				<span className="kicker text-haze">
 					Preview · goes to {preview.recipientCount}
 				</span>
 				<div className="flex gap-2">
@@ -55,11 +53,11 @@ export function PreviewPanel({
 				</div>
 			</div>
 			<p className="mb-3 text-sm">
-				<span className="text-neutral-700">Subject:</span>{" "}
+				<span className="text-haze">Subject:</span>{" "}
 				<span className="font-semibold">{preview.subject}</span>
 			</p>
 			{showText ? (
-				<pre className="max-h-[480px] overflow-auto whitespace-pre-wrap border border-divider bg-surface p-3 font-mono text-xs leading-5">
+				<pre className="max-h-[480px] overflow-auto whitespace-pre-wrap rounded-[14px] bg-night p-3 font-mono text-soft text-xs leading-5">
 					{preview.text}
 				</pre>
 			) : (
@@ -67,9 +65,9 @@ export function PreviewPanel({
 					title="Email preview"
 					sandbox=""
 					srcDoc={preview.html}
-					className="h-[480px] w-full border border-divider bg-white"
+					className="h-[480px] w-full rounded-[14px] border-0 bg-white"
 				/>
 			)}
-		</Blueprint>
+		</div>
 	);
 }

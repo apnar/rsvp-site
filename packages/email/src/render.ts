@@ -1,7 +1,12 @@
 /**
  * Building blocks for the HTML and text parts of every email. Inline styles
- * only, one column, no images: this has to look right in whatever mail app
- * a phone happens to open.
+ * only, one column: this has to look right in whatever mail app a phone
+ * happens to open.
+ *
+ * The site is After Dark -- plum night, lime and pink -- but the email body
+ * stays light. Gmail and Outlook rewrite dark backgrounds in their own dark
+ * modes and the result is unreadable, so the brand lives in the header band
+ * and the buttons, and the text sits on white.
  */
 
 import { SENDER } from "./sender";
@@ -30,25 +35,41 @@ export const PARAM = {
 const FONT =
 	"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;";
 
+/** After Dark, as far as email allows. */
+export const COLORS = {
+	night: "#14101F",
+	ink: "#1F1930",
+	lime: "#C6FF3D",
+	pink: "#FF4FA3",
+	/** Pink deep enough to read as text on white. */
+	pinkText: "#B0236C",
+	muted: "#5E5577",
+	line: "#E4DEF0",
+	ground: "#F3F0F8",
+} as const;
+
 const styles = {
-	body: `margin:0; padding:0; background:#f4f3ef; ${FONT} color:#1a1a1a;`,
+	body: `margin:0; padding:0; background:${COLORS.ground}; ${FONT} color:${COLORS.ink};`,
 	wrap: "max-width:560px; margin:0 auto; padding:24px 16px;",
-	card: "background:#ffffff; border:1px solid #d9d6cc; padding:28px 24px;",
-	kicker:
-		"margin:0 0 8px; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#4a6d8c;",
-	h1: "margin:0 0 16px; font-size:26px; line-height:1.15; font-weight:700; text-transform:uppercase; letter-spacing:0.01em;",
+	band: `background:${COLORS.night}; padding:18px 24px; border-radius:20px 20px 0 0;`,
+	wordmark:
+		"margin:0; font-size:18px; font-weight:900; letter-spacing:-0.02em; color:#F5F0FF;",
+	cover: "display:block; width:100%; height:auto; border:0;",
+	card: `background:#ffffff; padding:28px 24px; border-radius:0 0 20px 20px; border:1px solid ${COLORS.line}; border-top:0;`,
+	kicker: `margin:0 0 8px; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; color:${COLORS.pinkText};`,
+	h1: "margin:0 0 16px; font-size:28px; line-height:1.1; font-weight:900; letter-spacing:-0.03em;",
 	p: "margin:0 0 14px; font-size:16px; line-height:1.5;",
 	facts:
 		"margin:0 0 18px; padding:0; border-collapse:collapse; font-size:16px; line-height:1.5;",
-	factLabel:
-		"padding:4px 12px 4px 0; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#4a6d8c; vertical-align:baseline; white-space:nowrap;",
+	factLabel: `padding:4px 14px 4px 0; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; color:${COLORS.muted}; vertical-align:baseline; white-space:nowrap;`,
 	factValue: "padding:4px 0; font-weight:600; vertical-align:baseline;",
-	button:
-		"display:inline-block; padding:12px 20px; background:#2f5f86; color:#ffffff !important; text-decoration:none; font-weight:700; font-size:15px;",
-	muted: "color:#5f5f5f; font-size:14px; line-height:1.5;",
-	footer:
-		"margin:16px 0 0; padding:0 4px; color:#6b6b6b; font-size:12px; line-height:1.5;",
-	link: "color:#2f5f86;",
+	buttonRow: "margin:22px 0 8px;",
+	button: `display:inline-block; margin:0 6px 8px 0; padding:13px 22px; border-radius:999px; background:${COLORS.lime}; color:${COLORS.night} !important; text-decoration:none; font-weight:800; font-size:15px;`,
+	buttonPink: `display:inline-block; margin:0 6px 8px 0; padding:13px 22px; border-radius:999px; background:${COLORS.pink}; color:${COLORS.night} !important; text-decoration:none; font-weight:800; font-size:15px;`,
+	buttonOutline: `display:inline-block; margin:0 6px 8px 0; padding:12px 21px; border-radius:999px; border:1px solid ${COLORS.ink}; color:${COLORS.ink} !important; text-decoration:none; font-weight:800; font-size:15px;`,
+	muted: `color:${COLORS.muted}; font-size:14px; line-height:1.5;`,
+	footer: `margin:16px 0 0; padding:0 4px; color:${COLORS.muted}; font-size:12px; line-height:1.5;`,
+	link: `color:${COLORS.pinkText};`,
 } as const;
 
 export type Fact = { label: string; value: string };
@@ -77,9 +98,34 @@ export function factsTable(facts: Fact[]): string {
 	return `<table role="presentation" style="${styles.facts}">${rows}</table>`;
 }
 
+export type ButtonTone = "lime" | "pink" | "outline";
+
+function buttonLink(label: string, href: string, tone: ButtonTone): string {
+	const style =
+		tone === "pink"
+			? styles.buttonPink
+			: tone === "outline"
+				? styles.buttonOutline
+				: styles.button;
+	return `<a href="${escapeHtml(href)}" style="${style}">${escapeHtml(label)}</a>`;
+}
+
 /** A call-to-action link styled as a button. `href` must already be safe. */
-export function button(label: string, href: string): string {
-	return `<p style="margin:20px 0 6px;"><a href="${escapeHtml(href)}" style="${styles.button}">${escapeHtml(label)}</a></p>`;
+export function button(
+	label: string,
+	href: string,
+	tone: ButtonTone = "lime",
+): string {
+	return `<p style="${styles.buttonRow}">${buttonLink(label, href, tone)}</p>`;
+}
+
+/** Several buttons on one line, wrapping on a phone. */
+export function buttons(
+	items: { label: string; href: string; tone?: ButtonTone }[],
+): string {
+	return `<p style="${styles.buttonRow}">${items
+		.map((b) => buttonLink(b.label, b.href, b.tone ?? "lime"))
+		.join(" ")}</p>`;
 }
 
 export function muted(html: string): string {
@@ -87,18 +133,20 @@ export function muted(html: string): string {
 }
 
 /**
- * Footer for list emails: who this is and how to step away. There is no
- * unsubscribe-and-stay-on-the-list any more -- email is how this group
- * talks, so leaving the email means leaving the events for a while. The
- * link opens a form that asks for how long and why. Uses raw placeholders.
+ * Footer for list emails: why they got it, and the way out. The link opens a
+ * page with a button rather than acting on the GET, because mail clients
+ * fetch links unprompted. Uses raw placeholders.
  */
 export function listFooter(): string {
-	return `<p style="${styles.footer}">You get these because you are on the guest list. Links in this email sign you in, so don't forward it. Away, busy, or just need a pause? <a href="${PARAM.unsubscribeUrl}" style="${styles.link}">Take a break</a> and we will hold your spot.</p>`;
+	return `<p style="${styles.footer}">You got this because a host invited you on ${escapeHtml(SITE_LABEL)}. Links in this email sign you in, so don't forward it. Rather not get these? <a href="${PARAM.unsubscribeUrl}" style="${styles.link}">Unsubscribe</a>.</p>`;
 }
 
 export function listFooterText(): string {
-	return `You get these because you are on the guest list.\nLinks in this email sign you in, so don't forward it.\nAway, busy, or just need a pause? Take a break: ${PARAM.unsubscribeUrl}`;
+	return `You got this because a host invited you on ${SITE_LABEL}.\nLinks in this email sign you in, so don't forward it.\nRather not get these? Unsubscribe: ${PARAM.unsubscribeUrl}`;
 }
+
+/** How the site names itself in running text. */
+export const SITE_LABEL = "Botch RSVP";
 
 export function layout(input: {
 	title: string;
@@ -106,7 +154,12 @@ export function layout(input: {
 	heading: string;
 	bodyHtml: string;
 	footerHtml?: string;
+	/** An absolute, token-free image URL shown full width under the band. */
+	coverUrl?: string | null;
 }): string {
+	const cover = input.coverUrl
+		? `<img src="${escapeHtml(input.coverUrl)}" alt="" width="560" style="${styles.cover}">`
+		: "";
 	return `<!doctype html>
 <html lang="en">
 <head>
@@ -117,6 +170,8 @@ export function layout(input: {
 </head>
 <body style="${styles.body}">
 <div style="${styles.wrap}">
+<div style="${styles.band}"><p style="${styles.wordmark}">botch<span style="color:${COLORS.lime};">&bull;</span>rsvp</p></div>
+${cover}
 <div style="${styles.card}">
 <p style="${styles.kicker}">${escapeHtml(input.kicker ?? SENDER.name)}</p>
 <h1 style="${styles.h1}">${escapeHtml(input.heading)}</h1>

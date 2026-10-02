@@ -1,25 +1,15 @@
-import {
-	and,
-	asc,
-	eq,
-	gte,
-	inArray,
-	isNotNull,
-	isNull,
-	lte,
-	ne,
-	or,
-} from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 
 import type { createDb } from "./index";
+import { roleOf } from "./roles";
 import {
 	type PersonSource,
 	type PersonStatus,
+	type Role,
 	type StatusActor,
+	type UnsubscribeReason,
 	user,
 } from "./schema/auth";
-import { game } from "./schema/game";
-import { rsvp } from "./schema/rsvp";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -28,45 +18,53 @@ export function normalizeEmail(raw: string): string {
 	return raw.trim().toLowerCase();
 }
 
+/**
+ * Pull addresses out of whatever a host pasted: commas, semicolons, new
+ * lines, "Name <a@b.c>". Lower-cased and deduplicated, in the order given.
+ * Anything without an @ and a dot after it is dropped rather than guessed at.
+ */
+export function parseEmails(raw: string): string[] {
+	return parseAddresses(raw).map((a) => a.email);
+}
+
+const ADDRESS = /[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/g;
+
+/**
+ * The same, keeping the name a mail client puts in front of an address --
+ * `"Linh Nguyen" <linh@x.com>` or `Linh Nguyen <linh@x.com>` -- so a pasted
+ * list makes accounts with real names rather than the part before the @.
+ */
+export function parseAddresses(
+	raw: string,
+): { email: string; name: string | null }[] {
+	const seen = new Set<string>();
+	const out: { email: string; name: string | null }[] = [];
+	let last = 0;
+	for (const match of raw.matchAll(ADDRESS)) {
+		const start = match.index ?? 0;
+		// Whatever sits between the previous address and this one, after the
+		// last separator, is this one's name -- if it is in angle brackets.
+		const before = raw.slice(last, start);
+		last = start + match[0].length;
+		const email = normalizeEmail(match[0]);
+		if (seen.has(email)) continue;
+		seen.add(email);
+		const bracketed = before.trimEnd().endsWith("<");
+		const name = bracketed
+			? (before.split(/[,;\n]/).at(-1) ?? "").replace(/[<>"']/g, "").trim()
+			: "";
+		out.push({ email, name: name && name.length <= 60 ? name : null });
+	}
+	return out;
+}
+
 /** A fresh token: 32 hex characters, unguessable. */
 export function newToken(): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(16));
 	return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export type PersonState = {
-	id: string;
-	email: string;
-	name: string;
-	status: PersonStatus;
-	suspendedUntil: Date | null;
-	statusReason: string | null;
-};
-
-/**
- * What a person's stored status actually means right now. A suspension with
- * a date in the past is simply over — nothing has to run for somebody to come
- * back, which is why a missed cron cannot strand anyone. `deactivated` never
- * expires: only an admin lifts it.
- */
-export function effectiveStatus(
-	row: Pick<PersonState, "status" | "suspendedUntil">,
-	now: Date = new Date(),
-): PersonStatus {
-	if (
-		row.status === "suspended" &&
-		row.suspendedUntil &&
-		row.suspendedUntil.getTime() <= now.getTime()
-	) {
-		return "active";
-	}
-	return row.status;
-}
-
-/**
- * Not thrown out of the group -- which is exactly who is on the roster, break
- * or no break. `banned` is nullable, so never compare it with `= 0`.
- */
+/** Not thrown out. `banned` is nullable, so never compare it with `= 0`. */
 export function notDeactivated() {
 	return and(
 		ne(user.status, "deactivated"),
@@ -74,26 +72,9 @@ export function notDeactivated() {
 	);
 }
 
-/** On the list right now: active, or a suspension whose date has passed. */
-export function activeWhere(now: Date = new Date()) {
-	return and(
-		notDeactivated(),
-		or(
-			eq(user.status, "active"),
-			and(
-				eq(user.status, "suspended"),
-				isNotNull(user.suspendedUntil),
-				lte(user.suspendedUntil, now),
-			),
-		),
-	);
-}
-
-export type Audience = "active" | "everyone";
-
-/** Who a send of this audience would reach. Never anyone deactivated. */
-export function audienceWhere(audience: Audience, now: Date = new Date()) {
-	return audience === "everyone" ? notDeactivated() : activeWhere(now);
+/** Somebody email may go to: not deactivated, and not unsubscribed. */
+export function mailableWhere() {
+	return and(notDeactivated(), isNull(user.unsubscribedAt));
 }
 
 export type Person = {
@@ -101,13 +82,13 @@ export type Person = {
 	name: string;
 	email: string;
 	emailVerified: boolean;
-	role: string | null;
+	role: Role;
 	source: PersonSource;
 	status: PersonStatus;
-	suspendedUntil: Date | null;
-	statusReason: string | null;
 	statusChangedAt: Date | null;
 	statusChangedBy: StatusActor | null;
+	unsubscribedAt: Date | null;
+	unsubscribeReason: UnsubscribeReason | null;
 	linkSentAt: Date | null;
 	createdAt: Date;
 };
@@ -120,55 +101,32 @@ const personColumns = {
 	role: user.role,
 	source: user.source,
 	status: user.status,
-	suspendedUntil: user.suspendedUntil,
-	statusReason: user.statusReason,
 	statusChangedAt: user.statusChangedAt,
 	statusChangedBy: user.statusChangedBy,
+	unsubscribedAt: user.unsubscribedAt,
+	unsubscribeReason: user.unsubscribeReason,
 	linkSentAt: user.linkSentAt,
 	createdAt: user.createdAt,
 };
 
-/** Everybody, oldest first, with their status resolved for display. */
-export async function listPeople(
-	db: Db,
-	now: Date = new Date(),
-): Promise<(Person & { effectiveStatus: PersonStatus })[]> {
+/** Everybody, oldest first. */
+export async function listPeople(db: Db): Promise<Person[]> {
 	const rows = await db
 		.select(personColumns)
 		.from(user)
 		.orderBy(asc(user.createdAt))
 		.all();
-	return rows.map((row) => ({
-		...row,
-		effectiveStatus: effectiveStatus(row, now),
-	}));
+	return rows.map((row) => ({ ...row, role: roleOf(row.role) }));
 }
 
-/**
- * Everybody still in the group and whether they are stepped away right now.
- *
- * The roster as the opening call finds it, which is what stage 01 writes down
- * so that a break can still be told from silence months later. Wider than
- * `listRecipients("active")` on purpose: the people on a break are the point.
- */
-export async function listRosterState(
-	db: Db,
-	now: Date = new Date(),
-): Promise<{ id: string; onBreak: boolean }[]> {
-	const rows = await db
-		.select({
-			id: user.id,
-			status: user.status,
-			suspendedUntil: user.suspendedUntil,
-		})
+/** One person's own record, re-read from D1 rather than the session cookie. */
+export async function findPerson(db: Db, id: string): Promise<Person | null> {
+	const row = await db
+		.select(personColumns)
 		.from(user)
-		.where(notDeactivated())
-		.orderBy(asc(user.createdAt))
-		.all();
-	return rows.map((row) => ({
-		id: row.id,
-		onBreak: effectiveStatus(row, now) === "suspended",
-	}));
+		.where(eq(user.id, id))
+		.get();
+	return row ? { ...row, role: roleOf(row.role) } : null;
 }
 
 export type Recipient = {
@@ -179,24 +137,48 @@ export type Recipient = {
 	linkToken: string | null;
 };
 
-/** Everyone the next list email should reach, oldest first. */
+const recipientColumns = {
+	id: user.id,
+	email: user.email,
+	name: user.name,
+	unsubscribeToken: user.unsubscribeToken,
+	linkToken: user.linkToken,
+};
+
+/**
+ * The people email may go to, oldest first: everybody, or just these ids.
+ * Deactivated and unsubscribed people are never in it, whatever was asked.
+ */
 export async function listRecipients(
 	db: Db,
-	audience: Audience = "active",
-	now: Date = new Date(),
+	onlyIds?: readonly string[],
 ): Promise<Recipient[]> {
-	return db
-		.select({
-			id: user.id,
-			email: user.email,
-			name: user.name,
-			unsubscribeToken: user.unsubscribeToken,
-			linkToken: user.linkToken,
-		})
-		.from(user)
-		.where(audienceWhere(audience, now))
-		.orderBy(asc(user.createdAt))
-		.all();
+	if (onlyIds && onlyIds.length === 0) return [];
+	const rows: Recipient[] = [];
+	// D1 caps bound parameters per statement, so long id lists go in slices.
+	const slices = onlyIds ? chunk(onlyIds, 90) : [undefined];
+	for (const ids of slices) {
+		const where = ids
+			? and(mailableWhere(), inArray(user.id, ids))
+			: mailableWhere();
+		rows.push(
+			...(await db
+				.select(recipientColumns)
+				.from(user)
+				.where(where)
+				.orderBy(asc(user.createdAt))
+				.all()),
+		);
+	}
+	return rows;
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) {
+		out.push(items.slice(i, i + size));
+	}
+	return out;
 }
 
 export type LinkPerson = {
@@ -205,8 +187,6 @@ export type LinkPerson = {
 	name: string;
 	emailVerified: boolean;
 	status: PersonStatus;
-	suspendedUntil: Date | null;
-	statusReason: string | null;
 };
 
 /** Who a sign-in link belongs to. Null when the token means nothing. */
@@ -221,8 +201,6 @@ export async function findPersonByLinkToken(
 			name: user.name,
 			emailVerified: user.emailVerified,
 			status: user.status,
-			suspendedUntil: user.suspendedUntil,
-			statusReason: user.statusReason,
 		})
 		.from(user)
 		.where(eq(user.linkToken, token))
@@ -230,40 +208,108 @@ export async function findPersonByLinkToken(
 	return row ?? null;
 }
 
-/** Somebody's own state, for the dashboard and the RSVP board. */
-export async function findPersonState(
-	db: Db,
-	userId: string,
-): Promise<PersonState | null> {
-	const row = await db
-		.select({
-			id: user.id,
-			email: user.email,
-			name: user.name,
-			status: user.status,
-			suspendedUntil: user.suspendedUntil,
-			statusReason: user.statusReason,
-		})
-		.from(user)
-		.where(eq(user.id, userId))
-		.get();
-	return row ?? null;
-}
-
-/**
- * Somebody who could still be sent a sign-in link, by address. Suspended
- * counts: getting back in is exactly how they come back. Deactivated does not.
- */
+/** Somebody who could still be sent a sign-in link, by address. */
 export async function findReachablePersonByEmail(
 	db: Db,
 	email: string,
-): Promise<{ id: string; linkSentAt: Date | null } | null> {
+): Promise<{
+	id: string;
+	linkSentAt: Date | null;
+	unsubscribedAt: Date | null;
+} | null> {
 	const row = await db
-		.select({ id: user.id, linkSentAt: user.linkSentAt })
+		.select({
+			id: user.id,
+			linkSentAt: user.linkSentAt,
+			unsubscribedAt: user.unsubscribedAt,
+		})
 		.from(user)
 		.where(and(eq(user.email, normalizeEmail(email)), notDeactivated()))
 		.get();
 	return row ?? null;
+}
+
+export type FoundPerson = {
+	id: string;
+	email: string;
+	name: string;
+	status: PersonStatus;
+	created: boolean;
+};
+
+/**
+ * The people behind these addresses, creating a plain `user` for each one
+ * nobody has used yet. This is how anybody gets an account now: a host types
+ * an address, or a stranger types theirs on a share link.
+ *
+ * Rows are written straight to D1 rather than through Better Auth's
+ * `createUser`, which is an admin endpoint that refuses hosts. Both tokens
+ * go in with the insert, so there is no moment when a person exists with no
+ * way in -- the same promise `stampTokens` keeps for rows Better Auth makes.
+ * Deactivated people come back as found, never revived; callers skip them.
+ */
+export async function findOrCreatePeople(
+	db: Db,
+	entries: readonly (string | { email: string; name: string | null })[],
+	source: PersonSource,
+): Promise<FoundPerson[]> {
+	const names = new Map<string, string>();
+	for (const e of entries) {
+		if (typeof e !== "string" && e.name)
+			names.set(normalizeEmail(e.email), e.name);
+	}
+	const wanted = [
+		...new Set(
+			entries.map((e) => normalizeEmail(typeof e === "string" ? e : e.email)),
+		),
+	].filter(Boolean);
+	if (wanted.length === 0) return [];
+	const before = await selectByEmail(db, wanted);
+	const known = new Set(before.map((p) => p.email));
+	const missing = wanted.filter((email) => !known.has(email));
+	for (const slice of chunk(missing, 8)) {
+		await db
+			.insert(user)
+			.values(
+				slice.map((email) => ({
+					id: crypto.randomUUID(),
+					email,
+					name: names.get(email) ?? email.split("@")[0] ?? email,
+					emailVerified: false,
+					role: "user",
+					source,
+					linkToken: newToken(),
+					unsubscribeToken: newToken(),
+				})),
+			)
+			// Two hosts adding the same stranger at once: the loser's row is
+			// dropped and the re-read below finds the winner's.
+			.onConflictDoNothing({ target: user.email });
+	}
+	const after = missing.length ? await selectByEmail(db, wanted) : before;
+	const order = new Map(wanted.map((email, i) => [email, i]));
+	return after
+		.map((p) => ({ ...p, created: !known.has(p.email) }))
+		.sort((a, b) => (order.get(a.email) ?? 0) - (order.get(b.email) ?? 0));
+}
+
+async function selectByEmail(db: Db, emails: string[]) {
+	const rows: Omit<FoundPerson, "created">[] = [];
+	for (const slice of chunk(emails, 90)) {
+		rows.push(
+			...(await db
+				.select({
+					id: user.id,
+					email: user.email,
+					name: user.name,
+					status: user.status,
+				})
+				.from(user)
+				.where(inArray(user.email, slice))
+				.all()),
+		);
+	}
+	return rows;
 }
 
 /** The sign-in token for a person, generating one if the row predates them. */
@@ -300,94 +346,6 @@ export async function markLinkSent(db: Db, id: string): Promise<void> {
 	await db.update(user).set({ linkSentAt: new Date() }).where(eq(user.id, id));
 }
 
-/**
- * Take somebody off the sheet for every game still ahead of them.
- *
- * Stepping away has to mean stepping off the headcount, or a cancelled
- * flight the night before still counts toward the next day's total, shows up in the In list of
- * every email, and gets none of them -- because none of those emails go to
- * anybody on a break.
- *
- * Dates are compared as YYYY-MM-DD strings against the venue's calendar day,
- * which is what `game.date` has always been.
- */
-async function standDown(db: Db, userId: string): Promise<void> {
-	const today = new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/New_York",
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-	}).format(new Date());
-	await db
-		.update(rsvp)
-		.set({ response: "out" })
-		.where(
-			and(
-				eq(rsvp.userId, userId),
-				ne(rsvp.response, "out"),
-				inArray(
-					rsvp.gameId,
-					db.select({ id: game.id }).from(game).where(gte(game.date, today)),
-				),
-			),
-		);
-}
-
-export type SuspendInput = {
-	userId: string;
-	reason?: string | null;
-	/** Null means "until they say otherwise". */
-	until?: Date | null;
-	by: StatusActor;
-};
-
-/**
- * Step somebody away for a while. No game email, no spot on the sheet, but
- * their link still signs them in — that is how they come back. Never touches
- * a deactivated row: an admin put them there and only an admin lifts it.
- */
-export async function suspend(db: Db, input: SuspendInput): Promise<boolean> {
-	await standDown(db, input.userId);
-	const result = await db
-		.update(user)
-		.set({
-			status: "suspended",
-			suspendedUntil: input.until ?? null,
-			statusReason: input.reason?.trim() || null,
-			statusChangedAt: new Date(),
-			statusChangedBy: input.by,
-		})
-		.where(and(eq(user.id, input.userId), ne(user.status, "deactivated")))
-		.run();
-	return result.meta.changes === 1;
-}
-
-/**
- * Take an address off the list because the mail bounced, or because they hit
- * Unsubscribe in their mail app. Only touches somebody who is currently
- * active, so a repeat webhook cannot clobber a reason they wrote themselves.
- */
-export async function suspendByEmail(
-	db: Db,
-	email: string,
-	input: { reason: string },
-): Promise<boolean> {
-	const result = await db
-		.update(user)
-		.set({
-			status: "suspended",
-			suspendedUntil: null,
-			statusReason: input.reason,
-			statusChangedAt: new Date(),
-			statusChangedBy: "mail",
-		})
-		.where(
-			and(eq(user.email, normalizeEmail(email)), eq(user.status, "active")),
-		)
-		.run();
-	return result.meta.changes === 1;
-}
-
 /** Who a list-email footer link belongs to. Null when the token means nothing. */
 export async function findPersonByUnsubscribeToken(
 	db: Db,
@@ -397,6 +355,7 @@ export async function findPersonByUnsubscribeToken(
 	email: string;
 	name: string;
 	status: PersonStatus;
+	unsubscribedAt: Date | null;
 } | null> {
 	const row = await db
 		.select({
@@ -404,6 +363,7 @@ export async function findPersonByUnsubscribeToken(
 			email: user.email,
 			name: user.name,
 			status: user.status,
+			unsubscribedAt: user.unsubscribedAt,
 		})
 		.from(user)
 		.where(eq(user.unsubscribeToken, token))
@@ -412,40 +372,64 @@ export async function findPersonByUnsubscribeToken(
 }
 
 /**
- * Back on the list. Lifts a suspension only — a deactivated row is left
- * alone, so no self-service path can ever turn into a way to lift a ban.
+ * No more email. The account still works and invitations still list them;
+ * the hosts see that this person will not get the mail. A repeat (the
+ * webhook firing twice, the footer clicked again) keeps the first reason.
  */
-export async function unsuspend(db: Db, userId: string): Promise<boolean> {
+export async function unsubscribe(
+	db: Db,
+	where: { id: string } | { email: string },
+	reason: UnsubscribeReason,
+): Promise<boolean> {
+	const match =
+		"id" in where
+			? eq(user.id, where.id)
+			: eq(user.email, normalizeEmail(where.email));
 	const result = await db
 		.update(user)
-		.set({
-			status: "active",
-			suspendedUntil: null,
-			statusReason: null,
-			statusChangedAt: new Date(),
-			statusChangedBy: null,
-		})
-		.where(and(eq(user.id, userId), eq(user.status, "suspended")))
+		.set({ unsubscribedAt: new Date(), unsubscribeReason: reason })
+		.where(and(match, isNull(user.unsubscribedAt)))
 		.run();
 	return result.meta.changes === 1;
 }
 
 /**
- * Out of the group. Admin only. `banned` is set in the same statement so
- * Better Auth refuses the password door too; the caller kills their sessions.
+ * Email again. Never touches a deactivated row, so no self-service path can
+ * become a way around an admin. The caller also lifts Brevo's blocklist, or
+ * the person reads as subscribed and is quietly undeliverable.
+ */
+export async function resubscribe(db: Db, userId: string): Promise<boolean> {
+	const result = await db
+		.update(user)
+		.set({ unsubscribedAt: null, unsubscribeReason: null })
+		.where(and(eq(user.id, userId), ne(user.status, "deactivated")))
+		.run();
+	return result.meta.changes === 1;
+}
+
+/**
+ * Change what somebody may do. Written here rather than through Better
+ * Auth's admin plugin, which only knows `admin` and `user` and refuses
+ * `host`. The session cookie caches the old role for up to five minutes;
+ * anything that grants access re-reads D1.
+ */
+export async function setRole(db: Db, userId: string, role: Role) {
+	await db.update(user).set({ role }).where(eq(user.id, userId));
+}
+
+/**
+ * Out. Admin only. `banned` is set in the same statement so Better Auth
+ * refuses the password door too; the caller kills their sessions.
  */
 export async function deactivate(
 	db: Db,
 	input: { userId: string; reason?: string | null },
 ): Promise<void> {
-	await standDown(db, input.userId);
 	const reason = input.reason?.trim() || null;
 	await db
 		.update(user)
 		.set({
 			status: "deactivated",
-			suspendedUntil: null,
-			statusReason: reason,
 			statusChangedAt: new Date(),
 			statusChangedBy: "admin",
 			banned: true,
@@ -461,44 +445,13 @@ export async function reactivate(db: Db, userId: string): Promise<void> {
 		.update(user)
 		.set({
 			status: "active",
-			suspendedUntil: null,
-			statusReason: null,
 			statusChangedAt: new Date(),
-			statusChangedBy: null,
+			statusChangedBy: "admin",
 			banned: false,
 			banReason: null,
 			banExpires: null,
 		})
 		.where(eq(user.id, userId));
-}
-
-/**
- * Tidy suspensions whose date has passed. Housekeeping only — `activeWhere`
- * already treats them as active — so a missed run costs nothing but a stale
- * "Suspended until <a date last month>" in the admin table.
- */
-export async function sweepExpiredSuspensions(
-	db: Db,
-	now: Date = new Date(),
-): Promise<number> {
-	const result = await db
-		.update(user)
-		.set({
-			status: "active",
-			suspendedUntil: null,
-			statusReason: null,
-			statusChangedAt: null,
-			statusChangedBy: null,
-		})
-		.where(
-			and(
-				eq(user.status, "suspended"),
-				isNotNull(user.suspendedUntil),
-				lte(user.suspendedUntil, now),
-			),
-		)
-		.run();
-	return result.meta.changes ?? 0;
 }
 
 /** Stamp the tokens onto a row that has none. Idempotent; used by the create hook. */
@@ -517,4 +470,4 @@ export async function stampTokens(db: Db, userId: string): Promise<void> {
 		.where(and(eq(user.id, userId), isNull(user.unsubscribeToken)));
 }
 
-export type { PersonSource, PersonStatus, StatusActor };
+export type { PersonSource, PersonStatus, Role, StatusActor };

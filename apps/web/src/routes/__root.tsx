@@ -7,14 +7,15 @@ import {
 	Link,
 	Outlet,
 	Scripts,
+	useMatches,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
-import { SITE_NAME } from "@/content/run";
+import { Wordmark } from "@/components/brand";
+import SiteHeader from "@/components/site-header";
+import { SITE_NAME, TAGLINE } from "@/content/site";
 import { getUser } from "@/functions/get-user";
 import type { orpc } from "@/utils/orpc";
-
-import Header from "../components/header";
 
 import appCss from "../index.css?url";
 export interface RouterAppContext {
@@ -45,18 +46,18 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 			},
 			{
 				name: "description",
-				content:
-					"Invitations and RSVPs for the host's events. In, out or maybe, one click from your inbox.",
+				content: TAGLINE,
 			},
+			{ name: "theme-color", content: "#14101F" },
 		],
 		links: [
 			{
 				rel: "stylesheet",
 				href: appCss,
 			},
-			// An envelope on steel, inside the sheet's registration marks.
-			// SVG for browsers that take it, the .ico for the ones that do not
-			// (Safari among them), and the 180px PNG for a home screen.
+			// The lime dot on plum. SVG for browsers that take it, the .ico for
+			// the ones that do not (Safari among them), and the 180px PNG for a
+			// home screen.
 			{ rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
 			{ rel: "icon", href: "/favicon.ico", sizes: "16x16 32x32 48x48" },
 			{ rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
@@ -66,8 +67,16 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 	component: RootDocument,
 });
 
+/**
+ * Pages that open on a full-bleed photo draw the header inside it, over the
+ * picture, the way the design has it.
+ */
+const OWN_HEADER = new Set(["/_auth/e/$eventId/", "/i/$token"]);
+
 function RootDocument() {
 	const { session } = Route.useRouteContext();
+	const matches = useMatches();
+	const ownHeader = matches.some((m) => OWN_HEADER.has(m.routeId));
 
 	return (
 		<html lang="en">
@@ -75,30 +84,25 @@ function RootDocument() {
 				<HeadContent />
 			</head>
 			<body>
-				<div className="flex min-h-svh flex-col">
-					<Header />
-					<div className="mx-auto w-full max-w-[1100px] flex-1 px-[clamp(20px,5vw,72px)]">
-						<main>
-							<Outlet />
-						</main>
-						<footer className="flex flex-wrap justify-between gap-2 border-divider border-t py-12 text-[13px] text-neutral-700 leading-6">
-							<span>{SITE_NAME} · invitations from the host</span>
-							{session ? (
-								<span>
-									Rain or shine: the final word on every event lands in your
-									inbox on the day.
-								</span>
-							) : (
-								<span>
-									Already on the list?{" "}
-									<Link to="/login" className="text-steel-700">
-										Sign in
-									</Link>
-									.
-								</span>
-							)}
-						</footer>
-					</div>
+				<div className="flex min-h-svh flex-col overflow-x-clip">
+					{ownHeader ? null : <SiteHeader />}
+					<main className="flex-1">
+						<Outlet />
+					</main>
+					<footer className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center gap-x-5 gap-y-2 px-[clamp(16px,4vw,40px)] pt-5 pb-8 text-[13px] text-haze">
+						<Link to="/" className="mr-auto no-underline">
+							<Wordmark className="text-[15px] text-haze" />
+						</Link>
+						{session ? (
+							<Link to="/account" className="text-haze hover:text-ink">
+								Your account
+							</Link>
+						) : (
+							<Link to="/login" className="text-haze hover:text-ink">
+								Sign in
+							</Link>
+						)}
+					</footer>
 				</div>
 				<Toaster richColors />
 				<TanStackRouterDevtools position="bottom-left" />

@@ -13,7 +13,7 @@ export function resetPasswordEmail(input: ResetPasswordInput): Rendered {
 			`<p style="margin:0 0 14px; font-size:16px; line-height:1.5;">${escapeHtml(input.name)}, here is your way back in. The link dies in an hour.</p>`,
 			button("Reset my password", input.url),
 			muted(
-				`Or paste this into a browser:<br><a href="${escapeHtml(input.url)}" style="color:#2f5f86; word-break:break-all;">${escapeHtml(input.url)}</a>`,
+				`Or paste this into a browser:<br><a href="${escapeHtml(input.url)}" style="color:#B0236C; word-break:break-all;">${escapeHtml(input.url)}</a>`,
 			),
 			muted(
 				"Didn't ask for this? Ignore it and keep the story to yourself. Your password has not changed.",

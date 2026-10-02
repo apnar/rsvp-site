@@ -1,55 +1,74 @@
 import { describe, expect, it } from "vitest";
 
-import { effectiveStatus } from "./people";
+import { parseAddresses, parseEmails } from "./people";
+import { canHost, isAdmin, roleOf } from "./roles";
 
-const at = (ms: number) => new Date(ms);
-const NOW = at(1_000_000);
-
-describe("effectiveStatus", () => {
-	it("leaves an active person alone", () => {
-		expect(
-			effectiveStatus({ status: "active", suspendedUntil: null }, NOW),
-		).toBe("active");
+describe("parseEmails", () => {
+	it("splits on commas, semicolons and new lines", () => {
+		expect(parseEmails("a@x.com, b@x.com;c@x.com\nd@x.com")).toEqual([
+			"a@x.com",
+			"b@x.com",
+			"c@x.com",
+			"d@x.com",
+		]);
 	});
 
-	it("keeps an open-ended break running", () => {
-		expect(
-			effectiveStatus({ status: "suspended", suspendedUntil: null }, NOW),
-		).toBe("suspended");
+	it("takes the address out of a mail client's Name <address>", () => {
+		expect(parseEmails('"Linh Nguyen" <Linh.Nguyen@Mail.com>')).toEqual([
+			"linh.nguyen@mail.com",
+		]);
 	});
 
-	it("keeps a break that has not run out yet", () => {
+	it("drops repeats, keeping the first position", () => {
+		expect(parseEmails("b@x.com a@x.com B@X.com")).toEqual([
+			"b@x.com",
+			"a@x.com",
+		]);
+	});
+
+	it("ignores words that are not addresses", () => {
+		expect(parseEmails("the Parks, nobody@, @x.com, x@y")).toEqual([]);
+	});
+});
+
+describe("parseAddresses", () => {
+	it("keeps the name a mail client puts in front", () => {
 		expect(
-			effectiveStatus(
-				{ status: "suspended", suspendedUntil: at(1_000_001) },
-				NOW,
+			parseAddresses(
+				'"Linh Nguyen" <linh@x.com>, Marcus T <marcus@x.com>; bare@x.com',
 			),
-		).toBe("suspended");
+		).toEqual([
+			{ email: "linh@x.com", name: "Linh Nguyen" },
+			{ email: "marcus@x.com", name: "Marcus T" },
+			{ email: "bare@x.com", name: null },
+		]);
+	});
+});
+
+describe("roleOf", () => {
+	it("reads host and admin", () => {
+		expect(roleOf("host")).toBe("host");
+		expect(roleOf("admin")).toBe("admin");
 	});
 
-	it("ends a break the instant its date arrives", () => {
-		// The boundary is inclusive on purpose: "back on the 7th" means they
-		// are back on the 7th, not the 8th.
-		expect(
-			effectiveStatus({ status: "suspended", suspendedUntil: NOW }, NOW),
-		).toBe("active");
+	it("treats null and anything unknown as a plain user", () => {
+		expect(roleOf(null)).toBe("user");
+		expect(roleOf("user")).toBe("user");
+		expect(roleOf("superuser")).toBe("user");
+	});
+});
+
+describe("canHost and isAdmin", () => {
+	it("let admins do everything a host can", () => {
+		expect(canHost({ role: "admin" })).toBe(true);
+		expect(canHost({ role: "host" })).toBe(true);
+		expect(isAdmin({ role: "host" })).toBe(false);
 	});
 
-	it("ends a break whose date has passed, with no job having run", () => {
-		expect(
-			effectiveStatus(
-				{ status: "suspended", suspendedUntil: at(999_999) },
-				NOW,
-			),
-		).toBe("active");
-	});
-
-	it("never expires a deactivation, dated or not", () => {
-		expect(
-			effectiveStatus({ status: "deactivated", suspendedUntil: null }, NOW),
-		).toBe("deactivated");
-		expect(
-			effectiveStatus({ status: "deactivated", suspendedUntil: at(1) }, NOW),
-		).toBe("deactivated");
+	it("leave a plain user, or nobody, with neither", () => {
+		for (const who of [{ role: "user" }, { role: null }, null, undefined]) {
+			expect(canHost(who)).toBe(false);
+			expect(isAdmin(who)).toBe(false);
+		}
 	});
 });

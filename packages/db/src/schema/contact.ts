@@ -1,0 +1,52 @@
+import { sql } from "drizzle-orm";
+import {
+	index,
+	integer,
+	primaryKey,
+	sqliteTable,
+	text,
+} from "drizzle-orm/sqlite-core";
+
+import { user } from "./auth";
+
+/**
+ * A host's own named list of people ("King Farm Swim Team"), added to an
+ * event's guest list in one go. Private to its owner; admins can read all.
+ */
+export const contactGroup = sqliteTable(
+	"contact_group",
+	{
+		id: text("id").primaryKey(),
+		ownerId: text("owner_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+		updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.$onUpdate(() => /* @__PURE__ */ new Date())
+			.notNull(),
+	},
+	(table) => [index("contact_group_owner_idx").on(table.ownerId)],
+);
+
+export const contactGroupMember = sqliteTable(
+	"contact_group_member",
+	{
+		groupId: text("group_id")
+			.notNull()
+			.references(() => contactGroup.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.groupId, table.userId] }),
+		index("contact_group_member_user_idx").on(table.userId),
+	],
+);

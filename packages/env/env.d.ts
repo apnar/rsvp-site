@@ -4,8 +4,13 @@
 export interface CloudflareEnv {
 	/** D1 database binding. */
 	DB: D1Database;
-	/** R2 bucket holding permit PDFs. */
-	PERMITS: R2Bucket;
+	/** R2 bucket holding event cover photos, served at /api/covers/<key>. */
+	MEDIA: R2Bucket;
+	/**
+	 * Workers rate limiter for the share-link email form, keyed by IP, so a
+	 * public page cannot be used to mail strangers in bulk.
+	 */
+	JOIN_LIMITER: RateLimit;
 	/** Secret: `wrangler secret put BETTER_AUTH_SECRET` (or .dev.vars locally). */
 	BETTER_AUTH_SECRET: string;
 	/** Public origin of the deployed Worker (wrangler.jsonc `vars`). */
