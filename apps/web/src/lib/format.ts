@@ -14,7 +14,7 @@ export function initials(name: string): string {
 }
 
 /** "12m", "3h", "2d", against a clock seeded from the server. */
-export function ago(when: Date | string, nowMs: number): string {
+export function since(when: Date | string, nowMs: number): string {
 	const ms = nowMs - new Date(when).getTime();
 	const minutes = Math.max(0, Math.floor(ms / 60_000));
 	if (minutes < 1) return "now";
@@ -22,6 +22,20 @@ export function ago(when: Date | string, nowMs: number): string {
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) return `${hours}h`;
 	return `${Math.floor(hours / 24)}d`;
+}
+
+/** "12 min ago", "3 hours ago", "just now". */
+export function ago(when: Date | string, nowMs: number): string {
+	const minutes = Math.max(
+		0,
+		Math.floor((nowMs - new Date(when).getTime()) / 60_000),
+	);
+	if (minutes < 1) return "just now";
+	if (minutes < 60) return `${minutes} min ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+	const days = Math.floor(hours / 24);
+	return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
 /** "Friday, Oct 2" for the dashboard kicker. */

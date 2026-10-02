@@ -15,7 +15,7 @@ import { Page, PageHead, Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag } from "@/components/response-bar";
 import { StatTile } from "@/components/stat-tile";
-import { ago, longDay } from "@/lib/format";
+import { longDay, since } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/events")({
@@ -197,6 +197,18 @@ function HostDashboard() {
 											>
 												Nudge {event.totals.waiting}
 											</Button>
+										) : event.status === "canceled" ? (
+											<Link
+												to="/e/$eventId"
+												params={{ eventId: event.id }}
+												className={buttonVariants({
+													variant: "outline",
+													size: "sm",
+													className: "flex-1",
+												})}
+											>
+												View
+											</Link>
 										) : (
 											<Link
 												to="/e/$eventId/edit"
@@ -243,7 +255,7 @@ function HostDashboard() {
 								</span>
 								<span className="text-[13px] text-haze">
 									{f.respondedAt
-										? ago(f.respondedAt, Date.parse(data.now))
+										? since(f.respondedAt, Date.parse(data.now))
 										: ""}
 								</span>
 							</Link>

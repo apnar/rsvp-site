@@ -278,6 +278,7 @@ export const eventsRouter = {
 				.sort(byDate)
 				.reverse();
 
+			const live = upcoming.filter((c) => c.status === "published");
 			const ids = rows.map((r) => r.id);
 			const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 			const fresh = ids.length
@@ -314,11 +315,12 @@ export const eventsRouter = {
 					newReplies: fresh.filter(
 						(f) => f.respondedAt && f.respondedAt > since,
 					).length,
-					deciding: upcoming.reduce(
+					// A canceled party has nobody left to decide and nothing to bring.
+					deciding: live.reduce(
 						(n, c) => n + c.totals.waiting + c.totals.maybe,
 						0,
 					),
-					openSlots: upcoming.reduce((n, c) => n + openSlots(c.potluck), 0),
+					openSlots: live.reduce((n, c) => n + openSlots(c.potluck), 0),
 				},
 				fresh: fresh.map((f) => ({
 					...f,

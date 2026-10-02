@@ -1,3 +1,4 @@
+import { isAdmin } from "@rsvp-site/db/roles";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -53,6 +54,16 @@ export default function UserMenu() {
 					>
 						Your account
 					</DropdownMenuItem>
+					{isAdmin(session.user) ? (
+						<DropdownMenuItem
+							className="sm:hidden"
+							render={
+								<Link to="/admin/users" className="text-ink no-underline" />
+							}
+						>
+							Admin
+						</DropdownMenuItem>
+					) : null}
 					<DropdownMenuItem
 						variant="destructive"
 						onClick={() => {

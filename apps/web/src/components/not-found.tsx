@@ -31,8 +31,10 @@ export function NotFound({
 /** Loader and render errors. An API "no such event" reads as not found. */
 export function RouteError({ error: raw }: ErrorComponentProps) {
 	const error = raw instanceof Error ? raw : new Error(String(raw));
+	// After a server render the error arrives without its oRPC `code`, so
+	// the API's own wording is the other way to recognise a not-found.
 	const code = (error as { code?: string }).code;
-	if (code === "NOT_FOUND") {
+	if (code === "NOT_FOUND" || /^No such /.test(error.message)) {
 		return <NotFound body={error.message} />;
 	}
 	if (code === "UNAUTHORIZED") {

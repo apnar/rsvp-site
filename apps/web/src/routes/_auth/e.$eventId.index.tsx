@@ -66,6 +66,11 @@ function crowdLine(names: string[], shown = 4): string {
 	return `${names.slice(0, shown).join(", ")} and ${names.length - shown} more`;
 }
 
+/** End with a period, unless a name already did ("Marcus T."). */
+function sentence(text: string): string {
+	return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 function InvitePage() {
 	const { eventId } = Route.useParams();
 	const { a } = Route.useSearch();
@@ -185,9 +190,9 @@ function InvitePage() {
 							</div>
 							{data.crowd.yes.length > 0 ? (
 								<span className="text-[15px] text-soft">
-									{crowdLine(data.crowd.yes)}
+									{sentence(crowdLine(data.crowd.yes))}
 									{data.crowd.maybe.length > 0
-										? `. Maybe: ${crowdLine(data.crowd.maybe, 3)}.`
+										? ` Maybe: ${sentence(crowdLine(data.crowd.maybe, 3))}`
 										: ""}
 								</span>
 							) : null}

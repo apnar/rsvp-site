@@ -6,7 +6,7 @@ import { Wordmark } from "./brand";
 import UserMenu from "./user-menu";
 
 const linkClass =
-	"text-[14px] font-medium text-ink no-underline hover:text-lime aria-[current=page]:font-bold aria-[current=page]:text-lime";
+	"text-[13px] sm:text-[14px] font-medium whitespace-nowrap text-ink no-underline hover:text-lime aria-[current=page]:font-bold aria-[current=page]:text-lime";
 
 /**
  * The top bar. What it offers depends on the role in the session: the
@@ -18,13 +18,13 @@ export default function SiteHeader() {
 	const user = session?.user;
 
 	return (
-		<header className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center gap-x-5 gap-y-2.5 px-[clamp(16px,4vw,40px)] py-[18px]">
+		<header className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center gap-x-3.5 gap-y-2.5 px-[clamp(16px,4vw,40px)] py-[18px] sm:gap-x-5">
 			<Link
 				to="/"
 				className="mr-auto no-underline hover:opacity-90"
 				aria-label="Botch RSVP home"
 			>
-				<Wordmark />
+				<Wordmark className="max-sm:text-[17px]" />
 			</Link>
 			{user ? (
 				<>
@@ -37,7 +37,9 @@ export default function SiteHeader() {
 						</Link>
 					) : null}
 					{isAdmin(user) ? (
-						<Link to="/admin/users" className={linkClass}>
+						// On a phone the bar has room for two links and the avatar;
+						// Admin moves into the account menu there.
+						<Link to="/admin/users" className={`${linkClass} max-sm:hidden`}>
 							Admin
 						</Link>
 					) : null}

@@ -337,18 +337,19 @@ function GuestRow({
 	const waiting = g.response === null;
 	const out = g.response === "no";
 	const sub = isYou
-		? `That's you${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)} ago` : ""}`
+		? `That's you${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : ""}`
 		: waiting
 			? g.invitedAt
 				? `${g.email} · invited ${shortDate(g.invitedAt)}`
 				: `${g.email} · not invited yet`
-			: `${g.email}${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)} ago` : ""}`;
+			: `${g.email}${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : ""}`;
 	const note = [g.dietary, g.note ? `"${g.note}"` : ""].filter(Boolean);
+	const coming = g.response === "yes" || g.response === "maybe";
 
 	return (
 		<div
 			className={cn(
-				"flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4",
+				"relative flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4 max-md:pr-12 md:grid md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_184px]",
 				waiting && "border border-line-strong border-dashed",
 				out && "bg-panel-dim text-haze",
 				!waiting && !out && "bg-panel",
@@ -362,39 +363,49 @@ function GuestRow({
 				<b className={cn("text-[17px]", out && "text-soft")}>{g.name}</b>
 				<div className="truncate text-[13px] text-haze">{sub}</div>
 			</div>
-			<AnswerTag response={g.response} />
-			{g.unreachable ? (
-				<span className="rounded-full border border-pink px-2.5 py-0.5 text-[12px] text-pink-soft">
-					No email
-				</span>
-			) : null}
-			{g.response === "yes" || g.response === "maybe" ? (
-				<>
-					<span className="flex-[0_0_120px] text-[14px] text-soft">
-						{party(g)}
+			{/* Every column is drawn on every row, empty or not, so the tags and
+			    the counts line up down the list; the empties drop out on a phone,
+			    where the row wraps anyway. */}
+			<span className="flex w-[96px] flex-col items-start gap-1">
+				<AnswerTag response={g.response} />
+				{g.unreachable ? (
+					<span className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-soft">
+						No email
 					</span>
-					<span className="flex-[0_0_140px] text-[14px] text-soft">
-						{g.bringing.length > 0 ? (
-							g.bringing.join(", ")
-						) : (
-							<span className="text-haze">Nothing yet</span>
-						)}
-					</span>
-				</>
-			) : null}
-			{note.length > 0 ? (
-				<span
-					className={cn(
-						"flex-[1_1_220px] text-[14px]",
-						g.dietary ? "text-pink-soft" : "text-soft",
-					)}
-				>
-					{note.join(" · ")}
-				</span>
-			) : waiting ? (
-				<span className="flex-[1_1_120px]" />
-			) : null}
-			<span className="flex items-center gap-1.5">
+				) : null}
+			</span>
+			<span
+				className={cn(
+					"flex-[0_0_120px] text-[14px] text-soft",
+					!coming && "max-md:hidden",
+				)}
+			>
+				{coming ? party(g) : null}
+			</span>
+			<span
+				className={cn(
+					"flex-[0_0_140px] text-[14px] text-soft",
+					!coming && "max-md:hidden",
+				)}
+			>
+				{coming ? (
+					g.bringing.length > 0 ? (
+						g.bringing.join(", ")
+					) : (
+						<span className="text-haze">Nothing yet</span>
+					)
+				) : null}
+			</span>
+			<span
+				className={cn(
+					"min-w-0 flex-[1_1_160px] text-[14px]",
+					g.dietary ? "text-pink-soft" : "text-soft",
+					note.length === 0 && "max-md:hidden",
+				)}
+			>
+				{note.join(" · ")}
+			</span>
+			<span className="flex items-center justify-end gap-1.5 max-md:empty:hidden md:ml-auto md:min-w-[40px]">
 				{waiting && canNudge && g.invitedAt && !g.unreachable ? (
 					<Button variant="pink" size="sm" disabled={nudging} onClick={onNudge}>
 						Send a nudge
@@ -420,7 +431,9 @@ function GuestRow({
 						onClick={() => setConfirming(true)}
 						className={cn(
 							buttonVariants({ variant: "ghost", size: "icon-xs" }),
-							"text-haze",
+							// In the corner on a phone, so it does not take a line of
+							// its own; in its column otherwise.
+							"text-haze max-md:absolute max-md:top-3 max-md:right-3",
 						)}
 					>
 						×

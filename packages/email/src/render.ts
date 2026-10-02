@@ -138,11 +138,11 @@ export function muted(html: string): string {
  * fetch links unprompted. Uses raw placeholders.
  */
 export function listFooter(): string {
-	return `<p style="${styles.footer}">You got this because a host invited you on ${escapeHtml(SITE_LABEL)}. Links in this email sign you in, so don't forward it. Rather not get these? <a href="${PARAM.unsubscribeUrl}" style="${styles.link}">Unsubscribe</a>.</p>`;
+	return `<p style="${styles.footer}">You got this because you're on ${escapeHtml(SITE_LABEL)}. Links in this email sign you in, so don't forward it. Rather not get these? <a href="${PARAM.unsubscribeUrl}" style="${styles.link}">Unsubscribe</a>.</p>`;
 }
 
 export function listFooterText(): string {
-	return `You got this because a host invited you on ${SITE_LABEL}.\nLinks in this email sign you in, so don't forward it.\nRather not get these? Unsubscribe: ${PARAM.unsubscribeUrl}`;
+	return `You got this because you're on ${SITE_LABEL}.\nLinks in this email sign you in, so don't forward it.\nRather not get these? Unsubscribe: ${PARAM.unsubscribeUrl}`;
 }
 
 /** How the site names itself in running text. */
