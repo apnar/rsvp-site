@@ -160,13 +160,25 @@ function detailsBlock(facts: EventFacts): {
 		: {};
 }
 
-/** The invitation itself. */
-export function inviteEmail(facts: EventFacts): Rendered {
+/**
+ * The invitation itself. `invitedBy` is the guest who brought them, when it
+ * was a guest rather than the host -- the reader should know whose friend
+ * they are on this list.
+ */
+export function inviteEmail(
+	facts: EventFacts,
+	invitedBy: string | null = null,
+): Rendered {
+	const host = facts.hostLine.trim();
 	return render(facts, {
-		subject: `You're invited: ${facts.title}`,
+		subject: invitedBy
+			? `${invitedBy} invited you: ${facts.title}`
+			: `You're invited: ${facts.title}`,
 		kicker: "You're invited",
 		heading: facts.title,
-		lead: hostedBy(facts),
+		lead: invitedBy
+			? `${invitedBy} is going and invited you along${host ? `. Hosted by ${host}.` : "."}`
+			: hostedBy(facts),
 		facts: eventFacts(facts, true),
 		...detailsBlock(facts),
 		answers: true,

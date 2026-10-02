@@ -15,6 +15,7 @@ import {
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import type { Context } from "./context";
 import {
@@ -140,7 +141,13 @@ export type GuestListRow = {
 	createdAt: Date;
 	/** Mail cannot reach them: unsubscribed, or deactivated. */
 	unreachable: boolean;
+	/** Who put them on the list. */
+	addedBy: string | null;
+	addedByName: string | null;
 };
+
+/** The person who added a guest, joined a second time under its own name. */
+const adder = alias(user, "adder");
 
 /** Everybody on an event's list, with the person behind each row. */
 export async function guestsOf(
@@ -165,9 +172,12 @@ export async function guestsOf(
 			createdAt: eventGuest.createdAt,
 			unsubscribedAt: user.unsubscribedAt,
 			status: user.status,
+			addedBy: eventGuest.addedBy,
+			addedByName: adder.name,
 		})
 		.from(eventGuest)
 		.innerJoin(user, eq(user.id, eventGuest.userId))
+		.leftJoin(adder, eq(adder.id, eventGuest.addedBy))
 		.where(eq(eventGuest.eventId, eventId))
 		.orderBy(asc(eventGuest.createdAt))
 		.all();

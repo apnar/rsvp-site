@@ -43,6 +43,8 @@ export type EventForm = {
 	potluckEnabled: boolean;
 	showGuestNames: boolean;
 	shareEnabled: boolean;
+	guestInvites: boolean;
+	guestInviteLimit: number;
 	remindDeadline: boolean;
 	remindDaysBefore: number;
 	remindDayBefore: boolean;
@@ -68,6 +70,8 @@ const BLANK: EventForm = {
 	potluckEnabled: false,
 	showGuestNames: true,
 	shareEnabled: false,
+	guestInvites: false,
+	guestInviteLimit: 3,
 	remindDeadline: true,
 	remindDaysBefore: 3,
 	remindDayBefore: true,
@@ -93,6 +97,8 @@ function formOf(loaded: Loaded): EventForm {
 		potluckEnabled: e.potluckEnabled,
 		showGuestNames: e.showGuestNames,
 		shareEnabled: e.shareEnabled,
+		guestInvites: e.guestInvites,
+		guestInviteLimit: e.guestInviteLimit,
 		remindDeadline: e.remindDeadline,
 		remindDaysBefore: e.remindDaysBefore,
 		remindDayBefore: e.remindDayBefore,
@@ -707,6 +713,38 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 								{ value: "daily", label: "Daily" },
 							]}
 						/>
+					</SettingRow>
+					<SettingRow
+						title="Guests can invite others"
+						hint="Only people you invite, never the people they add or share-link joiners"
+					>
+						<span className="flex items-center gap-3">
+							{form.guestInvites ? (
+								<span className="flex items-center gap-2 text-[14px] text-soft">
+									up to
+									<Input
+										type="number"
+										min={1}
+										max={20}
+										aria-label="Most people each guest can invite"
+										value={form.guestInviteLimit}
+										onChange={(ev) =>
+											set(
+												"guestInviteLimit",
+												Math.max(1, Math.min(20, Number(ev.target.value) || 1)),
+											)
+										}
+										className="min-h-10 w-20 rounded-full py-2 text-center"
+									/>
+									each
+								</span>
+							) : null}
+							<Switch
+								label="Guests can invite others"
+								checked={form.guestInvites}
+								onChange={(v) => set("guestInvites", v)}
+							/>
+						</span>
 					</SettingRow>
 					<SettingRow
 						title="Share link"

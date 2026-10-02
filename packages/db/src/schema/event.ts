@@ -79,6 +79,15 @@ export const event = sqliteTable(
 		shareEnabled: integer("share_enabled", { mode: "boolean" })
 			.notNull()
 			.default(false),
+		/**
+		 * Whether guests the host invited may invite others, and how many
+		 * each. People a guest adds can never add anyone themselves; that
+		 * one level is what keeps a party from inviting itself to strangers.
+		 */
+		guestInvites: integer("guest_invites", { mode: "boolean" })
+			.notNull()
+			.default(false),
+		guestInviteLimit: integer("guest_invite_limit").notNull().default(3),
 
 		remindDeadline: integer("remind_deadline", { mode: "boolean" })
 			.notNull()
@@ -144,8 +153,12 @@ export const eventHost = sqliteTable(
 	],
 );
 
-/** How somebody got on an event's list. */
-export const GUEST_SOURCES = ["host", "group", "link"] as const;
+/**
+ * How somebody got on an event's list. `host` and `group` are the host's own
+ * choice; `guest` is a host-invited guest bringing a friend (`added_by` says
+ * who); `link` came in through the share link.
+ */
+export const GUEST_SOURCES = ["host", "group", "guest", "link"] as const;
 export type GuestSource = (typeof GUEST_SOURCES)[number];
 
 /** What a guest said. No row value at all (null) is "hasn't answered". */

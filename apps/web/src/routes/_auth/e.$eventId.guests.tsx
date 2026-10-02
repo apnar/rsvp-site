@@ -343,6 +343,13 @@ function GuestRow({
 				? `${g.email} · invited ${shortDate(g.invitedAt)}`
 				: `${g.email} · not invited yet`
 			: `${g.email}${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : ""}`;
+	// Whose friend they are, for anybody the host did not choose.
+	const via =
+		g.source === "guest"
+			? `Added by ${g.addedByName ?? "a guest"}`
+			: g.source === "link"
+				? "Joined by share link"
+				: null;
 	const note = [g.dietary, g.note ? `"${g.note}"` : ""].filter(Boolean);
 	const coming = g.response === "yes" || g.response === "maybe";
 
@@ -362,6 +369,9 @@ function GuestRow({
 			<div className="min-w-0 flex-[1_1_200px]">
 				<b className={cn("text-[17px]", out && "text-soft")}>{g.name}</b>
 				<div className="truncate text-[13px] text-haze">{sub}</div>
+				{via ? (
+					<div className="truncate text-[12px] text-pink-soft">{via}</div>
+				) : null}
 			</div>
 			{/* Every column is drawn on every row, empty or not, so the tags and
 			    the counts line up down the list; the empties drop out on a phone,

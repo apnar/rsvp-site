@@ -127,6 +127,16 @@ describe("the event emails", () => {
 	});
 });
 
+describe("an invitation from a guest", () => {
+	const r = inviteEmail(facts, "Priya <S>");
+
+	it("says whose friend they are, escaped", () => {
+		expect(r.subject).toBe("Priya <S> invited you: House Crawl <& tacos>");
+		expect(r.html).toContain("Priya &lt;S&gt; is going and invited you along");
+		expect(r.text).toContain("Hosted by The swim team parents.");
+	});
+});
+
 describe("join link", () => {
 	const url = `${site}/api/auth/link?k=abc123&to=%2Fi%2Ftok`;
 	const join = joinLinkEmail({ title: "Party", url, coverUrl: null });

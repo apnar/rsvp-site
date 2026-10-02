@@ -130,8 +130,17 @@ export async function sendInvites(
 	db: Db,
 	row: EventRow,
 	sentBy: string | null,
+	opts: {
+		/** Only these rows -- a guest's own friend, not the host's backlog. */
+		onlyGuestIds?: readonly string[];
+		/** The guest who brought them, named in the email. */
+		invitedBy?: string | null;
+	} = {},
 ): Promise<InviteOutcome> {
-	const guests = await guestsOf(db, row.id);
+	const only = opts.onlyGuestIds ? new Set(opts.onlyGuestIds) : null;
+	const guests = (await guestsOf(db, row.id)).filter(
+		(g) => !only || only.has(g.id),
+	);
 	const pending = guests.filter((g) => g.invitedAt === null && !g.unreachable);
 	const skipped = guests.filter(
 		(g) => g.invitedAt === null && g.unreachable,
@@ -157,7 +166,7 @@ export async function sendInvites(
 		result = await sendToList(db, {
 			kind: "invite",
 			eventId: row.id,
-			rendered: inviteEmail(eventFacts(row)),
+			rendered: inviteEmail(eventFacts(row), opts.invitedBy ?? null),
 			sentBy,
 			onlyPersonIds: claimed,
 		});
@@ -177,6 +186,8 @@ export async function sendInvites(
 }
 
 async function releaseInvites(db: Db, eventId: string, stamp: Date) {
+	// Keyed on the claim's own timestamp, so a failed send gives back exactly
+	// the rows it took and nothing a concurrent send stamped.
 	await db
 		.update(eventGuest)
 		.set({ invitedAt: null })

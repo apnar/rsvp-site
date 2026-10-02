@@ -9,12 +9,14 @@ import {
 
 /**
  * How somebody first landed on the list. `host` is an address a host typed
- * into an event or a contact group; `link` is somebody who came in through
- * an event's share link. The rest predate events.
+ * into an event or a contact group; `guest` is a friend a guest invited;
+ * `link` is somebody who came in through an event's share link. The rest
+ * predate events.
  */
 export const PERSON_SOURCES = [
 	"admin",
 	"host",
+	"guest",
 	"link",
 	"site",
 	"signup",

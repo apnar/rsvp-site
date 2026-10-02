@@ -6,13 +6,20 @@ import {
 	GUEST_RESPONSES,
 	potluckClaim,
 } from "@rsvp-site/db/schema/event";
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { accessTo, guestsOf, hostAccessTo, potluckOf } from "../events";
+import {
+	type Access,
+	accessTo,
+	guestsOf,
+	hostAccessTo,
+	potluckOf,
+} from "../events";
+import { canInviteOthers } from "../guest-invites";
 import { clampParty, headcount, tally } from "../headcount";
 import { hostProcedure, personProcedure } from "../index";
-import { alertHosts } from "../mail";
+import { alertHosts, sendInvites } from "../mail";
 import { startsAt } from "../schedule";
 
 const idInput = z.object({ eventId: z.string().min(1) });
@@ -280,4 +287,140 @@ export const guestsRouter = {
 			}
 			return { ok: true, full };
 		}),
+
+	/**
+	 * A guest the host chose brings a friend: the friend goes on the list,
+	 * marked as theirs, and gets the invitation now. Nobody the friend knows
+	 * can follow -- people a guest adds, and people from the share link, are
+	 * never offered this (see `guest-invites.ts`).
+	 *
+	 * The per-guest cap is checked inside the INSERT, so two quick invites
+	 * cannot both slip under it; a refused insert is then told apart from a
+	 * friend who was already on the list.
+	 */
+	inviteFriend: personProcedure
+		.input(
+			idInput.extend({
+				email: z.email("That doesn't look like an email address.").max(254),
+			}),
+		)
+		.handler(async ({ context, input }) => {
+			const access = await accessTo(context.db, context.me, input.eventId);
+			const row = access.event;
+			const guest = requireInviter(access);
+			const [friend] = await findOrCreatePeople(
+				context.db,
+				[input.email],
+				"guest",
+			);
+			if (!friend || friend.status === "deactivated") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "That address can't be invited.",
+				});
+			}
+			if (friend.id === context.me.id) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "You're already on the list.",
+				});
+			}
+			const id = crypto.randomUUID();
+			// Plain names, not drizzle columns: see the potluck claim above.
+			const result = await context.db.run(sql`
+				insert into event_guest (id, event_id, user_id, source, added_by)
+				select ${id}, ${row.id}, ${friend.id}, 'guest', ${guest.userId}
+				where (
+					select count(*) from event_guest
+					where event_id = ${row.id}
+						and added_by = ${guest.userId}
+						and source = 'guest'
+				) < ${row.guestInviteLimit}
+				on conflict do nothing
+			`);
+			if (result.meta.changes !== 1) {
+				const already = await context.db
+					.select({ id: eventGuest.id })
+					.from(eventGuest)
+					.where(
+						and(
+							eq(eventGuest.eventId, row.id),
+							eq(eventGuest.userId, friend.id),
+						),
+					)
+					.get();
+				throw new ORPCError("BAD_REQUEST", {
+					message: already
+						? "They're already on the list."
+						: `You've invited ${row.guestInviteLimit}, the most this party allows.`,
+				});
+			}
+			const sent = await sendInvites(context.db, row, context.me.id, {
+				onlyGuestIds: [id],
+				invitedBy: context.me.name,
+			});
+			return { ok: true, emailed: sent.sent > 0, created: friend.created };
+		}),
+
+	/**
+	 * Take back an invitation you made, while they have not answered. Once
+	 * they have, they are a guest like any other and only a host removes them.
+	 */
+	uninviteFriend: personProcedure
+		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.handler(async ({ context, input }) => {
+			const access = await accessTo(context.db, context.me, input.eventId);
+			const guest = access.guest;
+			if (!guest) {
+				throw new ORPCError("BAD_REQUEST", { message: "Not your guest." });
+			}
+			const result = await context.db
+				.delete(eventGuest)
+				.where(
+					and(
+						eq(eventGuest.id, input.guestId),
+						eq(eventGuest.eventId, access.event.id),
+						eq(eventGuest.addedBy, guest.userId),
+						eq(eventGuest.source, "guest"),
+						isNull(eventGuest.response),
+					),
+				)
+				.run();
+			if (result.meta.changes !== 1) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "They've already answered; ask the hosts.",
+				});
+			}
+			return { ok: true };
+		}),
 };
+
+/**
+ * The caller's own invitation, if it lets them invite: the event allows
+ * guest invites, it is out and not over, and the host chose them.
+ */
+function requireInviter(access: Access) {
+	const row = access.event;
+	const guest = access.guest;
+	if (!guest || !canInviteOthers(guest.source)) {
+		throw new ORPCError("FORBIDDEN", {
+			message: "Only guests the hosts invited can invite others.",
+		});
+	}
+	if (!row.guestInvites) {
+		throw new ORPCError("FORBIDDEN", {
+			message: "The hosts aren't taking extra guests for this one.",
+		});
+	}
+	if (row.status !== "published") {
+		throw new ORPCError("BAD_REQUEST", {
+			message:
+				row.status === "canceled"
+					? "It's been canceled."
+					: "It hasn't gone out.",
+		});
+	}
+	const start = startsAt(row);
+	if (start && Date.now() >= start.getTime()) {
+		throw new ORPCError("BAD_REQUEST", { message: "It's already started." });
+	}
+	return guest;
+}

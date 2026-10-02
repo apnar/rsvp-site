@@ -27,6 +27,7 @@ import {
 	and,
 	desc,
 	eq,
+	getTableColumns,
 	inArray,
 	isNotNull,
 	isNull,
@@ -51,6 +52,7 @@ import {
 	notFound,
 	potluckOf,
 } from "../events";
+import { canInviteOthers, invitesLeft } from "../guest-invites";
 import { headcount, openSlots, tally } from "../headcount";
 import { hostProcedure, personProcedure, publicProcedure } from "../index";
 import { eventFacts, sendInvites, sendToList, signInUrl } from "../mail";
@@ -86,6 +88,8 @@ const eventFields = z.object({
 	potluckEnabled: z.boolean(),
 	showGuestNames: z.boolean(),
 	shareEnabled: z.boolean(),
+	guestInvites: z.boolean(),
+	guestInviteLimit: z.number().int().min(1).max(20),
 	remindDeadline: z.boolean(),
 	remindDaysBefore: z.number().int().min(0).max(30),
 	remindDayBefore: z.boolean(),
@@ -188,6 +192,9 @@ async function invitePayload(
 	]);
 	const totals = tally(guests);
 	const mine = access.guest;
+	const myFriends = mine
+		? guests.filter((g) => g.source === "guest" && g.addedBy === mine.userId)
+		: [];
 	const myClaims = mine
 		? potluck.claims.filter((c) => c.guestId === mine.id).map((c) => c.itemId)
 		: [];
@@ -219,6 +226,7 @@ async function invitePayload(
 			askNote: row.askNote,
 			potluckEnabled: row.potluckEnabled,
 			showGuestNames: row.showGuestNames,
+			guestInviteLimit: row.guestInviteLimit,
 			...labelsOf(row),
 		},
 		hosts: hosts.map((h) => ({ id: h.id, name: h.name })),
@@ -232,6 +240,19 @@ async function invitePayload(
 					note: mine.note,
 					claims: myClaims,
 					name: guests.find((g) => g.id === mine.id)?.name ?? "",
+					friends: myFriends.map((g) => ({
+						guestId: g.id,
+						name: g.name,
+						email: g.email,
+						response: g.response,
+					})),
+					// Asked here rather than on the page, so the form shows only when
+					// the API would take it.
+					canInvite:
+						row.guestInvites &&
+						row.status === "published" &&
+						canInviteOthers(mine.source),
+					invitesLeft: invitesLeft(row.guestInviteLimit, myFriends.length),
 				}
 			: null,
 		viewerId: me.id,
@@ -805,6 +826,7 @@ export const eventsRouter = {
 				"Note",
 				"Bringing",
 				"Answered",
+				"Added by",
 			];
 			const lines = guests.map((g) => [
 				g.name,
@@ -816,6 +838,11 @@ export const eventsRouter = {
 				g.note,
 				bringing(g.id),
 				g.respondedAt ? g.respondedAt.toISOString() : "",
+				g.source === "guest"
+					? (g.addedByName ?? "a guest")
+					: g.source === "link"
+						? "share link"
+						: "host",
 			]);
 			const csv = [header, ...lines]
 				.map((cells) => cells.map(csvCell).join(","))
@@ -921,41 +948,11 @@ export const eventsRouter = {
 		}),
 };
 
-/** Event columns by name, so a join can select them flat. */
-const eventColumns = {
-	id: event.id,
-	shareToken: event.shareToken,
-	title: event.title,
-	hostLine: event.hostLine,
-	date: event.date,
-	startTime: event.startTime,
-	endTime: event.endTime,
-	location: event.location,
-	details: event.details,
-	coverKey: event.coverKey,
-	status: event.status,
-	rsvpDeadline: event.rsvpDeadline,
-	maxPlusOnes: event.maxPlusOnes,
-	askKids: event.askKids,
-	askDietary: event.askDietary,
-	askNote: event.askNote,
-	potluckEnabled: event.potluckEnabled,
-	showGuestNames: event.showGuestNames,
-	shareEnabled: event.shareEnabled,
-	remindDeadline: event.remindDeadline,
-	remindDaysBefore: event.remindDaysBefore,
-	remindDayBefore: event.remindDayBefore,
-	notifyChanges: event.notifyChanges,
-	hostAlerts: event.hostAlerts,
-	publishedAt: event.publishedAt,
-	deadlineReminderAt: event.deadlineReminderAt,
-	dayBeforeAt: event.dayBeforeAt,
-	digestAt: event.digestAt,
-	canceledAt: event.canceledAt,
-	createdBy: event.createdBy,
-	createdAt: event.createdAt,
-	updatedAt: event.updatedAt,
-};
+/**
+ * Every event column by name, so a join can select them flat. Read off the
+ * table rather than listed, so a new column cannot be forgotten here.
+ */
+const eventColumns = getTableColumns(event);
 
 /** One CSV cell, quoted when it has to be, and never read as a formula. */
 function csvCell(value: string): string {

@@ -23,7 +23,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0010 applied |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0011 applied |
 | R2 | `rsvp-site-media` (event cover photos, binding `MEDIA`) |
 | Rate limit | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
@@ -197,6 +197,12 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   `sendInvites` claims rows (`UPDATE ... SET invited_at WHERE invited_at IS
   NULL RETURNING`) before sending and gives them back if nothing left, so
   Send cannot invite anybody twice.
+- Guests inviting guests: only `source` host/group may (`canInviteOthers`
+  in `api/src/guest-invites.ts`), only when the event's `guest_invites` is
+  on, up to `guest_invite_limit` each, counted in the INSERT. Their friends
+  are `source = 'guest'` with `added_by` = the inviter and can never invite;
+  share-link joiners (`link`) cannot either. `sendInvites` takes
+  `onlyGuestIds` so a guest's invite never sends the host's unsent backlog.
 - Potluck claims are guarded in the INSERT itself (`guests.respond`), written
   in plain SQL names: see the Drizzle note under Conventions.
 - `/e/$eventId` **reads and does not write**; `?a=` only preselects. Mail
