@@ -5,6 +5,7 @@ import {
 	capitalize,
 	coverSrc,
 	crowdLine,
+	familySearchTerm,
 	firstName,
 	inDays,
 	initials,
@@ -116,5 +117,16 @@ describe("crowdLine and sentence", () => {
 		expect(sentence("A and B")).toBe("A and B.");
 		expect(sentence("Marcus T.")).toBe("Marcus T.");
 		expect(sentence("Wow!")).toBe("Wow!");
+	});
+});
+
+describe("familySearchTerm", () => {
+	it("looks for the surname behind a household's name", () => {
+		expect(familySearchTerm("The Nguyens")).toBe("Nguyen");
+		expect(familySearchTerm("the Joneses")).toBe("Jones");
+		expect(familySearchTerm("Hughes")).toBe("Hughe");
+		expect(familySearchTerm("Park family")).toBe("Park");
+		expect(familySearchTerm("The Okafor's")).toBe("Okafor");
+		expect(familySearchTerm("Bliss")).toBe("Bliss");
 	});
 });

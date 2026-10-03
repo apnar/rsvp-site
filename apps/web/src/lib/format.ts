@@ -113,6 +113,23 @@ export function matchesPerson(
 	);
 }
 
+/**
+ * What to look for when adding people to a family by its name: "The
+ * Nguyens" is people named Nguyen. A household's plural is dropped back to
+ * something both the singular and the plural contain ("Joneses" to
+ * "Jones", "Hughes" to "Hughe"), since a search is a substring match.
+ */
+export function familySearchTerm(name: string): string {
+	const bare = name
+		.trim()
+		.replace(/^the\s+/i, "")
+		.replace(/\s+family$/i, "")
+		.replace(/['’]s$/i, "");
+	if (/(s|x|z|ch|sh)es$/i.test(bare)) return bare.slice(0, -2);
+	if (/[^s]s$/i.test(bare)) return bare.slice(0, -1);
+	return bare;
+}
+
 /** "The Nguyens, Priya S., the Okafors, Coach Dana and 38 more" */
 export function crowdLine(names: string[], shown = 4): string {
 	if (names.length === 0) return "";

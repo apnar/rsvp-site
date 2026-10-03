@@ -1,16 +1,18 @@
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
+import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Switch } from "@/components/controls";
 import { Panel } from "@/components/page";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
-import { matchesPerson, plural } from "@/lib/format";
+import { familySearchTerm, matchesPerson, plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 const familiesQuery = () => orpc.families.list.queryOptions();
@@ -31,6 +33,20 @@ type Family = Outputs["families"]["list"][number];
 /** Households, kept here and nowhere else. */
 function AdminFamiliesPage() {
 	const { data: families } = useSuspenseQuery(familiesQuery());
+	// The family just made goes first, open, so its people can be added
+	// straight away. Only for this visit: on the next load it is in its
+	// alphabetical place, closed like the rest.
+	const [fresh, setFresh] = useState<string | null>(null);
+	const ordered = useMemo(
+		() =>
+			fresh
+				? [
+						...families.filter((f) => f.id === fresh),
+						...families.filter((f) => f.id !== fresh),
+					]
+				: families,
+		[families, fresh],
+	);
 	return (
 		<div className="flex flex-col gap-7">
 			<Panel>
@@ -44,24 +60,30 @@ function AdminFamiliesPage() {
 					add them can't.
 				</p>
 			</Panel>
-			<CreateFamily />
-			<div className="flex flex-col gap-4">
-				{families.map((f) => (
-					<FamilyPanel key={f.id} family={f} families={families} />
+			<CreateFamily onCreated={setFresh} />
+			<div className="flex flex-col gap-3">
+				{ordered.map((f) => (
+					<FamilyPanel
+						key={f.id}
+						family={f}
+						families={families}
+						startOpen={f.id === fresh}
+					/>
 				))}
 			</div>
 		</div>
 	);
 }
 
-function CreateFamily() {
+function CreateFamily({ onCreated }: { onCreated: (id: string) => void }) {
 	const [name, setName] = useState("");
 	const [shared, setShared] = useState(true);
 	const create = useMutation(
 		orpc.families.create.mutationOptions({
-			onSuccess: () => {
+			onSuccess: ({ id }) => {
 				toast.success("Made the family. Add its people below.");
 				setName("");
+				onCreated(id);
 			},
 		}),
 	);
@@ -98,13 +120,21 @@ function CreateFamily() {
 	);
 }
 
+/**
+ * One family, closed to a line by default: with a handful of families the
+ * open forms are most of the page.
+ */
 function FamilyPanel({
 	family,
 	families,
+	startOpen,
 }: {
 	family: Family;
 	families: Family[];
+	startOpen: boolean;
 }) {
+	const [open, setOpen] = useState(startOpen);
+	const bodyId = useId();
 	const [name, setName] = useState(family.name);
 	const rename = useMutation(orpc.families.rename.mutationOptions());
 	const setShared = useMutation(orpc.families.setShared.mutationOptions());
@@ -114,23 +144,27 @@ function FamilyPanel({
 		orpc.families.removeMember.mutationOptions(),
 	);
 	return (
-		<Panel>
+		<Panel className={open ? undefined : "py-3.5"}>
 			<div className="flex flex-wrap items-center gap-3">
-				<label htmlFor={`family-${family.id}`} className="sr-only">
-					Name of the family {family.name}
-				</label>
-				<Input
-					id={`family-${family.id}`}
-					value={name}
-					maxLength={80}
-					onChange={(e) => setName(e.target.value)}
-					onBlur={() => {
-						if (name.trim() && name !== family.name) {
-							rename.mutate({ familyId: family.id, name });
-						}
-					}}
-					className="min-h-9 min-w-0 flex-1 border-transparent bg-transparent px-0 font-bold text-[20px] hover:border-transparent focus-visible:border-line-strong focus-visible:px-3"
-				/>
+				<button
+					type="button"
+					aria-expanded={open}
+					aria-controls={bodyId}
+					onClick={() => setOpen((v) => !v)}
+					className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left"
+				>
+					<ChevronRight
+						aria-hidden
+						className={cn(
+							"size-5 shrink-0 text-haze transition-transform",
+							open && "rotate-90",
+						)}
+					/>
+					<span className="truncate font-bold text-[18px]">{family.name}</span>
+					<span className="shrink-0 text-[13px] text-haze">
+						{plural(family.members.length, "person", "people")}
+					</span>
+				</button>
 				<span className="flex items-center gap-2 text-[14px] text-soft">
 					<Switch
 						checked={family.shared}
@@ -156,55 +190,79 @@ function FamilyPanel({
 					}}
 				/>
 			</div>
-			{family.members.length === 0 ? (
-				<p className="m-0 text-[14px] text-haze">Nobody yet.</p>
-			) : (
-				<ul className="m-0 flex list-none flex-col p-0">
-					{family.members.map((m) => (
-						<li
-							key={m.id}
-							className="flex flex-wrap items-center gap-3 border-line border-t py-2"
+			{open ? (
+				<div id={bodyId} className="flex flex-col gap-4">
+					<div className="flex flex-col gap-1.5">
+						<label
+							htmlFor={`family-${family.id}`}
+							className="text-[13px] text-haze"
 						>
-							<span className="min-w-0 flex-[1_1_200px]">
-								<b className="text-[15px]">{m.name}</b>
-								<span className="block truncate text-[13px] text-haze">
-									{m.noEmail ? "No email" : m.email}
-								</span>
-							</span>
-							<span className="flex items-center gap-2 text-[14px] text-soft">
-								<Switch
-									checked={m.child}
-									onChange={(child) =>
-										setChild.mutate({
-											familyId: family.id,
-											userId: m.id,
-											child,
-										})
-									}
-									label={`${m.name} is a child`}
-								/>
-								Child
-							</span>
-							<ConfirmAction
-								size="xs"
-								confirm="Remove"
-								pending={removeMember.isPending}
-								onConfirm={() =>
-									removeMember.mutate({ familyId: family.id, userId: m.id })
+							Name
+						</label>
+						<Input
+							id={`family-${family.id}`}
+							value={name}
+							maxLength={80}
+							onChange={(e) => setName(e.target.value)}
+							onBlur={() => {
+								if (name.trim() && name !== family.name) {
+									rename.mutate({ familyId: family.id, name });
 								}
-								trigger={{
-									variant: "ghost",
-									size: "icon-xs",
-									"aria-label": `Take ${m.name} out of ${family.name}`,
-									className: "text-haze",
-									children: "×",
-								}}
-							/>
-						</li>
-					))}
-				</ul>
-			)}
-			<AddMembers family={family} families={families} />
+							}}
+							className="min-h-11 rounded-full py-2.5"
+						/>
+					</div>
+					{family.members.length === 0 ? (
+						<p className="m-0 text-[14px] text-haze">Nobody yet.</p>
+					) : (
+						<ul className="m-0 flex list-none flex-col p-0">
+							{family.members.map((m) => (
+								<li
+									key={m.id}
+									className="flex flex-wrap items-center gap-3 border-line border-t py-2"
+								>
+									<span className="min-w-0 flex-[1_1_200px]">
+										<b className="text-[15px]">{m.name}</b>
+										<span className="block truncate text-[13px] text-haze">
+											{m.noEmail ? "No email" : m.email}
+										</span>
+									</span>
+									<span className="flex items-center gap-2 text-[14px] text-soft">
+										<Switch
+											checked={m.child}
+											onChange={(child) =>
+												setChild.mutate({
+													familyId: family.id,
+													userId: m.id,
+													child,
+												})
+											}
+											label={`${m.name} is a child`}
+										/>
+										Child
+									</span>
+									<ConfirmAction
+										size="xs"
+										confirm="Remove"
+										pending={removeMember.isPending}
+										onConfirm={() =>
+											removeMember.mutate({ familyId: family.id, userId: m.id })
+										}
+										trigger={{
+											variant: "ghost",
+											size: "icon-xs",
+											"aria-label": `Take ${m.name} out of ${family.name}`,
+											className: "text-haze",
+											children: "×",
+										}}
+									/>
+								</li>
+							))}
+						</ul>
+					)}
+					<AddMembers family={family} families={families} />
+				</div>
+			) : null}
 		</Panel>
 	);
 }
@@ -241,17 +299,24 @@ function AddMembers({
 			),
 		[families],
 	);
-	const found = useMemo(
-		() =>
-			query.trim()
-				? people
-						.filter(
-							(p) => p.status !== "deactivated" && matchesPerson(p, query),
-						)
-						.slice(0, 8)
-				: [],
-		[people, query],
-	);
+	// An empty box looks for the family's own name: the relatives to add
+	// are usually the people who share it. Its members are listed above, so
+	// they are left out here.
+	const fallback = familySearchTerm(family.name);
+	const term = query.trim() || fallback;
+	const found = useMemo(() => {
+		const members = new Set(family.members.map((m) => m.id));
+		return term
+			? people
+					.filter(
+						(p) =>
+							p.status !== "deactivated" &&
+							!members.has(p.id) &&
+							matchesPerson(p, term),
+					)
+					.slice(0, 8)
+			: [];
+	}, [people, term, family.members]);
 	const add = useMutation(
 		orpc.families.addMembers.mutationOptions({ onSuccess: reportAdd }),
 	);
@@ -271,11 +336,18 @@ function AddMembers({
 			<Input
 				id={`find-${family.id}`}
 				type="search"
-				placeholder="Find somebody"
+				placeholder={
+					fallback ? `Find somebody (showing “${fallback}”)` : "Find somebody"
+				}
 				value={query}
 				onChange={(e) => setQuery(e.target.value)}
 				className="min-h-11 rounded-full py-2.5"
 			/>
+			{!query.trim() && fallback && found.length === 0 ? (
+				<p className="m-0 text-[13px] text-haze">
+					Nobody else on the site matches “{fallback}”.
+				</p>
+			) : null}
 			{found.map((p) => {
 				const elsewhere = familyOf.get(p.id);
 				return (
