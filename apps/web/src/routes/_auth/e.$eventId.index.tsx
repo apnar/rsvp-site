@@ -21,6 +21,8 @@ import {
 } from "@/components/controls";
 import { CountdownTiles } from "@/components/countdown";
 import { Cover } from "@/components/cover";
+import { CardSvg } from "@/components/design/card-svg";
+import { DesignTheme } from "@/components/design/design-theme";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import UserMenu from "@/components/user-menu";
 import type { Outputs } from "@/lib/api-types";
@@ -45,6 +47,9 @@ export const Route = createFileRoute("/_auth/e/$eventId/")({
 			},
 			// The page is behind a sign-in, but say it anyway.
 			{ name: "robots", content: "noindex" },
+			...(loaderData?.design
+				? [{ name: "theme-color", content: loaderData.design.theme.bg }]
+				: []),
 		],
 	}),
 	component: InvitePage,
@@ -81,59 +86,96 @@ function InvitePage() {
 	const e = data.event;
 	const canceled = e.status === "canceled";
 
+	const header = (
+		<header className="relative mx-auto flex w-full max-w-[1180px] items-center gap-4 px-[clamp(16px,4vw,40px)] py-[18px]">
+			<Link to="/events" className="mr-auto no-underline">
+				<Wordmark />
+			</Link>
+			<Link
+				to="/events"
+				className="font-medium text-[14px] text-ink no-underline hover:text-lime-ink"
+			>
+				{data.isHost ? "My events" : "My invites"}
+			</Link>
+			<UserMenu />
+		</header>
+	);
+	const status = (align: string) => (
+		<span
+			className={cn(
+				align,
+				"rounded-full px-3.5 py-1.5 font-bold text-[13px] uppercase tracking-[0.08em]",
+				canceled
+					? "bg-ink text-night"
+					: data.me
+						? "bg-lime text-on-lime"
+						: "bg-pink text-on-pink",
+			)}
+		>
+			{canceled
+				? "Canceled"
+				: data.me
+					? "You're on the list"
+					: e.status === "draft"
+						? "Draft · only hosts see this"
+						: "You're hosting"}
+		</span>
+	);
+	const facts = (align?: string) => (
+		<div
+			className={cn(
+				"flex flex-wrap gap-x-7 gap-y-2 font-medium text-[17px]",
+				align,
+			)}
+		>
+			{e.dateLabel ? <span>{e.dateLabel}</span> : null}
+			{e.timeLabel ? (
+				<span className="text-lime-ink">{e.timeLabel}</span>
+			) : null}
+			{e.location ? <span>{e.location}</span> : null}
+			{e.hostLine ? (
+				<span className="text-haze">Hosted by {e.hostLine}</span>
+			) : null}
+		</div>
+	);
+
 	return (
 		<div>
-			<section className="relative flex min-h-[min(86vh,760px)] flex-col overflow-hidden">
-				<div className="absolute inset-0">
-					<Cover coverKey={e.coverKey} />
-				</div>
-				<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_20%,transparent)_40%,var(--color-night)_100%)]" />
-				<header className="relative mx-auto flex w-full max-w-[1180px] items-center gap-4 px-[clamp(16px,4vw,40px)] py-[18px]">
-					<Link to="/events" className="mr-auto no-underline">
-						<Wordmark />
-					</Link>
-					<Link
-						to="/events"
-						className="font-medium text-[14px] text-ink no-underline hover:text-lime-ink"
-					>
-						{data.isHost ? "My events" : "My invites"}
-					</Link>
-					<UserMenu />
-				</header>
-				<div className="relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)] pb-9">
-					<span
-						className={cn(
-							"self-start rounded-full px-3.5 py-1.5 font-bold text-[13px] uppercase tracking-[0.08em]",
-							canceled
-								? "bg-ink text-night"
-								: data.me
-									? "bg-lime text-on-lime"
-									: "bg-pink text-on-pink",
-						)}
-					>
-						{canceled
-							? "Canceled"
-							: data.me
-								? "You're on the list"
-								: e.status === "draft"
-									? "Draft · only hosts see this"
-									: "You're hosting"}
-					</span>
-					<h1 className="m-0 max-w-[14ch] font-black text-[clamp(40px,7.4vw,96px)] leading-[0.95] tracking-[-0.04em]">
-						{e.title}
-					</h1>
-					<div className="flex flex-wrap gap-x-7 gap-y-2 font-medium text-[17px]">
-						{e.dateLabel ? <span>{e.dateLabel}</span> : null}
-						{e.timeLabel ? (
-							<span className="text-lime-ink">{e.timeLabel}</span>
-						) : null}
-						{e.location ? <span>{e.location}</span> : null}
-						{e.hostLine ? (
-							<span className="text-haze">Hosted by {e.hostLine}</span>
-						) : null}
+			{data.design ? (
+				<section className="relative flex flex-col">
+					<DesignTheme theme={data.design.theme} scene={data.design.scene} />
+					{header}
+					<div className="mx-auto flex w-full max-w-[1180px] flex-col items-center gap-5 px-[clamp(16px,4vw,40px)] pt-2 pb-9 text-center">
+						<CardSvg
+							scene={data.design.scene}
+							className={cn(
+								"h-auto w-full rounded-[6px] shadow-float",
+								data.design.scene.w > data.design.scene.h
+									? "max-w-[860px]"
+									: "max-w-[560px]",
+							)}
+						/>
+						<h1 className="sr-only">{e.title}</h1>
+						{status("self-center")}
+						{facts("justify-center")}
 					</div>
-				</div>
-			</section>
+				</section>
+			) : (
+				<section className="relative flex min-h-[min(86vh,760px)] flex-col overflow-hidden">
+					<div className="absolute inset-0">
+						<Cover coverKey={e.coverKey} />
+					</div>
+					<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_20%,transparent)_40%,var(--color-night)_100%)]" />
+					{header}
+					<div className="relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)] pb-9">
+						{status("self-start")}
+						<h1 className="m-0 max-w-[14ch] font-black text-[clamp(40px,7.4vw,96px)] leading-[0.95] tracking-[-0.04em]">
+							{e.title}
+						</h1>
+						{facts()}
+					</div>
+				</section>
+			)}
 
 			<div className="mx-auto flex max-w-[1180px] flex-col gap-[clamp(40px,6vw,72px)] px-[clamp(16px,4vw,40px)] pt-4 pb-20">
 				{canceled ? null : (

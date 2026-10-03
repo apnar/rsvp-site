@@ -171,6 +171,10 @@ export function wrap(
 	return { lines, overflow };
 }
 
+function round(n: number): number {
+	return Math.round(n * 100) / 100;
+}
+
 /** The smallest a "shrink" box goes, as a share of its set size. */
 export const SHRINK_FLOOR = 0.4;
 
@@ -210,9 +214,11 @@ export function layoutText(box: TextBox): TextLayout {
 						: box.w - r.width;
 			return {
 				chars: r.chars,
-				xs: r.xs.map((x) => x + dx),
-				y: top + i * lh + (lh - glyphH) / 2 + box.face.asc * k,
-				width: r.width,
+				// Hundredths of a unit are far below a printer's dot, and the
+				// rounding keeps the scene small enough to send to the page.
+				xs: r.xs.map((x) => round(x + dx)),
+				y: round(top + i * lh + (lh - glyphH) / 2 + box.face.asc * k),
+				width: round(r.width),
 			};
 		}),
 	};

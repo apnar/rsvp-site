@@ -9,12 +9,16 @@ import { isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
 	event,
+	eventDesign,
 	eventGuest,
 	eventHost,
 	potluckClaim,
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
+import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
+import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
+import type { Design } from "@rsvp-site/design/schema";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
@@ -317,5 +321,32 @@ export function designValues(row: EventRow, guest: string): Values {
 		host: row.hostLine,
 		rsvpBy: labels.deadlineLabel ?? "",
 		guest,
+	};
+}
+
+/**
+ * The event's card laid out for one viewer, when its design is on. The
+ * layout happens here, on the server, so the page receives line breaks
+ * and glyph positions and needs no font metrics of its own.
+ */
+export async function designedCard(
+	db: Db,
+	row: EventRow,
+	mode: Mode,
+	guest: string,
+): Promise<{ scene: Scene; version: number } | null> {
+	if (!row.designOn) return null;
+	const saved = await db
+		.select({ doc: eventDesign.doc, version: eventDesign.version })
+		.from(eventDesign)
+		.where(eq(eventDesign.eventId, row.id))
+		.get();
+	if (!saved) return null;
+	// Parsed on the way in (designs.save), so it is read back as it was kept.
+	const doc = saved.doc as Design;
+	const faces = await loadFaces(facesOf(doc));
+	return {
+		scene: layoutCard(doc, { values: designValues(row, guest), mode, faces }),
+		version: saved.version,
 	};
 }

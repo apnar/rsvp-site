@@ -45,6 +45,7 @@ import type { Context } from "../context";
 import {
 	accessTo,
 	cardsFor,
+	designedCard,
 	type EventRow,
 	emailsHeld,
 	findEvent,
@@ -196,6 +197,10 @@ async function invitePayload(
 			: Promise.resolve({ lines: [], claims: [] }),
 		hostsOf(db, row.id),
 	]);
+	const myName = access.guest
+		? (guests.find((g) => g.id === access.guest?.id)?.name ?? "")
+		: "Your guest";
+	const card = await designedCard(db, row, "web", myName);
 	const totals = tally(guests);
 	const mine = access.guest;
 	const myFriends = mine
@@ -235,6 +240,7 @@ async function invitePayload(
 			guestInviteLimit: row.guestInviteLimit,
 			...labelsOf(row),
 		},
+		design: card && row.theme ? { scene: card.scene, theme: row.theme } : null,
 		hosts: hosts.map((h) => ({ id: h.id, name: h.name })),
 		me: mine
 			? {
