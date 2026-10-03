@@ -14,6 +14,7 @@ import {
 	potluckClaim,
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
+import type { Values } from "@rsvp-site/design/placeholders";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
@@ -302,5 +303,19 @@ export function labelsOf(row: EventRow) {
 		dateLabel: row.date ? formatDate(row.date) : null,
 		timeLabel: formatTimeRange(row.startTime, row.endTime),
 		deadlineLabel: row.rsvpDeadline ? formatDate(row.rsvpDeadline) : null,
+	};
+}
+
+/** The event's facts as a design's placeholders read them. */
+export function designValues(row: EventRow, guest: string): Values {
+	const labels = labelsOf(row);
+	return {
+		title: row.title,
+		date: labels.dateLabel ?? "",
+		time: labels.timeLabel ?? "",
+		location: row.location,
+		host: row.hostLine,
+		rsvpBy: labels.deadlineLabel ?? "",
+		guest,
 	};
 }

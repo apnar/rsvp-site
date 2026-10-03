@@ -1,3 +1,4 @@
+export * from "./basis";
 export * from "./faces";
 export * from "./fonts";
 export * from "./paint";

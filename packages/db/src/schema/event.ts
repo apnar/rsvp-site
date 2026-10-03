@@ -1,3 +1,4 @@
+import type { DesignTheme } from "@rsvp-site/design/schema";
 import { sql } from "drizzle-orm";
 import {
 	index,
@@ -7,7 +8,6 @@ import {
 	text,
 	uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-
 import { user } from "./auth";
 
 /**
@@ -59,6 +59,29 @@ export const event = sqliteTable(
 		details: text("details").notNull().default(""),
 		/** R2 key of the cover photo, served token-free at /api/covers/<key>. */
 		coverKey: text("cover_key"),
+		/**
+		 * Advanced design: the card in `event_design` replaces the cover
+		 * hero and themes the guest page, the paper cards and the emails.
+		 * The document stays when this is switched off, so switching back
+		 * loses nothing.
+		 */
+		designOn: integer("design_on", { mode: "boolean" })
+			.notNull()
+			.default(false),
+		/**
+		 * The card drawn as one JPEG (designs/<id>/card-<uuid>.jpg) for
+		 * emails, link previews and the dashboard, and what it was drawn
+		 * from (`basisOf`), so a stale picture can be noticed and redrawn.
+		 */
+		cardKey: text("card_key"),
+		cardBasis: text("card_basis"),
+		/**
+		 * The design's page theme, copied out of the document: mail, the
+		 * share page and the dashboard need its colours and none of the
+		 * rest, and every read of an event row would otherwise drag the
+		 * whole document along.
+		 */
+		theme: text("theme", { mode: "json" }).$type<DesignTheme>(),
 		status: text("status", { enum: EVENT_STATUSES }).notNull().default("draft"),
 		rsvpDeadline: text("rsvp_deadline"),
 
@@ -254,3 +277,21 @@ export const potluckClaim = sqliteTable(
 		index("potluck_claim_guest_idx").on(table.guestId),
 	],
 );
+
+/**
+ * An event's invitation design, kept out of the `event` row because the
+ * document runs to tens of kilobytes and nearly every read of an event
+ * wants none of it. `version` counts saves: a save names the version it
+ * started from, so one co-host can't silently overwrite another's.
+ */
+export const eventDesign = sqliteTable("event_design", {
+	eventId: text("event_id")
+		.primaryKey()
+		.references(() => event.id, { onDelete: "cascade" }),
+	doc: text("doc", { mode: "json" }).notNull().$type<unknown>(),
+	version: integer("version").notNull().default(1),
+	updatedBy: text("updated_by").references(() => user.id, {
+		onDelete: "set null",
+	}),
+	updatedAt: updatedAt(),
+});

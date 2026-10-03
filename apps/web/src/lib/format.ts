@@ -73,3 +73,8 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 export function coverSrc(coverKey: string): string {
 	return `/api/${coverKey}`;
 }
+
+/** The public address of a design image or card (designs/<id>/<name>). */
+export function designSrc(ref: string): string {
+	return `/api/${ref}`;
+}

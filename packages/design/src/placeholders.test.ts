@@ -43,3 +43,13 @@ describe("usesPlaceholder", () => {
 		expect(usesPlaceholder("By {rsvp by}", "rsvp by")).toBe(true);
 	});
 });
+
+describe("basisOf", () => {
+	it("changes with the facts and the version, not the guest", async () => {
+		const { basisOf } = await import("./basis");
+		const a = basisOf(3, SAMPLE_VALUES);
+		expect(basisOf(3, { ...SAMPLE_VALUES, guest: "Someone else" })).toBe(a);
+		expect(basisOf(4, SAMPLE_VALUES)).not.toBe(a);
+		expect(basisOf(3, { ...SAMPLE_VALUES, date: "Sunday" })).not.toBe(a);
+	});
+});

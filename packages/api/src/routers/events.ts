@@ -10,11 +10,13 @@ import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
 	event,
+	eventDesign,
 	eventGuest,
 	eventHost,
 	HOST_ALERTS,
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
+import { parseDesign } from "@rsvp-site/design/schema";
 import {
 	cancelEmail,
 	coverUrl,
@@ -60,6 +62,7 @@ import { hostProcedure, personProcedure, publicProcedure } from "../index";
 import { eventFacts, sendInvites, sendToList, signInUrl } from "../mail";
 import { startsAt } from "../schedule";
 import { formatDate, formatTimeRange, todayOnSite } from "../time";
+import { deleteDesignMedia, needsQr } from "./designs";
 
 type Db = Context["db"];
 
@@ -695,6 +698,16 @@ export const eventsRouter = {
 			input.eventId,
 		);
 		requirePublishable(before);
+		if (before.paper && before.designOn) {
+			// The paper switch can be turned on after the card was designed.
+			const saved = await context.db
+				.select({ doc: eventDesign.doc })
+				.from(eventDesign)
+				.where(eq(eventDesign.eventId, before.id))
+				.get();
+			const parsed = saved ? parseDesign(saved.doc) : null;
+			needsQr(before, true, parsed?.ok ? parsed.design : { elements: [] });
+		}
 		if (before.status === "draft") {
 			await context.db
 				.update(event)
@@ -867,6 +880,7 @@ export const eventsRouter = {
 		}
 		await context.db.delete(event).where(eq(event.id, row.id));
 		if (row.coverKey) await context.env.MEDIA.delete(row.coverKey);
+		await deleteDesignMedia(context.env, row.id);
 		return { ok: true };
 	}),
 

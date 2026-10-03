@@ -46,6 +46,12 @@ export function coverUrl(siteUrl: string, coverKey: string): string {
 	return `${siteUrl}/api/${coverKey}`;
 }
 
+/** A design's card image, public for the same reasons as a cover. */
+export function cardUrl(siteUrl: string, cardKey: string): string {
+	// Keys are `designs/<event id>/card-<random>.jpg`.
+	return `${siteUrl}/api/${cardKey}`;
+}
+
 /**
  * Where a sign-in link may drop someone: somewhere on this site, never off
  * it. Anything clever ("//evil.com", "https://evil.com", a smuggled newline)

@@ -68,29 +68,44 @@ app.all("/reference/*", async (c, next) => {
 });
 
 /**
- * Streams an event's cover photo from R2. Public and token-free by design:
- * the same URL goes into emails, where mail proxies fetch it. Keys are
- * random and never reused -- a new photo gets a new key -- so the response
- * can be cached for good.
+ * Streams an image from R2. Public and token-free by design: the same URLs
+ * go into emails, where mail proxies fetch them. Keys are random and never
+ * reused -- a new photo gets a new key -- so the response can be cached for
+ * good.
  */
+async function media(key: string, etag: string | undefined): Promise<Response> {
+	const object = await env.MEDIA.get(key, {
+		onlyIf: etag ? { etagDoesNotMatch: etag.replaceAll('"', "") } : undefined,
+	});
+	if (!object) return new Response("No such image.", { status: 404 });
+	const headers = new Headers();
+	object.writeHttpMetadata(headers);
+	headers.set("etag", object.httpEtag);
+	headers.set("cache-control", "public, max-age=31536000, immutable");
+	headers.set("x-content-type-options", "nosniff");
+	if (!("body" in object)) return new Response(null, { status: 304, headers });
+	headers.set("content-length", String(object.size));
+	return new Response(object.body, { headers });
+}
+
 app.get("/covers/:name", async (c) => {
 	const name = c.req.param("name");
 	if (!/^[\w-]+\.(jpg|png|webp)$/.test(name)) {
 		return c.text("No such cover.", 404);
 	}
-	const key = `covers/${name}`;
-	const etag = c.req.header("if-none-match");
-	const object = await env.MEDIA.get(key, {
-		onlyIf: etag ? { etagDoesNotMatch: etag.replaceAll('"', "") } : undefined,
-	});
-	if (!object) return c.text("No such cover.", 404);
-	const headers = new Headers();
-	object.writeHttpMetadata(headers);
-	headers.set("etag", object.httpEtag);
-	headers.set("cache-control", "public, max-age=31536000, immutable");
-	if (!("body" in object)) return new Response(null, { status: 304, headers });
-	headers.set("content-length", String(object.size));
-	return new Response(object.body, { headers });
+	return media(`covers/${name}`, c.req.header("if-none-match"));
+});
+
+/** A design's images and its card, under designs/<event id>/. */
+app.get("/designs/:eventId/:name", async (c) => {
+	const { eventId, name } = c.req.param();
+	if (
+		!/^[0-9a-f-]{36}$/.test(eventId) ||
+		!/^(card-)?[0-9a-f-]{36}\.(jpg|png|webp)$/.test(name)
+	) {
+		return c.text("No such image.", 404);
+	}
+	return media(`designs/${eventId}/${name}`, c.req.header("if-none-match"));
 });
 
 app.route("/unsubscribe", unsubscribe);
