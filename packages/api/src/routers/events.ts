@@ -25,6 +25,7 @@ import {
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import {
 	and,
+	asc,
 	desc,
 	eq,
 	getTableColumns,
@@ -43,6 +44,7 @@ import {
 	accessTo,
 	cardsFor,
 	type EventRow,
+	emailsHeld,
 	findEvent,
 	findEventByShareToken,
 	guestsOf,
@@ -88,6 +90,7 @@ const eventFields = z.object({
 	potluckEnabled: z.boolean(),
 	showGuestNames: z.boolean(),
 	shareEnabled: z.boolean(),
+	paper: z.boolean(),
 	guestInvites: z.boolean(),
 	guestInviteLimit: z.number().int().min(1).max(20),
 	remindDeadline: z.boolean(),
@@ -456,6 +459,16 @@ export const eventsRouter = {
 				});
 			}
 			const fields = { ...input.fields };
+			if (
+				fields.paper !== undefined &&
+				fields.paper !== before.paper &&
+				before.status !== "draft"
+			) {
+				throw new ORPCError("BAD_REQUEST", {
+					message:
+						"Paper or email is chosen before sending. It can't change now.",
+				});
+			}
 			const moved = NOTIFY_FIELDS.some(
 				(k) => k in fields && fields[k] !== before[k],
 			);
@@ -475,10 +488,23 @@ export const eventsRouter = {
 				.update(event)
 				.set({ ...fields, ...rearm })
 				.where(eq(event.id, before.id));
+			if (fields.paper === false && before.paper) {
+				// Cards printed for a draft that goes back to email must not keep
+				// signing anybody in.
+				await context.db
+					.update(eventGuest)
+					.set({ paperToken: null })
+					.where(eq(eventGuest.eventId, before.id));
+			}
 			const after = (await findEvent(context.db, before.id)) ?? before;
 
 			let notified = 0;
-			if (before.status === "published" && after.notifyChanges && moved) {
+			if (
+				before.status === "published" &&
+				after.notifyChanges &&
+				moved &&
+				!emailsHeld(after)
+			) {
 				const changes = describeChanges(before, after);
 				if (changes.length > 0) {
 					const result = await sendToList(context.db, {
@@ -658,6 +684,9 @@ export const eventsRouter = {
 	/**
 	 * Send the invitations: publishes a draft, and on a published event sends
 	 * to whoever was added since. Each person gets one invitation, ever.
+	 *
+	 * A paper event is only published here -- its QR codes start working --
+	 * and nobody is emailed until the host presses "Start emails".
 	 */
 	send: hostProcedure.input(idInput).handler(async ({ context, input }) => {
 		const { event: before } = await hostAccessTo(
@@ -673,9 +702,118 @@ export const eventsRouter = {
 				.where(and(eq(event.id, before.id), eq(event.status, "draft")));
 		}
 		const row = (await findEvent(context.db, before.id)) ?? before;
+		if (emailsHeld(row)) {
+			return { sent: 0, failed: 0, skipped: 0, held: true, dryRun: false };
+		}
 		const outcome = await sendInvites(context.db, row, context.me.id);
-		return { ...outcome, dryRun: getMailer().dryRun };
+		return { ...outcome, held: false, dryRun: getMailer().dryRun };
 	}),
+
+	/**
+	 * "Start emails" on a paper event: from now on it behaves like any other.
+	 * Claimed with a guarded UPDATE so a double press emails nobody twice,
+	 * then everybody with an address gets the invitation by email too.
+	 */
+	releaseEmails: hostProcedure
+		.input(idInput)
+		.handler(async ({ context, input }) => {
+			const { event: row } = await hostAccessTo(
+				context.db,
+				context.me,
+				input.eventId,
+			);
+			if (!row.paper || row.status !== "published") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Only a sent paper event has emails to start.",
+				});
+			}
+			const now = new Date();
+			const result = await context.db
+				.update(event)
+				.set({ emailsReleasedAt: now })
+				.where(and(eq(event.id, row.id), isNull(event.emailsReleasedAt)))
+				.run();
+			if (result.meta.changes !== 1) {
+				return { sent: 0, failed: 0, skipped: 0, dryRun: getMailer().dryRun };
+			}
+			const outcome = await sendInvites(
+				context.db,
+				{ ...row, emailsReleasedAt: now },
+				context.me.id,
+				{ skipAnswered: true },
+			);
+			return { ...outcome, dryRun: getMailer().dryRun };
+		}),
+
+	/**
+	 * Everything the host's browser needs to print paper invitations: the
+	 * event, and a QR key per guest, issued on first print and kept after, so
+	 * printing again never breaks a card already in somebody's mailbox.
+	 * (`guests.newPaperCode` replaces one guest's key on purpose.)
+	 *
+	 * The keys go to the host by design -- they are printed -- which is why
+	 * they are per invitation and sign in plain guests only.
+	 */
+	paperInvites: hostProcedure
+		.input(idInput.extend({ guestIds: z.array(z.string().min(1)).optional() }))
+		.handler(async ({ context, input }) => {
+			const { event: row } = await hostAccessTo(
+				context.db,
+				context.me,
+				input.eventId,
+			);
+			if (!row.paper) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "This event is sent by email, not on paper.",
+				});
+			}
+			const missing = await context.db
+				.select({ id: eventGuest.id })
+				.from(eventGuest)
+				.where(
+					and(eq(eventGuest.eventId, row.id), isNull(eventGuest.paperToken)),
+				)
+				.all();
+			for (const g of missing) {
+				await context.db
+					.update(eventGuest)
+					.set({ paperToken: newToken() })
+					.where(and(eq(eventGuest.id, g.id), isNull(eventGuest.paperToken)));
+			}
+			const wanted = input.guestIds ? new Set(input.guestIds) : null;
+			const rows = await context.db
+				.select({
+					id: eventGuest.id,
+					name: user.name,
+					token: eventGuest.paperToken,
+				})
+				.from(eventGuest)
+				.innerJoin(user, eq(user.id, eventGuest.userId))
+				.where(eq(eventGuest.eventId, row.id))
+				.orderBy(asc(user.name))
+				.all();
+			return {
+				event: {
+					title: row.title,
+					hostLine: row.hostLine,
+					location: row.location,
+					details: row.details,
+					coverKey: row.coverKey,
+					...labelsOf(row),
+				},
+				guests: rows.flatMap((r) =>
+					(!wanted || wanted.has(r.id)) && r.token
+						? [
+								{
+									id: r.id,
+									name: r.name,
+									url: `${siteUrl()}/api/auth/paper?k=${r.token}`,
+								},
+							]
+						: [],
+				),
+			};
+		}),
 
 	/** Call it off, and tell everybody who was still coming if asked to. */
 	cancel: hostProcedure
@@ -702,7 +840,9 @@ export const eventsRouter = {
 				.where(and(eq(event.id, row.id), eq(event.status, "published")))
 				.run();
 			if (result.meta.changes !== 1) return { notified: 0 };
-			if (!input.notify) return { notified: 0 };
+			// Held paper events tell nobody by email; the host knows who has a
+			// card and can tell them.
+			if (!input.notify || emailsHeld(row)) return { notified: 0 };
 			const sent = await sendToList(context.db, {
 				kind: "cancel",
 				eventId: row.id,
@@ -745,6 +885,11 @@ export const eventsRouter = {
 			);
 			if (row.status !== "published") {
 				throw new ORPCError("BAD_REQUEST", { message: "It hasn't gone out." });
+			}
+			if (emailsHeld(row)) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Emails are on hold until you start them.",
+				});
 			}
 			const now = new Date();
 			const claimed = await context.db

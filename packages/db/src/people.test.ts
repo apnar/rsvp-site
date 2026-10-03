@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAddresses, parseEmails } from "./people";
+import { parseAddresses, parseEmails, parseGuestLines } from "./people";
 import { canHost, isAdmin, roleOf } from "./roles";
 
 describe("parseEmails", () => {
@@ -70,5 +70,21 @@ describe("canHost and isAdmin", () => {
 			expect(canHost(who)).toBe(false);
 			expect(isAdmin(who)).toBe(false);
 		}
+	});
+});
+
+describe("parseGuestLines", () => {
+	it("keeps addresses as addresses and the rest as names", () => {
+		expect(
+			parseGuestLines(
+				'The Parks\n"Linh N" <linh@x.com>, bo@x.com\nCoach Dana,\n  ',
+			),
+		).toEqual({
+			addresses: [
+				{ email: "linh@x.com", name: "Linh N" },
+				{ email: "bo@x.com", name: null },
+			],
+			names: ["The Parks", "Coach Dana"],
+		});
 	});
 });

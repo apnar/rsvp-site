@@ -60,10 +60,13 @@ export function GroupChips({
 export function AddGuests({
 	eventId,
 	published,
+	paper = false,
 	onAdded,
 }: {
 	eventId: string;
 	published: boolean;
+	/** Paper events also take bare names, one per line. */
+	paper?: boolean;
 	onAdded: () => void;
 }) {
 	const [emails, setEmails] = useState("");
@@ -73,7 +76,11 @@ export function AddGuests({
 		orpc.guests.add.mutationOptions({
 			onSuccess: (r) => {
 				if (r.invalid) {
-					toast.error("Those don't look like email addresses.");
+					toast.error(
+						paper
+							? "Nothing to add there."
+							: "Those don't look like email addresses.",
+					);
 					return;
 				}
 				const parts = [
@@ -82,7 +89,7 @@ export function AddGuests({
 					r.refused ? `${r.refused} can't be invited` : "",
 				].filter(Boolean);
 				toast.success(
-					`${parts.join(", ")}.${published && r.added > 0 ? " Send when you're ready." : ""}`,
+					`${parts.join(", ")}.${published && r.added > 0 && !paper ? " Send when you're ready." : ""}`,
 				);
 				setEmails("");
 				setGroupIds([]);
@@ -115,7 +122,11 @@ export function AddGuests({
 			<Textarea
 				id="add-emails"
 				value={emails}
-				placeholder="Paste or type emails, separated by commas or new lines"
+				placeholder={
+					paper
+						? "One per line: an email, or just a name for a card-only guest"
+						: "Paste or type emails, separated by commas or new lines"
+				}
 				onChange={(ev) => setEmails(ev.target.value)}
 			/>
 			<div className="flex flex-wrap items-center gap-3">

@@ -85,7 +85,12 @@ function NameAndEmail() {
 				/>
 			</Field>
 			<Field label="Email" htmlFor="email">
-				<Input id="email" value={me.email} readOnly disabled />
+				<Input
+					id="email"
+					value={me.email || "No email on file"}
+					readOnly
+					disabled
+				/>
 			</Field>
 			<p className="m-0 text-[14px] text-haze">{ROLE_LINE[me.role]}</p>
 			<Button
@@ -112,6 +117,8 @@ function EmailPrefs() {
 			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
+	// Somebody invited on paper by name alone: there is nothing to switch.
+	if (!me.email) return null;
 	return (
 		<Panel className="gap-1">
 			<h2 className="m-0 mb-2 text-[20px]">Email</h2>

@@ -28,6 +28,9 @@ export type ScheduleEvent = {
 	remindDaysBefore: number;
 	remindDayBefore: boolean;
 	hostAlerts: "off" | "each" | "daily";
+	/** Paper invitations hold guest email until the host releases it. */
+	paper: boolean;
+	emailsReleasedAt: Date | null;
 	publishedAt: Date | null;
 	deadlineReminderAt: Date | null;
 	dayBeforeAt: Date | null;
@@ -72,10 +75,21 @@ export function dueEmails(e: ScheduleEvent, now: Date): Due[] {
 	const due: Due[] = [];
 	const t = now.getTime();
 	const start = startsAt(e)?.getTime() ?? null;
-	const published = e.publishedAt.getTime();
+	// When guests first heard from us by email: publishing, or for a paper
+	// event the host's "Start emails". Until then a paper event's guests get
+	// nothing -- their card is meant to arrive first.
+	const held = e.paper && e.emailsReleasedAt === null;
+	const published = (
+		e.paper ? (e.emailsReleasedAt ?? e.publishedAt) : e.publishedAt
+	).getTime();
 	const started = start !== null && t >= start;
 
-	if (e.remindDeadline && e.rsvpDeadline && e.deadlineReminderAt === null) {
+	if (
+		!held &&
+		e.remindDeadline &&
+		e.rsvpDeadline &&
+		e.deadlineReminderAt === null
+	) {
 		const at = deadlineReminderAt(e)?.getTime() ?? null;
 		// The deadline day runs to midnight; after that, nobody is late any more.
 		const closes = siteInstant(addDays(e.rsvpDeadline, 1), "00:00").getTime();
@@ -87,7 +101,7 @@ export function dueEmails(e: ScheduleEvent, now: Date): Due[] {
 		}
 	}
 
-	if (e.remindDayBefore && e.date && e.dayBeforeAt === null) {
+	if (!held && e.remindDayBefore && e.date && e.dayBeforeAt === null) {
 		const at = dayBeforeAt(e)?.getTime() ?? null;
 		if (at !== null && t >= at) {
 			const stale = started || published >= at;
@@ -102,12 +116,10 @@ export function dueEmails(e: ScheduleEvent, now: Date): Due[] {
 		const over = e.date !== null && today > addDays(e.date, 1);
 		const claimed =
 			e.digestAt !== null && e.digestAt.getTime() >= slot.getTime();
-		if (
-			!over &&
-			!claimed &&
-			t >= slot.getTime() &&
-			published < slot.getTime()
-		) {
+		// The digest is for hosts, so a paper hold does not stop it, and it
+		// counts from publishing rather than from the release.
+		const live = e.publishedAt.getTime();
+		if (!over && !claimed && t >= slot.getTime() && live < slot.getTime()) {
 			due.push({ kind: "host_digest", action: "send", slot });
 		}
 	}

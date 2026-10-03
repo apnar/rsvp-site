@@ -84,6 +84,14 @@ export const event = sqliteTable(
 		 * each. People a guest adds can never add anyone themselves; that
 		 * one level is what keeps a party from inviting itself to strangers.
 		 */
+		/**
+		 * Paper invitations: the host prints a card per guest with a QR code,
+		 * and no guest email goes out until `emails_released_at` is set by the
+		 * host's "Start emails" -- so the card arrives first. Chosen while the
+		 * event is a draft and fixed after.
+		 */
+		paper: integer("paper", { mode: "boolean" }).notNull().default(false),
+		emailsReleasedAt: integer("emails_released_at", { mode: "timestamp_ms" }),
 		guestInvites: integer("guest_invites", { mode: "boolean" })
 			.notNull()
 			.default(false),
@@ -189,6 +197,13 @@ export const eventGuest = sqliteTable(
 		note: text("note").notNull().default(""),
 		/** When the invitation email went out. Null: not sent yet. */
 		invitedAt: integer("invited_at", { mode: "timestamp_ms" }),
+		/**
+		 * The key in this guest's printed QR code. Separate from their
+		 * `link_token` on purpose: the host holds it (it is in the PDF), so it
+		 * is per invitation, signs in plain guests only, and can be replaced
+		 * without breaking their email links.
+		 */
+		paperToken: text("paper_token").unique(),
 		respondedAt: integer("responded_at", { mode: "timestamp_ms" }),
 		nudgedAt: integer("nudged_at", { mode: "timestamp_ms" }),
 		addedBy: text("added_by").references(() => user.id, {

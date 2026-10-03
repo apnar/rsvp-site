@@ -1,5 +1,12 @@
 import { ORPCError } from "@orpc/server";
-import { findOrCreatePeople, parseAddresses } from "@rsvp-site/db/people";
+import {
+	createNameOnlyPeople,
+	findOrCreatePeople,
+	newToken,
+	parseAddresses,
+	parseGuestLines,
+	setRealEmail,
+} from "@rsvp-site/db/people";
 import { contactGroup, contactGroupMember } from "@rsvp-site/db/schema/contact";
 import {
 	eventGuest,
@@ -12,6 +19,7 @@ import { z } from "zod";
 import {
 	type Access,
 	accessTo,
+	emailsHeld,
 	guestsOf,
 	hostAccessTo,
 	potluckOf,
@@ -47,6 +55,9 @@ export const guestsRouter = {
 				date: row.date,
 				rsvpDeadline: row.rsvpDeadline,
 				potluckEnabled: row.potluckEnabled,
+				paper: row.paper,
+				emailsReleasedAt: row.emailsReleasedAt,
+				emailsHeld: emailsHeld(row),
 			},
 			totals,
 			headcount: headcount(totals),
@@ -81,13 +92,19 @@ export const guestsRouter = {
 			if (row.status === "canceled") {
 				throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
 			}
-			const typed = parseAddresses(input.emails);
-			if (typed.length > 500) {
+			// A paper event may also take bare names, one per line: people
+			// with no address who will only ever have the card.
+			const lines = row.paper
+				? parseGuestLines(input.emails)
+				: { addresses: parseAddresses(input.emails), names: [] };
+			const typed = lines.addresses;
+			if (typed.length + lines.names.length > 500) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "That's a lot of people. Add them 500 at a time.",
 				});
 			}
 			const people = await findOrCreatePeople(context.db, typed, "host");
+			const named = await createNameOnlyPeople(context.db, lines.names, "host");
 
 			// Groups only count if they are the caller's own -- or anybody's, for
 			// an admin -- so a guessed group id reveals and adds nothing.
@@ -114,6 +131,7 @@ export const guestsRouter = {
 			const usable = people.filter((p) => p.status !== "deactivated");
 			const rows = [
 				...usable.map((p) => ({ userId: p.id, source: "host" as const })),
+				...named.map((p) => ({ userId: p.id, source: "host" as const })),
 				...members.map((m) => ({ userId: m.userId, source: "group" as const })),
 			];
 			const unique = [...new Map(rows.map((r) => [r.userId, r])).values()];
@@ -138,9 +156,10 @@ export const guestsRouter = {
 			return {
 				added,
 				already: unique.length - added,
-				created: people.filter((p) => p.created).length,
+				created: people.filter((p) => p.created).length + named.length,
 				refused: people.length - usable.length,
-				invalid: input.emails.trim() && typed.length === 0,
+				invalid:
+					input.emails.trim() && typed.length === 0 && named.length === 0,
 			};
 		}),
 
@@ -286,6 +305,72 @@ export const guestsRouter = {
 				);
 			}
 			return { ok: true, full };
+		}),
+
+	/**
+	 * Replace one guest's QR key: a lost or misprinted card stops working,
+	 * and the next download prints the new one.
+	 */
+	newPaperCode: hostProcedure
+		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.handler(async ({ context, input }) => {
+			const { event: row } = await hostAccessTo(
+				context.db,
+				context.me,
+				input.eventId,
+			);
+			if (!row.paper) {
+				throw new ORPCError("BAD_REQUEST", { message: "Not a paper event." });
+			}
+			await context.db
+				.update(eventGuest)
+				.set({ paperToken: newToken() })
+				.where(
+					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
+				);
+			return { ok: true };
+		}),
+
+	/**
+	 * Give a name-only guest an email address, so they can get email once
+	 * it starts. An address somebody already has is refused rather than
+	 * merged: the host removes this guest and invites that person instead.
+	 */
+	setEmail: hostProcedure
+		.input(
+			idInput.extend({
+				guestId: z.string().min(1),
+				email: z.email("That doesn't look like an email address.").max(254),
+			}),
+		)
+		.handler(async ({ context, input }) => {
+			const { event: row } = await hostAccessTo(
+				context.db,
+				context.me,
+				input.eventId,
+			);
+			const guest = await context.db
+				.select({ userId: eventGuest.userId })
+				.from(eventGuest)
+				.where(
+					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
+				)
+				.get();
+			if (!guest)
+				throw new ORPCError("NOT_FOUND", { message: "No such guest." });
+			const outcome = await setRealEmail(context.db, guest.userId, input.email);
+			if (outcome === "taken") {
+				throw new ORPCError("BAD_REQUEST", {
+					message:
+						"Somebody already has that address. Remove this guest and invite them by email instead.",
+				});
+			}
+			if (outcome === "not-placeholder") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "They already have an email address.",
+				});
+			}
+			return { ok: true };
 		}),
 
 	/**

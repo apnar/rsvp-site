@@ -43,6 +43,7 @@ export type EventForm = {
 	potluckEnabled: boolean;
 	showGuestNames: boolean;
 	shareEnabled: boolean;
+	paper: boolean;
 	guestInvites: boolean;
 	guestInviteLimit: number;
 	remindDeadline: boolean;
@@ -70,6 +71,7 @@ const BLANK: EventForm = {
 	potluckEnabled: false,
 	showGuestNames: true,
 	shareEnabled: false,
+	paper: false,
 	guestInvites: false,
 	guestInviteLimit: 3,
 	remindDeadline: true,
@@ -97,6 +99,7 @@ function formOf(loaded: Loaded): EventForm {
 		potluckEnabled: e.potluckEnabled,
 		showGuestNames: e.showGuestNames,
 		shareEnabled: e.shareEnabled,
+		paper: e.paper,
 		guestInvites: e.guestInvites,
 		guestInviteLimit: e.guestInviteLimit,
 		remindDeadline: e.remindDeadline,
@@ -252,9 +255,11 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 			if (after === "send") {
 				const r = await client.events.send({ eventId: id });
 				toast.success(
-					r.sent > 0
-						? `Sent ${plural(r.sent, "invite")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`
-						: "Published. Nobody new to invite.",
+					r.held
+						? "Published. Download the cards from the guest list; no emails go out until you start them."
+						: r.sent > 0
+							? `Sent ${plural(r.sent, "invite")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`
+							: "Published. Nobody new to invite.",
 				);
 				await refresh();
 				navigate({ to: "/e/$eventId/guests", params: { eventId: id } });
@@ -423,6 +428,28 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							) : null
 						}
 					/>
+					<div className="flex flex-wrap items-center gap-3">
+						<PillTabs
+							label="How guests are invited"
+							value={form.paper ? "paper" : "email"}
+							onChange={(v) => {
+								if (status === "draft") set("paper", v === "paper");
+							}}
+							options={[
+								{ value: "email", label: "Email" },
+								{ value: "paper", label: "Paper" },
+							]}
+							className={
+								status === "draft" ? "" : "pointer-events-none opacity-60"
+							}
+						/>
+						<span className="min-w-[200px] flex-1 text-[13px] text-haze">
+							{form.paper
+								? "You print a card for each guest with a QR code that signs them in. No email goes to guests until you start emails from the guest list, so the cards arrive first."
+								: "Each guest gets the invitation by email when you send."}
+							{status === "draft" ? "" : " Chosen when the event went out."}
+						</span>
+					</div>
 					{eventId ? (
 						<>
 							<p className="m-0 text-soft">
@@ -436,6 +463,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							<AddGuests
 								eventId={eventId}
 								published={published}
+								paper={form.paper}
 								onAdded={() => refresh()}
 							/>
 						</>
@@ -457,12 +485,17 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							<Textarea
 								id="new-emails"
 								value={emails}
-								placeholder="Add emails, separated by commas or new lines"
+								placeholder={
+									form.paper
+										? "One per line: an email, or just a name for a card-only guest"
+										: "Add emails, separated by commas or new lines"
+								}
 								onChange={(ev) => setEmails(ev.target.value)}
 							/>
 							<span className="text-[13px] text-haze">
-								Guests sign in with their email to RSVP, so every answer has a
-								name on it. Nobody is emailed until you send.
+								{form.paper
+									? "Each guest answers with the QR code on their card. Nobody is emailed until you start emails."
+									: "Guests sign in with their email to RSVP, so every answer has a name on it. Nobody is emailed until you send."}
 							</span>
 						</>
 					)}
@@ -795,11 +828,13 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							disabled={busy || !form.date}
 							onClick={() => run("send")}
 						>
-							{status === "draft"
-								? sendCount > 0
-									? `Send ${plural(sendCount, "invite")}`
-									: "Send invites"
-								: `Send ${plural(sendCount, "invite")}`}
+							{form.paper
+								? "Publish"
+								: status === "draft"
+									? sendCount > 0
+										? `Send ${plural(sendCount, "invite")}`
+										: "Send invites"
+									: `Send ${plural(sendCount, "invite")}`}
 						</Button>
 					) : null}
 				</div>

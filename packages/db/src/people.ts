@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import type { createDb } from "./index";
 import { roleOf } from "./roles";
 import {
+	NO_EMAIL_DOMAIN,
 	type PersonSource,
 	type PersonStatus,
 	type Role,
@@ -72,9 +73,91 @@ export function notDeactivated() {
 	);
 }
 
-/** Somebody email may go to: not deactivated, and not unsubscribed. */
+/**
+ * Somebody email may go to: not deactivated, not unsubscribed, and with a
+ * real address -- a name-only paper guest's placeholder is never mailed.
+ */
 export function mailableWhere() {
-	return and(notDeactivated(), isNull(user.unsubscribedAt));
+	return and(
+		notDeactivated(),
+		isNull(user.unsubscribedAt),
+		eq(user.noEmail, false),
+	);
+}
+
+/**
+ * Split what a host pasted for a paper event into addresses and bare names:
+ * a line with an address is the address (and the name in front of it);
+ * a line without one is somebody to invite by name alone.
+ */
+export function parseGuestLines(raw: string): {
+	addresses: { email: string; name: string | null }[];
+	names: string[];
+} {
+	const addresses: { email: string; name: string | null }[] = [];
+	const names: string[] = [];
+	for (const line of raw.split(/\n+/)) {
+		const found = parseAddresses(line);
+		if (found.length > 0) addresses.push(...found);
+		else {
+			const name = line.replace(/[,;]+$/, "").trim();
+			if (name) names.push(name.slice(0, 60));
+		}
+	}
+	return { addresses, names };
+}
+
+/**
+ * New people known only by name, for paper invitations. Each gets a unique
+ * placeholder address (the column is NOT NULL UNIQUE) and `no_email`, so
+ * nothing mails them; their printed QR code is their way in. Never deduped:
+ * two "Dana"s are two people until a host says otherwise.
+ */
+export async function createNameOnlyPeople(
+	db: Db,
+	names: readonly string[],
+	source: PersonSource,
+): Promise<{ id: string; name: string }[]> {
+	const rows = names.map((name) => ({
+		id: crypto.randomUUID(),
+		name,
+		email: `${crypto.randomUUID()}@${NO_EMAIL_DOMAIN}`,
+		emailVerified: false,
+		noEmail: true,
+		role: "user",
+		source,
+		linkToken: newToken(),
+		unsubscribeToken: newToken(),
+	}));
+	for (const slice of chunk(rows, 8)) {
+		await db.insert(user).values(slice);
+	}
+	return rows.map((r) => ({ id: r.id, name: r.name }));
+}
+
+/**
+ * Give a name-only guest a real address. Refused when that address already
+ * belongs to somebody: merging two people is a host's call to make by hand
+ * (remove this one, invite that one), not something to guess at.
+ */
+export async function setRealEmail(
+	db: Db,
+	userId: string,
+	raw: string,
+): Promise<"ok" | "taken" | "not-placeholder"> {
+	const email = normalizeEmail(raw);
+	const taken = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(eq(user.email, email))
+		.get();
+	if (taken) return "taken";
+	const result = await db
+		.update(user)
+		.set({ email, noEmail: false })
+		.where(and(eq(user.id, userId), eq(user.noEmail, true)))
+		.run();
+	return result.meta.changes === 1 ? "ok" : "not-placeholder";
 }
 
 export type Person = {
@@ -89,6 +172,7 @@ export type Person = {
 	statusChangedBy: StatusActor | null;
 	unsubscribedAt: Date | null;
 	unsubscribeReason: UnsubscribeReason | null;
+	noEmail: boolean;
 	linkSentAt: Date | null;
 	createdAt: Date;
 };
@@ -105,6 +189,7 @@ const personColumns = {
 	statusChangedBy: user.statusChangedBy,
 	unsubscribedAt: user.unsubscribedAt,
 	unsubscribeReason: user.unsubscribeReason,
+	noEmail: user.noEmail,
 	linkSentAt: user.linkSentAt,
 	createdAt: user.createdAt,
 };
@@ -116,7 +201,12 @@ export async function listPeople(db: Db): Promise<Person[]> {
 		.from(user)
 		.orderBy(asc(user.createdAt))
 		.all();
-	return rows.map((row) => ({ ...row, role: roleOf(row.role) }));
+	return rows.map((row) => shown({ ...row, role: roleOf(row.role) }));
+}
+
+/** A name-only guest's placeholder address is never shown to anybody. */
+function shown<T extends { email: string; noEmail: boolean }>(row: T): T {
+	return row.noEmail ? { ...row, email: "" } : row;
 }
 
 /** One person's own record, re-read from D1 rather than the session cookie. */
@@ -126,7 +216,7 @@ export async function findPerson(db: Db, id: string): Promise<Person | null> {
 		.from(user)
 		.where(eq(user.id, id))
 		.get();
-	return row ? { ...row, role: roleOf(row.role) } : null;
+	return row ? shown({ ...row, role: roleOf(row.role) }) : null;
 }
 
 export type Recipient = {

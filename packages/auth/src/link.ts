@@ -1,5 +1,7 @@
 import type { createDb } from "@rsvp-site/db";
+import { findPaperInvite } from "@rsvp-site/db/paper";
 import { findPersonByLinkToken } from "@rsvp-site/db/people";
+import { roleOf } from "@rsvp-site/db/roles";
 import { safeReturnPath } from "@rsvp-site/email";
 import type { BetterAuthPlugin } from "better-auth";
 import { createAuthEndpoint } from "better-auth/api";
@@ -80,9 +82,53 @@ export function emailLink({ db }: { db: Db }) {
 					);
 				},
 			),
+			/**
+			 * The QR code on a paper invitation: `/api/auth/paper?k=<token>`.
+			 *
+			 * The host holds these keys -- they print them -- so they are not
+			 * the guest's own `link_token`. Each opens one invitation, and signs
+			 * in only a plain guest: somebody who is a host or an admin is sent
+			 * to the normal sign-in instead, or a host could print a card for
+			 * an admin's address and walk in as them. Draft events, deactivated
+			 * people and replaced keys get nothing.
+			 */
+			signInByPaper: createAuthEndpoint(
+				"/paper",
+				{
+					method: "GET",
+					query: z.object({ k: z.string().min(1).max(64) }),
+				},
+				async (ctx) => {
+					const site = new URL(ctx.context.baseURL).origin;
+					const invite = await findPaperInvite(db, ctx.query.k);
+					if (
+						!invite ||
+						invite.status === "deactivated" ||
+						invite.eventStatus === "draft"
+					) {
+						throw ctx.redirect(`${site}/login?error=paper`);
+					}
+					const to = `/e/${invite.eventId}`;
+					if (roleOf(invite.role) !== "user") {
+						throw ctx.redirect(
+							`${site}/login?redirect=${encodeURIComponent(to)}`,
+						);
+					}
+					const user = await ctx.context.internalAdapter.findUserById(
+						invite.userId,
+					);
+					if (!user) throw ctx.redirect(`${site}/login?error=paper`);
+					const session = await ctx.context.internalAdapter.createSession(
+						user.id,
+					);
+					await setSessionCookie(ctx, { session, user });
+					throw ctx.redirect(new URL(to, site).toString());
+				},
+			),
 		},
 		rateLimit: [
 			{ pathMatcher: (path: string) => path === "/link", window: 60, max: 10 },
+			{ pathMatcher: (path: string) => path === "/paper", window: 60, max: 10 },
 		],
 	} satisfies BetterAuthPlugin;
 }

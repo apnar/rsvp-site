@@ -8,7 +8,7 @@ import {
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AddGuests } from "@/components/add-guests";
@@ -18,6 +18,7 @@ import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import type { Outputs } from "@/lib/api-types";
 import { ago, initials, plural, shortDate } from "@/lib/format";
+import { PAPER_SIZES, type PaperSize } from "@/lib/paper-sizes";
 import { client, orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/guests")({
@@ -141,7 +142,7 @@ function GuestListPage() {
 						<Button variant="outline" onClick={exportCsv}>
 							Export
 						</Button>
-						{published && t.waiting > 0 ? (
+						{published && !e.emailsHeld && t.waiting > 0 ? (
 							<Button
 								variant="pink"
 								disabled={nudge.isPending}
@@ -150,7 +151,7 @@ function GuestListPage() {
 								Nudge {t.waiting}
 							</Button>
 						) : null}
-						{published && notInvited > 0 ? (
+						{published && !e.emailsHeld && notInvited > 0 ? (
 							<Button
 								variant="send"
 								disabled={send.isPending}
@@ -170,7 +171,20 @@ function GuestListPage() {
 				<AddGuests
 					eventId={eventId}
 					published={published}
+					paper={e.paper}
 					onAdded={() => refresh()}
+				/>
+			) : null}
+
+			{e.paper ? (
+				<PaperPanel
+					eventId={eventId}
+					title={e.title}
+					published={published}
+					held={e.emailsHeld}
+					releasedAt={e.emailsReleasedAt}
+					emailable={notInvited}
+					onChange={refresh}
 				/>
 			) : null}
 
@@ -277,7 +291,10 @@ function GuestListPage() {
 							guest={g}
 							isYou={g.userId === session.user.id}
 							nowMs={nowMs}
-							canNudge={published}
+							canNudge={published && !e.emailsHeld}
+							paper={e.paper}
+							eventId={eventId}
+							eventTitle={e.title}
 							nudging={nudge.isPending}
 							onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
 							onRemove={() => remove.mutate({ eventId, guestId: g.id })}
@@ -321,6 +338,9 @@ function GuestRow({
 	isYou,
 	nowMs,
 	canNudge,
+	paper,
+	eventId,
+	eventTitle,
 	nudging,
 	onNudge,
 	onRemove,
@@ -329,6 +349,9 @@ function GuestRow({
 	isYou: boolean;
 	nowMs: number;
 	canNudge: boolean;
+	paper: boolean;
+	eventId: string;
+	eventTitle: string;
 	nudging: boolean;
 	onNudge: () => void;
 	onRemove: () => void;
@@ -340,9 +363,11 @@ function GuestRow({
 		? `That's you${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : ""}`
 		: waiting
 			? g.invitedAt
-				? `${g.email} · invited ${shortDate(g.invitedAt)}`
-				: `${g.email} · not invited yet`
-			: `${g.email}${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : ""}`;
+				? `${g.email || "No email"} · invited ${shortDate(g.invitedAt)}`
+				: paper
+					? `${g.email || "No email"} · paper invite${g.hasPaper ? "" : ", not printed yet"}`
+					: `${g.email} · not invited yet`
+			: `${g.email || "No email"}${g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : ""}`;
 	// Whose friend they are, for anybody the host did not choose.
 	const via =
 		g.source === "guest"
@@ -356,7 +381,12 @@ function GuestRow({
 	return (
 		<div
 			className={cn(
-				"relative flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4 max-md:pr-12 md:grid md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_184px]",
+				"relative flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4 max-md:pr-12 md:grid",
+				// One fixed actions column per kind of event, so the tags line up
+				// down the list whatever buttons a row has.
+				paper
+					? "md:grid-cols-[44px_minmax(0,1.3fr)_96px_110px_120px_minmax(0,1fr)_300px]"
+					: "md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_184px]",
 				waiting && "border border-line-strong border-dashed",
 				out && "bg-panel-dim text-haze",
 				!waiting && !out && "bg-panel",
@@ -372,13 +402,14 @@ function GuestRow({
 				{via ? (
 					<div className="truncate text-[12px] text-pink-soft">{via}</div>
 				) : null}
+				{g.noEmail ? <AddEmail eventId={eventId} guestId={g.id} /> : null}
 			</div>
 			{/* Every column is drawn on every row, empty or not, so the tags and
 			    the counts line up down the list; the empties drop out on a phone,
 			    where the row wraps anyway. */}
 			<span className="flex w-[96px] flex-col items-start gap-1">
 				<AnswerTag response={g.response} />
-				{g.unreachable ? (
+				{g.unreachable && !g.noEmail ? (
 					<span className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-soft">
 						No email
 					</span>
@@ -416,6 +447,9 @@ function GuestRow({
 				{note.join(" · ")}
 			</span>
 			<span className="flex items-center justify-end gap-1.5 max-md:empty:hidden md:ml-auto md:min-w-[40px]">
+				{paper ? (
+					<PaperActions eventId={eventId} eventTitle={eventTitle} guest={g} />
+				) : null}
 				{waiting && canNudge && g.invitedAt && !g.unreachable ? (
 					<Button variant="pink" size="sm" disabled={nudging} onClick={onNudge}>
 						Send a nudge
@@ -451,5 +485,297 @@ function GuestRow({
 				)}
 			</span>
 		</div>
+	);
+}
+
+/**
+ * The paper side of an event: pick a size, download everybody's card in one
+ * PDF, and -- once they have had time to arrive -- start the emails.
+ */
+function PaperPanel({
+	eventId,
+	title,
+	published,
+	held,
+	releasedAt,
+	emailable,
+	onChange,
+}: {
+	eventId: string;
+	title: string;
+	published: boolean;
+	held: boolean;
+	releasedAt: Date | null;
+	emailable: number;
+	onChange: () => void;
+}) {
+	const [size, setSize] = usePaperSize();
+	const [busy, setBusy] = useState(false);
+	const [sure, setSure] = useState(false);
+	const release = useMutation(
+		orpc.events.releaseEmails.mutationOptions({
+			onSuccess: (r) => {
+				toast.success(
+					`Emails started. Sent ${plural(r.sent, "invitation")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`,
+				);
+				setSure(false);
+				onChange();
+			},
+			onError: (error: Error) => toast.error(error.message),
+		}),
+	);
+	return (
+		<section className="flex flex-col gap-3.5 rounded-[26px] border border-lime/60 bg-panel p-[clamp(18px,3vw,28px)]">
+			<div className="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 className="m-0 text-[20px]">Paper invitations</h2>
+				<span className="text-[13px] text-haze">
+					{held
+						? "Emails are on hold, so the cards arrive first."
+						: releasedAt
+							? `Emails started ${shortDate(releasedAt)}.`
+							: ""}
+				</span>
+			</div>
+			<p className="m-0 text-[14px] text-soft">
+				Each card has a QR code that signs that guest in to answer.
+				{published ? "" : " The codes start working when you publish."}
+			</p>
+			<div className="flex flex-wrap items-center gap-2">
+				<PaperSizeSelect value={size} onChange={setSize} />
+				<Button
+					variant="light"
+					disabled={busy}
+					onClick={async () => {
+						setBusy(true);
+						await downloadCards(eventId, title, size, null);
+						setBusy(false);
+					}}
+				>
+					{busy ? "Making the PDF..." : "Download all (PDF)"}
+				</Button>
+				{published && held ? (
+					sure ? (
+						<>
+							<Button
+								variant="send"
+								disabled={release.isPending}
+								onClick={() => release.mutate({ eventId })}
+							>
+								Yes, email {plural(emailable, "guest")}
+							</Button>
+							<Button variant="ghost" onClick={() => setSure(false)}>
+								Not yet
+							</Button>
+						</>
+					) : (
+						<Button variant="send" onClick={() => setSure(true)}>
+							Start emails
+						</Button>
+					)
+				) : null}
+			</div>
+			{published && held ? (
+				<span className="text-[13px] text-haze">
+					Starting emails sends the invitation to everyone with an address who
+					hasn't answered from their card yet, then reminders and updates run as
+					usual. Guests a guest invites get email straight away; they have no
+					card.
+				</span>
+			) : null}
+		</section>
+	);
+}
+
+/** The paper size, remembered per browser: it is the host's printer. */
+function usePaperSize(): [PaperSize, (size: PaperSize) => void] {
+	const [size, setSize] = useState<PaperSize>("card");
+	useEffect(() => {
+		try {
+			const saved = localStorage.getItem("paper-size");
+			if (saved === "card" || saved === "letter" || saved === "half") {
+				setSize(saved);
+			}
+		} catch {
+			// Storage may be blocked; the default is fine.
+		}
+	}, []);
+	return [
+		size,
+		(next) => {
+			setSize(next);
+			try {
+				localStorage.setItem("paper-size", next);
+			} catch {
+				// Not remembered, then.
+			}
+		},
+	];
+}
+
+function PaperSizeSelect({
+	value,
+	onChange,
+}: {
+	value: PaperSize;
+	onChange: (size: PaperSize) => void;
+}) {
+	return (
+		<>
+			<label htmlFor="paper-size" className="sr-only">
+				Paper size
+			</label>
+			<select
+				id="paper-size"
+				value={value}
+				onChange={(ev) => onChange(ev.target.value as PaperSize)}
+				className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 py-2 text-[14px] text-ink [color-scheme:dark] hover:border-haze focus-visible:border-lime"
+			>
+				{PAPER_SIZES.map((o) => (
+					<option key={o.value} value={o.value}>
+						{o.label}
+					</option>
+				))}
+			</select>
+		</>
+	);
+}
+
+/**
+ * Fetch the cards' data (issuing any missing codes), build the PDF in the
+ * browser, and save it. One guest, or everybody.
+ */
+async function downloadCards(
+	eventId: string,
+	title: string,
+	size: PaperSize,
+	guest: { id: string; name: string } | null,
+) {
+	// Only ever called from a click. Saying so lets the server build drop the
+	// PDF library, which would otherwise ride along in the Worker for nothing.
+	if (import.meta.env.SSR) return;
+	try {
+		const [data, pdf] = await Promise.all([
+			client.events.paperInvites({
+				eventId,
+				guestIds: guest ? [guest.id] : undefined,
+			}),
+			import("@/lib/paper-pdf"),
+		]);
+		if (data.guests.length === 0) {
+			toast.error("Nobody on the list yet.");
+			return;
+		}
+		const file = await pdf.buildPaperInvites({
+			event: data.event,
+			guests: data.guests,
+			size,
+		});
+		pdf.download(
+			file,
+			guest ? `${title} - ${guest.name}.pdf` : `${title} - invitations.pdf`,
+		);
+	} catch (error) {
+		toast.error((error as Error).message || "The PDF didn't build.");
+	}
+}
+
+/** One guest's card, and a fresh code when theirs got lost. */
+function PaperActions({
+	eventId,
+	eventTitle,
+	guest,
+}: {
+	eventId: string;
+	eventTitle: string;
+	guest: Guest;
+}) {
+	const queryClient = useQueryClient();
+	const [busy, setBusy] = useState(false);
+	const [size] = usePaperSize();
+	const fresh = useMutation(
+		orpc.guests.newPaperCode.mutationOptions({
+			onSuccess: () => {
+				toast.success(
+					`New code for ${guest.name}. Their old card no longer works; download the new one.`,
+				);
+				queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
+			},
+			onError: (error: Error) => toast.error(error.message),
+		}),
+	);
+	return (
+		<>
+			<Button
+				variant="outline"
+				size="sm"
+				disabled={busy}
+				onClick={async () => {
+					setBusy(true);
+					await downloadCards(eventId, eventTitle, size, guest);
+					setBusy(false);
+				}}
+			>
+				Card
+			</Button>
+			{guest.hasPaper ? (
+				<Button
+					variant="ghost"
+					size="xs"
+					disabled={fresh.isPending}
+					onClick={() => fresh.mutate({ eventId, guestId: guest.id })}
+				>
+					New code
+				</Button>
+			) : null}
+		</>
+	);
+}
+
+/** Give a name-only paper guest an address, so email can reach them later. */
+function AddEmail({ eventId, guestId }: { eventId: string; guestId: string }) {
+	const queryClient = useQueryClient();
+	const [open, setOpen] = useState(false);
+	const [email, setEmail] = useState("");
+	const save = useMutation(
+		orpc.guests.setEmail.mutationOptions({
+			onSuccess: () => {
+				setOpen(false);
+				queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
+			},
+			onError: (error: Error) => toast.error(error.message),
+		}),
+	);
+	if (!open) {
+		return (
+			<button
+				type="button"
+				onClick={() => setOpen(true)}
+				className="cursor-pointer border-0 bg-transparent p-0 text-[12px] text-lime hover:text-lime-soft"
+			>
+				+ Add email
+			</button>
+		);
+	}
+	return (
+		<form
+			className="mt-1.5 flex gap-1.5"
+			onSubmit={(ev) => {
+				ev.preventDefault();
+				save.mutate({ eventId, guestId, email });
+			}}
+		>
+			<Input
+				type="email"
+				required
+				autoFocus
+				aria-label="Their email"
+				value={email}
+				onChange={(ev) => setEmail(ev.target.value)}
+				className="min-h-9 rounded-full px-3 py-1.5 text-[14px]"
+			/>
+			<Button type="submit" size="sm" disabled={save.isPending}>
+				Save
+			</Button>
+		</form>
 	);
 }

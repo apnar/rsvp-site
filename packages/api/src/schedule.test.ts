@@ -20,6 +20,8 @@ const base: ScheduleEvent = {
 	remindDaysBefore: 3,
 	remindDayBefore: true,
 	hostAlerts: "off",
+	paper: false,
+	emailsReleasedAt: null,
 	publishedAt: at("2026-10-01", "12:00"),
 	deadlineReminderAt: null,
 	dayBeforeAt: null,
@@ -133,5 +135,34 @@ describe("the host digest", () => {
 			"host_digest:send",
 		]);
 		expect(kinds(daily, at("2026-10-26", "08:00"))).toEqual([]);
+	});
+});
+
+describe("paper invitations", () => {
+	const paper = { ...base, paper: true, hostAlerts: "daily" as const };
+
+	it("hold every guest reminder until the host starts emails", () => {
+		expect(kinds(paper, at("2026-10-14", "10:00"))).toEqual([
+			"host_digest:send",
+		]);
+		expect(kinds(paper, at("2026-10-23", "10:00"))).toEqual([
+			"host_digest:send",
+		]);
+	});
+
+	it("run as normal once released", () => {
+		const e = { ...paper, emailsReleasedAt: at("2026-10-05", "12:00") };
+		expect(kinds(e, at("2026-10-14", "10:00"))).toEqual([
+			"deadline_reminder:send",
+			"host_digest:send",
+		]);
+	});
+
+	it("skip a reminder that falls just after a late release", () => {
+		const e = { ...paper, emailsReleasedAt: at("2026-10-15", "09:00") };
+		expect(kinds(e, at("2026-10-15", "09:30"))).toEqual([
+			"deadline_reminder:skip",
+			"host_digest:send",
+		]);
 	});
 });

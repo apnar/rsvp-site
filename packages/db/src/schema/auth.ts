@@ -60,6 +60,9 @@ export const UNSUBSCRIBE_REASONS = [
 ] as const;
 export type UnsubscribeReason = (typeof UNSUBSCRIBE_REASONS)[number];
 
+/** Where the placeholder addresses of name-only paper guests live. */
+export const NO_EMAIL_DOMAIN = "no-email.invalid";
+
 /**
  * Everybody, whatever their role: this one table is the people, the mailing
  * list and the accounts.
@@ -103,6 +106,12 @@ export const user = sqliteTable("user", {
 	statusChangedAt: integer("status_changed_at", { mode: "timestamp_ms" }),
 	statusChangedBy: text("status_changed_by", { enum: STATUS_ACTORS }),
 
+	/**
+	 * A paper guest added by name alone. Their `email` is a unique
+	 * placeholder at NO_EMAIL_DOMAIN (`.invalid` never delivers) only because
+	 * the column is NOT NULL UNIQUE; nothing may mail it or show it.
+	 */
+	noEmail: integer("no_email", { mode: "boolean" }).notNull().default(false),
 	/** Set while they want no email. Invitations still list them. */
 	unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp_ms" }),
 	unsubscribeReason: text("unsubscribe_reason", {

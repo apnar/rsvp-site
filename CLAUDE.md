@@ -23,7 +23,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0011 applied |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0012 applied |
 | R2 | `rsvp-site-media` (event cover photos, binding `MEDIA`) |
 | Rate limit | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
@@ -197,6 +197,15 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   `sendInvites` claims rows (`UPDATE ... SET invited_at WHERE invited_at IS
   NULL RETURNING`) before sending and gives them back if nothing left, so
   Send cannot invite anybody twice.
+- Paper events (`event.paper`, fixed once published): guest email of every
+  kind is held while `emailsHeld(row)` (paper and no `emails_released_at`);
+  check it before any guest-facing send. QR keys are
+  `event_guest.paper_token`, held by the host, so `/api/auth/paper` signs in
+  plain `user` accounts only. Name-only guests are `user.no_email` with a
+  placeholder address; `mailableWhere` and `sendWelcome` skip them and reads
+  blank the address. PDFs are built client-side (`lib/paper-pdf-core.ts` is
+  the pure layout, renderable from Node to check it; `lib/paper-sizes.ts`
+  keeps pdf-lib out of the page bundle).
 - Guests inviting guests: only `source` host/group may (`canInviteOthers`
   in `api/src/guest-invites.ts`), only when the event's `guest_invites` is
   on, up to `guest_invite_limit` each, counted in the INSERT. Their friends

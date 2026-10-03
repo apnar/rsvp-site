@@ -144,7 +144,19 @@ export type GuestListRow = {
 	/** Who put them on the list. */
 	addedBy: string | null;
 	addedByName: string | null;
+	/** Added by name alone, for paper: no address, never mailed. */
+	noEmail: boolean;
+	/** Their paper card has a QR code issued. */
+	hasPaper: boolean;
 };
+
+/**
+ * A paper event whose host has not pressed "Start emails" yet: no guest
+ * email of any kind may go, so the printed card arrives first.
+ */
+export function emailsHeld(row: Pick<EventRow, "paper" | "emailsReleasedAt">) {
+	return row.paper && row.emailsReleasedAt === null;
+}
 
 /** The person who added a guest, joined a second time under its own name. */
 const adder = alias(user, "adder");
@@ -174,6 +186,8 @@ export async function guestsOf(
 			status: user.status,
 			addedBy: eventGuest.addedBy,
 			addedByName: adder.name,
+			noEmail: user.noEmail,
+			paperToken: eventGuest.paperToken,
 		})
 		.from(eventGuest)
 		.innerJoin(user, eq(user.id, eventGuest.userId))
@@ -181,9 +195,13 @@ export async function guestsOf(
 		.where(eq(eventGuest.eventId, eventId))
 		.orderBy(asc(eventGuest.createdAt))
 		.all();
-	return rows.map(({ unsubscribedAt, status, ...row }) => ({
+	return rows.map(({ unsubscribedAt, status, paperToken, ...row }) => ({
 		...row,
-		unreachable: unsubscribedAt !== null || status === "deactivated",
+		// A placeholder address is never shown, not even to the host.
+		email: row.noEmail ? "" : row.email,
+		hasPaper: paperToken !== null,
+		unreachable:
+			unsubscribedAt !== null || status === "deactivated" || row.noEmail,
 	}));
 }
 

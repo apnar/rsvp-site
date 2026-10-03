@@ -4,6 +4,7 @@ import {
 	listRecipients,
 	markLinkSent,
 } from "@rsvp-site/db/people";
+import { NO_EMAIL_DOMAIN } from "@rsvp-site/db/schema/auth";
 import { type EmailKind, emailSend } from "@rsvp-site/db/schema/email";
 import { eventGuest } from "@rsvp-site/db/schema/event";
 import type {
@@ -135,11 +136,17 @@ export async function sendInvites(
 		onlyGuestIds?: readonly string[];
 		/** The guest who brought them, named in the email. */
 		invitedBy?: string | null;
+		/**
+		 * Leave out people who have already answered -- on a paper event they
+		 * did it from the card, and "You're invited" would be news to nobody.
+		 */
+		skipAnswered?: boolean;
 	} = {},
 ): Promise<InviteOutcome> {
 	const only = opts.onlyGuestIds ? new Set(opts.onlyGuestIds) : null;
 	const guests = (await guestsOf(db, row.id)).filter(
-		(g) => !only || only.has(g.id),
+		(g) =>
+			(!only || only.has(g.id)) && !(opts.skipAnswered && g.response !== null),
 	);
 	const pending = guests.filter((g) => g.invitedAt === null && !g.unreachable);
 	const skipped = guests.filter(
@@ -236,6 +243,11 @@ export async function sendWelcome(
 	userId: string,
 	person: { email: string; name: string | null },
 ): Promise<SendOutcome> {
+	// A name-only paper guest has no address to send to; their card's QR
+	// code is their way in.
+	if (!person.email || person.email.endsWith(`@${NO_EMAIL_DOMAIN}`)) {
+		return { ok: false, status: 0, error: "They have no email address." };
+	}
 	const token = await ensureLinkToken(db, userId);
 	const outcome = await getMailer().sendOne(
 		{ email: person.email, name: person.name },

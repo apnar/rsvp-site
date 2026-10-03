@@ -90,6 +90,12 @@ function RouteComponent() {
 					That link doesn't work any more. Ask for a fresh one below.
 				</Notice>
 			) : null}
+			{error === "paper" ? (
+				<Notice>
+					That invitation's code doesn't work any more. Ask the hosts for a new
+					card, or sign in below.
+				</Notice>
+			) : null}
 			{error === "revoked" ? (
 				<Notice>
 					That account is deactivated, so its links no longer work. If that's
