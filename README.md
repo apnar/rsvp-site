@@ -120,8 +120,9 @@ Open `https://rsvp.botch.com/api/auth/link?k=<that token>`. Then make hosts from
 - **Hosts can record answers.** The pencil on a guest row sets their answer (yes, maybe, can't, or back to no reply) and their adults and kids, for the guest who phoned it in. The host is not held to the event's plus-one limit, no host alert fires, and a "can't" drops their potluck claims as it would for the guest (`guests.setAnswer`).
 - **The share link** `/i/<share_token>` is off by default. A stranger sees the teaser and types their address; `events.join` (rate-limited by IP with the `JOIN_LIMITER` binding, and per address by `link_sent_at`) emails them a sign-in link back to the same page, and landing there signed in puts them on the list. A host can make a new token, which kills the old link and nothing else.
 - **Cover photos** are scaled down in the browser and stored in the `MEDIA` R2 bucket under a random key, served at `/api/covers/<key>` with immutable caching. A new photo gets a new key; the old object is deleted.
+- **Invitation designs** are per event and open to every host: "Design it" in the editor's first step opens the designer (`/e/<id>/design`), a free canvas over a fixed-shape card (5x7 either way, square, half-letter, letter) where text, uploaded images, shapes, stickers and, on paper events, the QR code are dragged, resized and turned, with a page theme (five colours, two fonts) for the rest of the guest page. Text can carry `{title}`, `{date}`, `{time}`, `{location}`, `{host}`, `{rsvp by}` and `{guest}`, filled from the event (and `{guest}` from the reader, or the addressee on paper). The document is `event_design` (JSON, validated by `@rsvp-site/design` on every save, versioned so a co-host's save is never silently overwritten); `event.design_on` says whether guests see it. One scene, laid out in `packages/design` with generated font metrics (line breaks and every glyph's position, kerning included), is drawn three ways: SVG on the page (laid out on the server), pdf-lib for paper (in the host's browser, with native gradients, a shared form XObject per card and an optional print-shop bleed with crop marks) and a canvas JPEG for email, link previews and the dashboard. That picture (`event.card_key`) bakes in the event's facts, so it is redrawn after design saves and fact changes, and by the guest list whenever `card_basis` says it is stale. Images live in R2 under `designs/<event id>/` (served at `/api/designs/...`, uploads never SVG), are pruned when unused for an hour, and go with the event. A paper event's design must carry a QR code to save, switch on or send.
 
-The oRPC procedures are `account.*`, `events.*`, `guests.*`, `contacts.*`, `people.*` and `mail.*` under `packages/api/src/routers`, built on `publicProcedure`, `protectedProcedure`, `personProcedure`, `hostProcedure` and `adminProcedure` from `packages/api/src/index.ts`. Event access is decided in one place, `accessTo` / `hostAccessTo` in `packages/api/src/events.ts`.
+The oRPC procedures are `account.*`, `events.*`, `designs.*`, `guests.*`, `contacts.*`, `people.*` and `mail.*` under `packages/api/src/routers`, built on `publicProcedure`, `protectedProcedure`, `personProcedure`, `hostProcedure` and `adminProcedure` from `packages/api/src/index.ts`. Event access is decided in one place, `accessTo` / `hostAccessTo` in `packages/api/src/events.ts`.
 
 ## Email
 
@@ -230,7 +231,8 @@ rsvp-site/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── api/         # oRPC router / business logic
 │   ├── auth/        # Better Auth configuration
-│   ├── db/          # Drizzle schema (people, events, guests, potluck, contacts, email_send), roles and D1 migrations
+│   ├── db/          # Drizzle schema (people, events, guests, potluck, contacts, designs, email_send), roles and D1 migrations
+│   ├── design/      # Invitation designs: schema, fonts and metrics, text layout, the scene, theme, templates
 │   ├── email/       # Brevo client, email templates and their tests
 │   └── env/         # Typed access to Worker env and bindings
 ```

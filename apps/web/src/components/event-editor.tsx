@@ -1,11 +1,10 @@
 import { formatDate, formatTimeRange } from "@rsvp-site/api/time";
-import { isAdmin } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -275,9 +274,6 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 		return id;
 	};
 
-	const { session } = useRouteContext({ from: "__root__" });
-	// Designs are tried out by admins before every host gets them.
-	const designable = session?.user ? isAdmin(session.user) : false;
 	const toggleDesign = async (on: boolean) => {
 		if (!eventId) return;
 		try {
@@ -395,33 +391,31 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							}}
 						/>
 					</div>
-					{designable ? (
-						<div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-line-strong px-4 py-3">
-							<div className="min-w-[200px] flex-1">
-								<b className="text-[16px]">Design your own invitation</b>
-								<div className="text-[13px] text-haze">
-									{loaded?.event.designOn
-										? "Guests see your designed card, on screen and on paper."
-										: "Fonts, colours, pictures, placed wherever you like."}
-								</div>
+					<div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-line-strong px-4 py-3">
+						<div className="min-w-[200px] flex-1">
+							<b className="text-[16px]">Design your own invitation</b>
+							<div className="text-[13px] text-haze">
+								{loaded?.event.designOn
+									? "Guests see your designed card, on screen and on paper."
+									: "Fonts, colours, pictures, placed wherever you like."}
 							</div>
-							{loaded?.hasDesign ? (
-								<Switch
-									checked={loaded.event.designOn}
-									onChange={toggleDesign}
-									label="Guests see the designed card"
-								/>
-							) : null}
-							<Button
-								variant="outline"
-								size="sm"
-								disabled={busy}
-								onClick={() => run("design")}
-							>
-								{loaded?.hasDesign ? "Open the designer" : "Design it"}
-							</Button>
 						</div>
-					) : null}
+						{loaded?.hasDesign ? (
+							<Switch
+								checked={loaded.event.designOn}
+								onChange={toggleDesign}
+								label="Guests see the designed card"
+							/>
+						) : null}
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={busy}
+							onClick={() => run("design")}
+						>
+							{loaded?.hasDesign ? "Open the designer" : "Design it"}
+						</Button>
+					</div>
 					<Field label="Event name" htmlFor="title">
 						<Input
 							id="title"

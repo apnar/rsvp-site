@@ -23,8 +23,8 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0013 applied |
-| R2 | `rsvp-site-media` (event cover photos, binding `MEDIA`) |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0014 applied |
+| R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
 | Rate limit | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
@@ -236,6 +236,39 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
 - `headcount.ts` is the only arithmetic for totals; pages and emails must
   not count on their own.
 
+### Invitation designs
+
+An event can carry a host-built card (`event_design`, shown while
+`event.design_on`). `packages/design` owns it: the schema every value
+passes, the curated fonts, and `layoutCard`, which turns a design and the
+event's facts into a scene -- every line break and every glyph's x,
+measured from metrics generated off the same @fontsource files the page
+and the PDF use. Three renderers draw that scene and nothing else:
+
+- `components/design/card-svg.tsx` -- the guest page (laid out on the
+  server in `invitePayload`), the designer, the editor's preview.
+- `lib/design-pdf-core.ts` -- paper, in the browser; pure, so
+  `scripts/render-design-samples.ts` renders every template from Node.
+- `lib/design-canvas.ts` -- the one JPEG (`event.card_key`) for emails,
+  link previews and the dashboard, without `{guest}` or the QR code.
+
+Rules that keep them agreeing, and safe:
+
+- Never let a browser lay out design text: no CSS wrapping, no kerning or
+  ligatures (the scene already has them). Change text layout in `text.ts`
+  only, and keep `paper-pdf-core.ts`'s old card separate.
+- Only parsed values reach CSS, SVG attributes and PDF operators. Colours
+  are `#rrggbb`, fonts and stickers come from registries, image refs must
+  be this event's `designs/<id>/<uuid>.(jpg|png|webp)`. Never accept SVG
+  uploads. `themeCss` output goes into a raw `<style>` on that basis.
+- The card picture bakes in the facts. `refreshCard` redraws it after a
+  design save and after the editor changes facts; the guest list redraws
+  it when `designs.cardInputs` says `card_basis` is stale.
+- Old card pictures are kept (sent emails show them); unused uploads are
+  pruned on save after an hour, and deleting an event empties its prefix.
+- A paper event's design must have a QR code: `needsQr` in
+  `routers/designs.ts`, checked on save, on switching on and on send.
+
 ### The email schedule
 
 `packages/api/src/schedule.ts` is pure: `dueEmails(event, now)` says which of
@@ -303,7 +336,12 @@ the plum band, the cover and the lime buttons.
   Subpath imports are the norm (`@rsvp-site/db/people`,
   `@rsvp-site/ui/components/button`).
 - Design system lives in `packages/ui/src/styles/globals.css`: After Dark,
-  dark only. Unbounded headings (`font-heading`) over Manrope; tokens
+  dark everywhere except a designed event's own pages, which override the
+  tokens on `:root` (`DesignTheme`). Text on a lime or pink fill is
+  `text-on-lime` / `text-on-pink` and lime or pink used as text is
+  `text-lime-ink` / `text-pink-ink`, never `text-night` / `text-lime`, so
+  a pale accent or a light page still reads. No literal colours in
+  components. Unbounded headings (`font-heading`) over Manrope; tokens
   `bg-night`, `bg-panel`, `bg-panel-2`, `border-line`, `text-ink`,
   `text-soft`, `text-haze`, `bg-lime`, `text-pink`, plus `.kicker` and
   `.numeral`. Lime is yes and the main action, pink is maybe and "send";
