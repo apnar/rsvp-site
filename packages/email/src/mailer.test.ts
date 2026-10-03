@@ -54,27 +54,30 @@ describe("createMailer", () => {
 		error.mockRestore();
 	});
 
-	it("keeps typed braces from reaching Brevo's template engine", async () => {
+	it("lets no stray brace open a template tag, however many there are", async () => {
 		const fetchImpl = vi.fn(
 			async () =>
 				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
 		);
 		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
 		await mailer.sendList(recipients(1), {
-			subject: "Party {{ dance }}",
-			html: '<p>{% if x %}</p><a href="/?k={{ params.key }}">go</a>',
-			text: "{# hi #} {{ params.unsubscribeUrl }}",
+			subject: "Party {{ dance }} {{{ x }}",
+			html: '<p>{% if x %}{{% y %}</p><a href="/?k={{ params.key }}">go</a>',
+			text: "{# hi #} {{{# no #} {{ params.unsubscribeUrl }}",
 		});
 		const [, init] = fetchImpl.mock.calls[0] as unknown as [
 			string,
 			RequestInit,
 		];
 		const sent = JSON.parse(init.body as string);
-		expect(sent.subject).toBe("Party { { dance }}");
+		const z = "\u200b";
+		expect(sent.subject).toBe(`Party {${z}{ dance }} {${z}{${z}{ x }}`);
 		expect(sent.htmlContent).toBe(
-			'<p>&#123;% if x %}</p><a href="/?k={{ params.key }}">go</a>',
+			`<p>{${z}% if x %}{${z}{${z}% y %}</p><a href="/?k={{ params.key }}">go</a>`,
 		);
-		expect(sent.textContent).toBe("{ # hi #} {{ params.unsubscribeUrl }}");
+		expect(sent.textContent).toBe(
+			`{${z}# hi #} {${z}{${z}{${z}# no #} {{ params.unsubscribeUrl }}`,
+		);
 	});
 
 	it("fills the placeholders in a dry-run log so the link is clickable", async () => {

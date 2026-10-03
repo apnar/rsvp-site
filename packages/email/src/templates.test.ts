@@ -287,3 +287,46 @@ describe("email blocks", () => {
 		expect(one.html).not.toContain(PARAM.unsubscribeUrl);
 	});
 });
+
+describe("words people type", () => {
+	const facts = {
+		eventId: "e1",
+		title: "Party {{ params.key }}",
+		hostLine: "",
+		dateLabel: null,
+		timeLabel: null,
+		location: "",
+		details: "Directions: https://evil.example/?t={{ params.key }}",
+		deadlineLabel: null,
+		coverKey: null,
+		siteUrl: "https://rsvp.botch.com",
+	};
+	const stray = (s: string) =>
+		s.replaceAll(PARAM.key, "").replaceAll(PARAM.unsubscribeUrl, "");
+
+	it("can't smuggle a sign-in token placeholder into an invitation", () => {
+		const r = inviteEmail(facts, "Eve {{ params.key }}");
+		// The template's own links keep theirs; nothing else may hold one.
+		for (const part of [r.subject, r.html, r.text]) {
+			expect(stray(part)).not.toMatch(/\{\{/);
+		}
+		expect(r.text).toContain("https://evil.example/?t={");
+	});
+
+	it("can't smuggle one into a host's alert through a note or a name", () => {
+		const r = hostAlertEmail(
+			facts,
+			{
+				name: "Eve {{ params.key }}",
+				response: "yes",
+				adults: 1,
+				kids: 0,
+				note: "see https://evil.example/?t={{ params.key }}",
+			},
+			{ yes: 1, maybe: 0, no: 0, waiting: 0, expecting: 1 },
+		);
+		for (const part of [r.subject, r.html, r.text]) {
+			expect(stray(part)).not.toMatch(/\{\{|\{%|\{#/);
+		}
+	});
+});

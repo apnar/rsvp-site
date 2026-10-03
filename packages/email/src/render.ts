@@ -31,21 +31,34 @@ export const PARAM = {
 	key: "{{ params.key }}",
 } as const;
 
-const ALLOWED = new Set<string>(Object.values(PARAM));
-const TEMPLATE_TAG = /\{\{ params\.\w+ \}\}|\{[{%#]/g;
+/**
+ * What a person typed can't open a Brevo template tag. Brevo runs its
+ * template language over the subject and both bodies, and fills
+ * `{{ params.key }}` with each reader's sign-in token: a guest's note
+ * reading "https://evil.example/?t={{ params.key }}" would hand the host
+ * a link that gives their token away, and "{%" or "{#" can break or cut
+ * off the email. Every brace in someone's words gets a zero-width space
+ * after it, invisible to the reader and enough that no tag can start
+ * there. email() applies this to everything except the links the
+ * templates build, which are the only place a placeholder belongs.
+ */
+export function defuse(value: string): string {
+	return value.replaceAll("{", "{\u200b");
+}
+
+const PLACEHOLDER = /\{\{ params\.(?:unsubscribeUrl|key) \}\}/g;
 
 /**
- * Brevo runs its template language over the subject and both bodies, so a
- * title or a guest's note containing "{{" or "{%" would be read as code: at
- * best garbled, at worst a template error that fails the whole batch. Only
- * the placeholders this package writes may open a tag; any other brace that
- * would is written so the engine doesn't see one (an entity in HTML, a space
- * in plain text and the subject).
+ * The mailer's backstop over the finished email: outside the placeholders
+ * this package writes, no brace may start a tag, however many come in a
+ * row. With defuse doing its job upstream this changes nothing.
  */
-export function guardTemplateSyntax(value: string, html: boolean): string {
-	return value.replace(TEMPLATE_TAG, (tag) =>
-		ALLOWED.has(tag) ? tag : `${html ? "&#123;" : "{ "}${tag.slice(1)}`,
-	);
+export function guardTemplateSyntax(value: string): string {
+	const parts = value.split(PLACEHOLDER);
+	const kept = value.match(PLACEHOLDER) ?? [];
+	return parts
+		.map((part, i) => part.replace(/\{(?=[{%#])/g, "{\u200b") + (kept[i] ?? ""))
+		.join("");
 }
 
 const FONT =
@@ -334,6 +347,33 @@ export type Block =
 	/** A template's own piece, with HTML it has already made safe. */
 	| { kind: "custom"; html: string; text: string };
 
+/** A block with every word defused and every link left as built. */
+function defused(block: Block): Block {
+	switch (block.kind) {
+		case "text":
+		case "typed":
+		case "muted":
+			return { ...block, text: defuse(block.text) };
+		case "facts":
+			return {
+				...block,
+				facts: block.facts.map((f) => ({
+					label: defuse(f.label),
+					value: defuse(f.value),
+				})),
+			};
+		case "buttons":
+			return {
+				...block,
+				items: block.items.map((b) => ({ ...b, label: defuse(b.label) })),
+			};
+		case "pasteLink":
+			return block;
+		case "custom":
+			return { ...block, html: defuse(block.html), text: defuse(block.text) };
+	}
+}
+
 function blockHtml(block: Block, pal: Palette): string {
 	switch (block.kind) {
 		case "text":
@@ -386,24 +426,32 @@ export function email(input: {
 	look?: EmailLook | null;
 }): Rendered {
 	const pal = paletteOf(input.look);
+	const subject = defuse(input.subject);
+	const heading = defuse(input.heading);
+	const kicker = input.kicker === undefined ? undefined : defuse(input.kicker);
+	const blocks = input.blocks.map(defused);
+	// The card's alt text is the event's title.
+	const look = input.look
+		? { ...input.look, cardAlt: defuse(input.look.cardAlt) }
+		: input.look;
 	const html = layout({
-		title: input.subject,
-		kicker: input.kicker,
-		heading: input.heading,
+		title: subject,
+		kicker,
+		heading,
 		coverUrl: input.coverUrl,
-		look: input.look,
-		bodyHtml: input.blocks
+		look,
+		bodyHtml: blocks
 			.map((b) => blockHtml(b, pal))
 			.filter(Boolean)
 			.join("\n"),
 		footerHtml: input.list ? listFooter(pal) : undefined,
 	});
 	const text = [
-		input.heading,
-		...input.blocks.map(blockText),
+		heading,
+		...blocks.map(blockText),
 		input.list ? listFooterText() : "",
 	]
 		.filter(Boolean)
 		.join("\n\n");
-	return { subject: input.subject, html, text };
+	return { subject, html, text };
 }

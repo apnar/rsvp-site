@@ -82,9 +82,9 @@ export function createMailer(options: MailerOptions): Mailer {
 		return {
 			sender: options.sender,
 			replyTo: options.replyTo,
-			subject: guardTemplateSyntax(rendered.subject, false),
-			htmlContent: guardTemplateSyntax(rendered.html, true),
-			textContent: guardTemplateSyntax(rendered.text, false),
+			subject: guardTemplateSyntax(rendered.subject),
+			htmlContent: guardTemplateSyntax(rendered.html),
+			textContent: guardTemplateSyntax(rendered.text),
 			tags,
 		};
 	}
