@@ -63,3 +63,36 @@ describe("{details}", () => {
 		);
 	});
 });
+
+describe("{guest's}", () => {
+	const with_ = (guest: string) =>
+		fill("{guest's}", { ...SAMPLE_VALUES, guest });
+
+	it.each([
+		["Josh", "Josh’s"],
+		["James", "James’s"],
+		["Max", "Max’s"],
+		["The Nguyens", "The Nguyens’"],
+		["the Parkers", "the Parkers’"],
+		["Aly & Josh", "Aly & Josh’s"],
+		["Marcus T.", "Marcus T.’s"],
+		["JOSH", "JOSH’S"],
+		["Josh's", "Josh's"],
+		["The Joneses’", "The Joneses’"],
+		["your guest", "your guest’s"],
+		["", ""],
+	])("%s becomes %s", (name, want) => {
+		expect(with_(name)).toBe(want);
+	});
+
+	it("takes a curly apostrophe and stray spaces too", () => {
+		expect(fill("{ Guest’s }", { ...SAMPLE_VALUES, guest: "Josh" })).toBe(
+			"Josh’s",
+		);
+	});
+
+	it("counts as {guest}, so it is per card on paper and off the shared picture", () => {
+		expect(usesPlaceholder("At {guest's} place", "guest")).toBe(true);
+		expect(usesPlaceholder("At {guest} place", "guest's")).toBe(true);
+	});
+});

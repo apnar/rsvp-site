@@ -13,6 +13,7 @@ export const PLACEHOLDERS = [
 	"rsvp by",
 	"details",
 	"guest",
+	"guest's",
 ] as const;
 
 export type Placeholder = (typeof PLACEHOLDERS)[number];
@@ -33,6 +34,7 @@ export type Values = {
 	guest: string;
 };
 
+/** Which value each placeholder reads; {guest's} is {guest}, made possessive. */
 const KEY: Record<Placeholder, keyof Values> = {
 	title: "title",
 	date: "date",
@@ -42,23 +44,49 @@ const KEY: Record<Placeholder, keyof Values> = {
 	"rsvp by": "rsvpBy",
 	details: "details",
 	guest: "guest",
+	"guest's": "guest",
 };
 
+// {guest's} is matched before {guest}, with a straight or curly apostrophe
+// (a phone's keyboard types the curly one).
 const PATTERN =
-	/\{\s*(title|date|time|location|host|rsvp\s*by|details|guest)\s*\}/gi;
+	/\{\s*(title|date|time|location|host|rsvp\s*by|details|guest['’]s|guest)\s*\}/gi;
 
-function keyOf(raw: string): keyof Values {
-	return KEY[raw.toLowerCase().replace(/\s+/g, " ") as Placeholder];
+function nameOf(raw: string): Placeholder {
+	return raw
+		.toLowerCase()
+		.replace(/\s+/g, " ")
+		.replace("’", "'") as Placeholder;
+}
+
+/**
+ * A name made possessive, the way people write it rather than by always
+ * adding 's: "Josh’s", "James’s", "Aly & Josh’s" (shared), but "The
+ * Nguyens’" for a family, plural and named with "The". A name that is
+ * already possessive is left alone, and one in capitals stays in capitals.
+ */
+export function possessive(name: string): string {
+	const n = name.trimEnd();
+	if (!n) return "";
+	if (/['’]s$/i.test(n) || /s['’]$/i.test(n)) return n;
+	const shouting = n === n.toUpperCase() && /[A-Z]/.test(n);
+	if (/^the\s/i.test(n) && /s$/i.test(n)) return `${n}’`;
+	return `${n}’${shouting ? "S" : "s"}`;
 }
 
 /** Fill the placeholders in; anything else in braces is left as typed. */
 export function fill(text: string, values: Values): string {
-	return text.replace(PATTERN, (_, name: string) => values[keyOf(name)]);
+	return text.replace(PATTERN, (_, raw: string) => {
+		const name = nameOf(raw);
+		const value = values[KEY[name]];
+		return name === "guest's" ? possessive(value) : value;
+	});
 }
 
+/** Whether a text reads that value ({guest's} counts as {guest}). */
 export function usesPlaceholder(text: string, name: Placeholder): boolean {
 	for (const m of text.matchAll(PATTERN)) {
-		if (keyOf(m[1] ?? "") === KEY[name]) return true;
+		if (KEY[nameOf(m[1] ?? "")] === KEY[name]) return true;
 	}
 	return false;
 }
