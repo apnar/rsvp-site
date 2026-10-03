@@ -44,7 +44,12 @@ export async function buildDesignInvites(input: {
 	const [faces, fonts, images] = await Promise.all([
 		loadFaces(keys),
 		Promise.all(
-			keys.map(async (k) => [k, await bytes(FONT_FILES[k].woff)] as const),
+			keys.map(async (k) => {
+				const files = FONT_FILES[k];
+				// facesOf names only registered faces; a gap is a generator bug.
+				if (!files) throw new Error(`No font file for ${k}.`);
+				return [k, await bytes(files.woff)] as const;
+			}),
 		),
 		Promise.all(refs.map(async (r) => [r, await imageBytes(r)] as const)),
 	]);

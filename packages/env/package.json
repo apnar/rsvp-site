@@ -6,6 +6,9 @@
 	"exports": {
 		"./server": "./src/server.ts"
 	},
+	"scripts": {
+		"check-types": "tsc --noEmit"
+	},
 	"devDependencies": {
 		"@rsvp-site/config": "workspace:*",
 		"@types/node": "catalog:",
