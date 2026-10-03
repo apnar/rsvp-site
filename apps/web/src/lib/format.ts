@@ -1,3 +1,4 @@
+import { templateAssetUrl } from "@rsvp-site/design/templates/index";
 /**
  * Small display helpers. Every date is formatted on the site's clock, never
  * the browser's, so the server render and the hydrated page agree.
@@ -74,7 +75,10 @@ export function coverSrc(coverKey: string): string {
 	return `/api/${coverKey}`;
 }
 
-/** The public address of a design image or card (designs/<id>/<name>). */
+/**
+ * The public address of a design image or card (designs/<id>/<name>), or,
+ * for a template not yet picked, of the picture it ships with.
+ */
 export function designSrc(ref: string): string {
-	return `/api/${ref}`;
+	return templateAssetUrl(ref) ?? `/api/${ref}`;
 }

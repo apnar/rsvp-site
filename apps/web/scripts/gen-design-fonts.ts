@@ -14,7 +14,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import fontkit from "@pdf-lib/fontkit";
-import { FACES, FONTS, type FontId } from "../../../packages/design/src/fonts";
+import {
+	FACES,
+	FONTS,
+	type FontId,
+	parseFace,
+} from "../../../packages/design/src/fonts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..");
@@ -53,8 +58,13 @@ function range(a: number, b: number): number[] {
 	return Array.from({ length: b - a + 1 }, (_, i) => a + i);
 }
 
-function fileOf(id: FontId, weight: number, ext: "woff" | "woff2"): string {
-	return `@fontsource/${id}/files/${id}-latin-${weight}-normal.${ext}`;
+function fileOf(
+	id: FontId,
+	weight: number,
+	italic: boolean,
+	ext: "woff" | "woff2",
+): string {
+	return `@fontsource/${id}/files/${id}-latin-${weight}-${italic ? "italic" : "normal"}.${ext}`;
 }
 
 const index: string[] = [];
@@ -62,10 +72,8 @@ const urls: string[] = [];
 const imports: string[] = [];
 
 for (const face of FACES) {
-	const cut = face.lastIndexOf("-");
-	const id = face.slice(0, cut) as FontId;
-	const weight = Number(face.slice(cut + 1));
-	const path = join(web, "node_modules", fileOf(id, weight, "woff"));
+	const { font: id, weight, italic } = parseFace(face);
+	const path = join(web, "node_modules", fileOf(id, weight, italic, "woff"));
 	const font = fontkit.create(readFileSync(path));
 	const upm = font.unitsPerEm;
 	const k = 1000 / upm;
@@ -109,8 +117,8 @@ for (const face of FACES) {
 	index.push(`\t"${face}": () => import("./${face}"),`);
 	const v = face.replace(/-/g, "_");
 	imports.push(
-		`import ${v}_woff2 from "${fileOf(id, weight, "woff2")}?url";`,
-		`import ${v}_woff from "${fileOf(id, weight, "woff")}?url";`,
+		`import ${v}_woff2 from "${fileOf(id, weight, italic, "woff2")}?url";`,
+		`import ${v}_woff from "${fileOf(id, weight, italic, "woff")}?url";`,
 	);
 	urls.push(`\t"${face}": { woff2: ${v}_woff2, woff: ${v}_woff },`);
 	console.log(face, chars.length, "chars,", kern.length, "pairs");
@@ -185,6 +193,94 @@ const STICKERS = [
 	"camera",
 	"smiley",
 ];
+/**
+ * Art-deco frame pieces, drawn here rather than taken from an icon set:
+ * one corner of a stepped double-line frame with a diamond, and its third
+ * line on its own (it is a different colour in the template that uses
+ * it). Strokes are outlined as polygons all wound the same way, so the
+ * nonzero fill every renderer uses unions them, and the diamond rings wind
+ * their holes the other way. A corner turned 90, 180 and 270 degrees makes
+ * the other three.
+ */
+function decoCorner(part: "frame" | "line"): string {
+	const box = 400;
+	const k = 256 / box;
+	const half = 1.1; // half a stroke, in the 400-unit corner
+	const [o, m, i, end] = [28, 44, 60, box];
+	type P = [number, number];
+	const quad = (a: P, b: P): P[] => {
+		const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+		const ux = (b[0] - a[0]) / len;
+		const uy = (b[1] - a[1]) / len;
+		const nx = -uy * half;
+		const ny = ux * half;
+		const a2: P = [a[0] - ux * half, a[1] - uy * half];
+		const b2: P = [b[0] + ux * half, b[1] + uy * half];
+		return [
+			[a2[0] + nx, a2[1] + ny],
+			[b2[0] + nx, b2[1] + ny],
+			[b2[0] - nx, b2[1] - ny],
+			[a2[0] - nx, a2[1] - ny],
+		];
+	};
+	const area = (p: P[]) =>
+		p.reduce((s, q, j) => {
+			const r = p[(j + 1) % p.length] as P;
+			return s + q[0] * r[1] - r[0] * q[1];
+		}, 0);
+	const wind = (p: P[], positive: boolean) =>
+		area(p) > 0 === positive ? p : [...p].reverse();
+	const diamond = (r: number): P[] => [
+		[80, 80 - r],
+		[80 + r, 80],
+		[80, 80 + r],
+		[80 - r, 80],
+	];
+	const mirror = ([a, b]: [P, P]): [P, P] => [
+		[a[1], a[0]],
+		[b[1], b[0]],
+	];
+	const top: [P, P][] =
+		part === "line"
+			? [
+					[
+						[152, m],
+						[end, m],
+					],
+				]
+			: [
+					[
+						[164, o],
+						[end, o],
+					],
+					[
+						[164, o],
+						[134, i],
+					],
+					[
+						[97.5, i],
+						[134, i],
+					],
+					[
+						[190, i],
+						[end, i],
+					],
+				];
+	const polys: P[][] = [...top, ...top.map(mirror)].map(([a, b]) =>
+		wind(quad(a, b), true),
+	);
+	if (part === "frame") {
+		const d = half * Math.SQRT2;
+		for (const r of [37.5, 23]) {
+			polys.push(wind(diamond(r + d), true), wind(diamond(r - d), false));
+		}
+	}
+	const f = (n: number) => Math.round(n * k * 100) / 100;
+	return polys
+		.map((p) => `M${p.map(([x, y]) => `${f(x)},${f(y)}`).join(" L")} Z`)
+		.join(" ");
+}
+
 const stickerLines = STICKERS.map((name) => {
 	const svg = readFileSync(
 		join(
@@ -198,7 +294,12 @@ const stickerLines = STICKERS.map((name) => {
 	if (paths.length !== 1) throw new Error(`${name}: ${paths.length} paths`);
 	return `\t"${name}": "${paths[0]}",`;
 });
+stickerLines.push(
+	`\t"deco-corner": "${decoCorner("frame")}",`,
+	`\t"deco-corner-line": "${decoCorner("line")}",`,
+);
 writeFileSync(
 	join(metricsDir, "../stickers.ts"),
-	`// Generated by apps/web/scripts/gen-design-fonts.ts from @phosphor-icons/core\n// (MIT, Copyright (c) 2023 Phosphor Icons). Do not edit.\n\n/** Each sticker is one filled path on a 256x256 box. */\nexport const STICKERS = {\n${stickerLines.join("\n")}\n} as const;\n\nexport type StickerId = keyof typeof STICKERS;\n\nexport const STICKER_IDS = Object.keys(STICKERS) as [StickerId, ...StickerId[]];\n`,
+	`// Generated by apps/web/scripts/gen-design-fonts.ts from @phosphor-icons/core\n// (MIT, Copyright (c) 2023 Phosphor Icons), and the deco frame pieces drawn
+// by that script. Do not edit.\n\n/** Each sticker is one filled path on a 256x256 box. */\nexport const STICKERS = {\n${stickerLines.join("\n")}\n} as const;\n\nexport type StickerId = keyof typeof STICKERS;\n\nexport const STICKER_IDS = Object.keys(STICKERS) as [StickerId, ...StickerId[]];\n`,
 );

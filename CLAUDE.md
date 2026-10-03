@@ -268,6 +268,15 @@ Rules that keep them agreeing, and safe:
   pruned on save after an hour, and deleting an event empties its prefix.
 - A paper event's design must have a QR code: `needsQr` in
   `routers/designs.ts`, checked on save, on switching on and on send.
+- Fonts are faces "<id>-<weight>", with an "i" for italic
+  (`parseFace`). Adding a font or weight to `FONTS` means installing its
+  @fontsource package and rerunning the generator.
+- A template can ship pictures (`Template.assets`, files under
+  `apps/web/public/templates/<id>/`). Until picked it is previewed with
+  stand-in refs that `designSrc` maps to those files; picking uploads each
+  into the event like any image, so a saved design only names the event's
+  own. The Night society template's art was cut from the host's own
+  invitation picture.
 
 ### The email schedule
 

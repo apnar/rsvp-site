@@ -11,6 +11,8 @@ export type FontInfo = {
 	label: string;
 	category: FontCategory;
 	weights: readonly number[];
+	/** Weights that also come in italic, when the font has any. */
+	italics?: readonly number[];
 };
 
 export const FONTS = {
@@ -32,10 +34,16 @@ export const FONTS = {
 		weights: [400],
 	},
 	lora: { label: "Lora", category: "serif", weights: [400, 700] },
+	merriweather: {
+		label: "Merriweather",
+		category: "serif",
+		weights: [400, 700],
+		italics: [400, 700],
+	},
 	"cormorant-garamond": {
 		label: "Cormorant Garamond",
 		category: "serif",
-		weights: [400, 700],
+		weights: [400, 600, 700],
 	},
 	"abril-fatface": {
 		label: "Abril Fatface",
@@ -77,15 +85,41 @@ export type FontId = keyof typeof FONTS;
 
 export const FONT_IDS = Object.keys(FONTS) as [FontId, ...FontId[]];
 
-/** Every face the registry ships, as "<id>-<weight>". */
-export type FaceKey = `${FontId}-${number}`;
+/** Every face the registry ships, as "<id>-<weight>", with "i" for italic. */
+export type FaceKey = `${FontId}-${number}` | `${FontId}-${number}i`;
 
-export const FACES: FaceKey[] = FONT_IDS.flatMap((id) =>
-	FONTS[id].weights.map((w) => `${id}-${w}` as FaceKey),
-);
+function italicsOf(font: FontId): readonly number[] {
+	const info: FontInfo = FONTS[font];
+	return info.italics ?? [];
+}
 
-export function faceKey(font: FontId, weight: number): FaceKey {
-	return `${font}-${weight}`;
+export function hasItalic(font: FontId): boolean {
+	return italicsOf(font).length > 0;
+}
+
+export const FACES: FaceKey[] = FONT_IDS.flatMap((id) => [
+	...FONTS[id].weights.map((w) => faceKey(id, w)),
+	...italicsOf(id).map((w) => faceKey(id, w, true)),
+]);
+
+export function faceKey(font: FontId, weight: number, italic = false): FaceKey {
+	return italic ? `${font}-${weight}i` : `${font}-${weight}`;
+}
+
+/** The font, weight and style a face key names. */
+export function parseFace(key: FaceKey): {
+	font: FontId;
+	weight: number;
+	italic: boolean;
+} {
+	const italic = key.endsWith("i");
+	const bare = italic ? key.slice(0, -1) : key;
+	const cut = bare.lastIndexOf("-");
+	return {
+		font: bare.slice(0, cut) as FontId,
+		weight: Number(bare.slice(cut + 1)),
+		italic,
+	};
 }
 
 export function family(font: FontId): string {
@@ -109,9 +143,14 @@ export function fontStack(font: FontId): string {
 	return `"${family(font)}", ${fallbackStack(font)}`;
 }
 
-/** The registry weight nearest to the one asked for. */
-export function nearestWeight(font: FontId, weight: number): number {
-	const weights: readonly number[] = FONTS[font].weights;
+/** The registry weight nearest to the one asked for, in that style. */
+export function nearestWeight(
+	font: FontId,
+	weight: number,
+	italic = false,
+): number {
+	const weights: readonly number[] =
+		italic && hasItalic(font) ? italicsOf(font) : FONTS[font].weights;
 	let best = weights[0] ?? 400;
 	for (const w of weights) {
 		if (Math.abs(w - weight) < Math.abs(best - weight)) best = w;

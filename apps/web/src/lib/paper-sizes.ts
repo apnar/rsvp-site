@@ -19,7 +19,7 @@ export const PAPER_SIZES: { value: PaperSize; label: string }[] = [
  */
 export type PrintLayout = "exact" | "two-up" | "on-letter";
 
-export type CardFormat = "5x7" | "5x7l" | "square" | "half" | "letter";
+export type CardFormat = "5x7" | "5x7l" | "square" | "8x10" | "half" | "letter";
 
 export function layoutsFor(
 	format: CardFormat,
@@ -30,6 +30,11 @@ export function layoutsFor(
 			return [
 				{ value: "two-up", label: "Two per letter sheet" },
 				{ value: "exact", label: "5x7 pages" },
+			];
+		case "8x10":
+			return [
+				{ value: "on-letter", label: "On letter, with cut marks" },
+				{ value: "exact", label: "8x10 pages" },
 			];
 		case "square":
 			return [

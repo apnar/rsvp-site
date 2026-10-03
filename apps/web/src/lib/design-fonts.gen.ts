@@ -20,6 +20,8 @@ import caveat_700_woff from "@fontsource/caveat/files/caveat-latin-700-normal.wo
 import caveat_700_woff2 from "@fontsource/caveat/files/caveat-latin-700-normal.woff2?url";
 import cormorant_garamond_400_woff from "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-400-normal.woff?url";
 import cormorant_garamond_400_woff2 from "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-400-normal.woff2?url";
+import cormorant_garamond_600_woff from "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff?url";
+import cormorant_garamond_600_woff2 from "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff2?url";
 import cormorant_garamond_700_woff from "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-700-normal.woff?url";
 import cormorant_garamond_700_woff2 from "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-700-normal.woff2?url";
 import dancing_script_400_woff from "@fontsource/dancing-script/files/dancing-script-latin-400-normal.woff?url";
@@ -48,6 +50,14 @@ import manrope_600_woff from "@fontsource/manrope/files/manrope-latin-600-normal
 import manrope_600_woff2 from "@fontsource/manrope/files/manrope-latin-600-normal.woff2?url";
 import manrope_800_woff from "@fontsource/manrope/files/manrope-latin-800-normal.woff?url";
 import manrope_800_woff2 from "@fontsource/manrope/files/manrope-latin-800-normal.woff2?url";
+import merriweather_400i_woff from "@fontsource/merriweather/files/merriweather-latin-400-italic.woff?url";
+import merriweather_400i_woff2 from "@fontsource/merriweather/files/merriweather-latin-400-italic.woff2?url";
+import merriweather_400_woff from "@fontsource/merriweather/files/merriweather-latin-400-normal.woff?url";
+import merriweather_400_woff2 from "@fontsource/merriweather/files/merriweather-latin-400-normal.woff2?url";
+import merriweather_700i_woff from "@fontsource/merriweather/files/merriweather-latin-700-italic.woff?url";
+import merriweather_700i_woff2 from "@fontsource/merriweather/files/merriweather-latin-700-italic.woff2?url";
+import merriweather_700_woff from "@fontsource/merriweather/files/merriweather-latin-700-normal.woff?url";
+import merriweather_700_woff2 from "@fontsource/merriweather/files/merriweather-latin-700-normal.woff2?url";
 import pacifico_400_woff from "@fontsource/pacifico/files/pacifico-latin-400-normal.woff?url";
 import pacifico_400_woff2 from "@fontsource/pacifico/files/pacifico-latin-400-normal.woff2?url";
 import permanent_marker_400_woff from "@fontsource/permanent-marker/files/permanent-marker-latin-400-normal.woff?url";
@@ -108,9 +118,29 @@ export const FONT_FILES: Record<FaceKey, { woff2: string; woff: string }> = {
 	},
 	"lora-400": { woff2: lora_400_woff2, woff: lora_400_woff },
 	"lora-700": { woff2: lora_700_woff2, woff: lora_700_woff },
+	"merriweather-400": {
+		woff2: merriweather_400_woff2,
+		woff: merriweather_400_woff,
+	},
+	"merriweather-700": {
+		woff2: merriweather_700_woff2,
+		woff: merriweather_700_woff,
+	},
+	"merriweather-400i": {
+		woff2: merriweather_400i_woff2,
+		woff: merriweather_400i_woff,
+	},
+	"merriweather-700i": {
+		woff2: merriweather_700i_woff2,
+		woff: merriweather_700i_woff,
+	},
 	"cormorant-garamond-400": {
 		woff2: cormorant_garamond_400_woff2,
 		woff: cormorant_garamond_400_woff,
+	},
+	"cormorant-garamond-600": {
+		woff2: cormorant_garamond_600_woff2,
+		woff: cormorant_garamond_600_woff,
 	},
 	"cormorant-garamond-700": {
 		woff2: cormorant_garamond_700_woff2,

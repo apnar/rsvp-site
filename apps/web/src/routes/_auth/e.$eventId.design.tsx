@@ -1,8 +1,13 @@
 import { allFaces, type Faces, loadFaces } from "@rsvp-site/design/faces";
 import { SAMPLE_VALUES, type Values } from "@rsvp-site/design/placeholders";
 import { layoutCard } from "@rsvp-site/design/scene";
-import { type Design, parseDesign } from "@rsvp-site/design/schema";
-import type { TemplateContext } from "@rsvp-site/design/templates/index";
+import { type Design, parseDesign, refsOf } from "@rsvp-site/design/schema";
+import {
+	fromTemplate,
+	type Placed,
+	type Template,
+	type TemplateContext,
+} from "@rsvp-site/design/templates/index";
 import { warningsOf } from "@rsvp-site/design/warnings";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
@@ -227,6 +232,44 @@ function PickTemplate({
 	const [ctx, setCtx] = useState<TemplateContext | null>(
 		coverKey ? null : { cover: null, paper },
 	);
+	const [preparing, setPreparing] = useState<string | null>(null);
+	// A template's pictures, once copied into this event, by "<template>/<name>":
+	// picking it again in the same visit reuses them.
+	const copied = useRef(new Map<string, Placed>());
+	const pick = async (t: Template) => {
+		if (!ctx) return;
+		if (!t.assets) {
+			onPick(fromTemplate(t, ctx));
+			return;
+		}
+		setPreparing(t.id);
+		try {
+			const assets: Record<string, Placed> = {};
+			for (const [name, a] of Object.entries(t.assets)) {
+				const key = `${t.id}/${name}`;
+				let placed = copied.current.get(key);
+				if (!placed) {
+					// The template's own pictures become this event's, like any
+					// upload, so the design names only images the event holds.
+					const blob = await (
+						await fetch(`/templates/${t.id}/${a.file}`)
+					).blob();
+					const file = new File([blob], a.file, { type: blob.type });
+					const { ref } = await client.designs.uploadImage({ eventId, file });
+					placed = { ref, iw: a.iw, ih: a.ih };
+					copied.current.set(key, placed);
+				}
+				assets[name] = placed;
+			}
+			onPick(fromTemplate(t, { ...ctx, assets }));
+		} catch (error) {
+			toast.error(
+				(error as Error).message || "That template's pictures didn't load.",
+			);
+		} finally {
+			setPreparing(null);
+		}
+	};
 	useEffect(() => {
 		if (!coverKey) return;
 		let live = true;
@@ -266,12 +309,17 @@ function PickTemplate({
 						your event.
 					</p>
 				</div>
+				{preparing ? (
+					<p className="m-0 text-haze">Bringing in the template's pictures…</p>
+				) : null}
 				{ctx ? (
 					<TemplatePicker
 						ctx={ctx}
 						faces={faces}
 						values={values}
-						onPick={onPick}
+						onPick={(t) => {
+							if (!preparing) void pick(t);
+						}}
 					/>
 				) : (
 					<p className="text-haze">Fetching your cover photo…</p>
@@ -418,7 +466,10 @@ function Editor({
 	const [savedOn, setSavedOn] = useState(unsaved ? !startOn : startOn);
 	const [saving, setSaving] = useState(false);
 	const [raw, setRaw] = useState(false);
-	const [images, setImages] = useState(startImages);
+	// A template's own pictures were just uploaded, so they join the tray.
+	const [images, setImages] = useState(() => [
+		...new Set([...refsOf(initial), ...startImages]),
+	]);
 	const [uploading, setUploading] = useState(false);
 	const sizes = useRef(new Map<string, { iw: number; ih: number }>());
 	const textRef = useRef<HTMLTextAreaElement>(null);

@@ -4,7 +4,13 @@
  * theme the guest page takes from it.
  */
 import { bounds } from "@rsvp-site/design/edit";
-import { FONTS, type FontId, nearestWeight } from "@rsvp-site/design/fonts";
+import {
+	FONTS,
+	type FontId,
+	type FontInfo,
+	hasItalic,
+	nearestWeight,
+} from "@rsvp-site/design/fonts";
 import { PLACEHOLDERS } from "@rsvp-site/design/placeholders";
 import {
 	type Background,
@@ -302,7 +308,8 @@ function TextFields({
 			ta?.setSelectionRange(caret, caret);
 		});
 	};
-	const weights = FONTS[el.font].weights as readonly number[];
+	const info: FontInfo = FONTS[el.font];
+	const weights = (el.italic ? info.italics : info.weights) ?? info.weights;
 	return (
 		<>
 			<Section title="Text">
@@ -333,9 +340,17 @@ function TextFields({
 					<FontField
 						label="Font"
 						value={el.font}
-						onChange={(font: FontId) =>
-							patch({ font, weight: nearestWeight(font, el.weight) }, "font")
-						}
+						onChange={(font: FontId) => {
+							const italic = el.italic && hasItalic(font);
+							patch(
+								{
+									font,
+									italic,
+									weight: nearestWeight(font, el.weight, italic),
+								},
+								"font",
+							);
+						}}
 					/>
 					<SelectField
 						label="Weight"
@@ -414,6 +429,18 @@ function TextFields({
 					/>
 				</Row>
 				<div className="flex flex-wrap gap-4">
+					{hasItalic(el.font) ? (
+						<Check
+							label="Italic"
+							checked={el.italic}
+							onChange={(italic) =>
+								patch(
+									{ italic, weight: nearestWeight(el.font, el.weight, italic) },
+									"italic",
+								)
+							}
+						/>
+					) : null}
 					<Check
 						label="ALL CAPS"
 						checked={el.upper}

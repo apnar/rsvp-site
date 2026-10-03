@@ -31,6 +31,7 @@ async function loadFonts(scene: Scene) {
 			if (!files) return;
 			const face = new FontFace(family(n.font), `url(${files.woff2})`, {
 				weight: String(n.weight),
+				style: n.italic ? "italic" : "normal",
 			});
 			await face.load();
 			document.fonts.add(face);
@@ -203,7 +204,7 @@ function drawNode(
 			break;
 		}
 		case "text": {
-			ctx.font = `${n.weight} ${n.size}px "${n.family}"`;
+			ctx.font = `${n.italic ? "italic " : ""}${n.weight} ${n.size}px "${n.family}"`;
 			ctx.textBaseline = "alphabetic";
 			ctx.fontKerning = "none";
 			const glyphs = (dx: number, dy: number, color: string) => {

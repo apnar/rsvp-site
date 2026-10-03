@@ -1,10 +1,10 @@
 import type { Faces } from "@rsvp-site/design/faces";
 import { SAMPLE_VALUES, type Values } from "@rsvp-site/design/placeholders";
 import { layoutCard } from "@rsvp-site/design/scene";
-import type { Design } from "@rsvp-site/design/schema";
 import {
 	fromTemplate,
 	TEMPLATES,
+	type Template,
 	type TemplateContext,
 } from "@rsvp-site/design/templates/index";
 import { CardSvg } from "./card-svg";
@@ -19,7 +19,7 @@ export function TemplatePicker({
 	ctx: TemplateContext;
 	faces: Faces;
 	values: Values;
-	onPick: (d: Design) => void;
+	onPick: (t: Template) => void;
 }) {
 	return (
 		<div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-5">
@@ -34,7 +34,7 @@ export function TemplatePicker({
 					<button
 						key={t.id}
 						type="button"
-						onClick={() => onPick(d)}
+						onClick={() => onPick(t)}
 						className="group flex cursor-pointer flex-col gap-2 border-0 bg-transparent p-0 text-left text-ink"
 					>
 						<CardSvg

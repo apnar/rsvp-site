@@ -12,6 +12,7 @@ import {
 	type FontId,
 	faceKey,
 	family,
+	hasItalic,
 	nearestWeight,
 } from "./fonts";
 import { type LinearEnds, linearEnds, sortedStops } from "./paint";
@@ -60,6 +61,7 @@ export type TextNode = Common & {
 	family: string;
 	font: FontId;
 	weight: number;
+	italic: boolean;
 	size: number;
 	color: string;
 	lines: Line[];
@@ -333,8 +335,9 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 		case "qr":
 			return { ...common, dynamic: true, k: "qr", fg: el.fg, bg: el.bg };
 		case "text": {
-			const weight = nearestWeight(el.font, el.weight);
-			const key = faceKey(el.font, weight);
+			const italic = el.italic && hasItalic(el.font);
+			const weight = nearestWeight(el.font, el.weight, italic);
+			const key = faceKey(el.font, weight, italic);
 			const face = opts.faces.get(key);
 			if (!face) throw new Error(`Font metrics for ${key} were not loaded`);
 			let content = fill(el.text, opts.values);
@@ -359,6 +362,7 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 				family: family(el.font),
 				font: el.font,
 				weight,
+				italic,
 				size: laid.size,
 				color: el.color,
 				lines: laid.lines,

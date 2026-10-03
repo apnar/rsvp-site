@@ -4,7 +4,7 @@
  */
 import { bounds } from "./edit";
 import type { Faces } from "./faces";
-import { FONTS, faceKey, nearestWeight } from "./fonts";
+import { FONTS, faceKey, hasItalic, nearestWeight } from "./fonts";
 import { fill, usesPlaceholder, type Values } from "./placeholders";
 import {
 	bleedUnits,
@@ -64,8 +64,9 @@ export function warningsOf(
 		}
 		if (el.type !== "text") continue;
 		const content = fill(el.text, opts.values);
+		const italic = el.italic && hasItalic(el.font);
 		const face = opts.faces.get(
-			faceKey(el.font, nearestWeight(el.font, el.weight)),
+			faceKey(el.font, nearestWeight(el.font, el.weight, italic), italic),
 		);
 		const missing = face
 			? unsupportedChars(face, el.upper ? content.toUpperCase() : content)

@@ -11,10 +11,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { facesOf, loadFaces } from "../../../packages/design/src/faces";
-import type { FaceKey, FontId } from "../../../packages/design/src/fonts";
+import { type FaceKey, parseFace } from "../../../packages/design/src/fonts";
 import { SAMPLE_VALUES } from "../../../packages/design/src/placeholders";
 import {
 	fromTemplate,
+	previewAssets,
 	TEMPLATES,
 } from "../../../packages/design/src/templates/index";
 import { layoutDesignInvites } from "../src/lib/design-pdf-core";
@@ -52,16 +53,14 @@ mkdirSync(out, { recursive: true });
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function woff(key: FaceKey): ArrayBuffer {
-	const cut = key.lastIndexOf("-");
-	const id = key.slice(0, cut) as FontId;
-	const weight = key.slice(cut + 1);
+	const { font, weight, italic } = parseFace(key);
 	const buf = readFileSync(
 		join(
 			web,
 			"node_modules/@fontsource",
-			id,
+			font,
 			"files",
-			`${id}-latin-${weight}-normal.woff`,
+			`${font}-latin-${weight}-${italic ? "italic" : "normal"}.woff`,
 		),
 	);
 	return buf.buffer.slice(
@@ -87,6 +86,22 @@ const guests = [
 		url: "https://rsvp.botch.com/api/auth/paper?k=00000000000000000000000000000000",
 	},
 ];
+
+// Templates' own pictures, from where the site serves them.
+for (const t of TEMPLATES) {
+	for (const [name, placed] of Object.entries(previewAssets(t))) {
+		const file = t.assets?.[name]?.file;
+		if (!file) continue;
+		const buf = readFileSync(join(web, "public/templates", t.id, file));
+		images.set(
+			placed.ref,
+			buf.buffer.slice(
+				buf.byteOffset,
+				buf.byteOffset + buf.byteLength,
+			) as ArrayBuffer,
+		);
+	}
+}
 
 for (const [t, withCover] of TEMPLATES.flatMap((t) => [
 	[t, false] as const,

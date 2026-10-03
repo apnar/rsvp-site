@@ -3,10 +3,11 @@
  * so a page pays only for the fonts its design uses.
  */
 import {
+	FACES,
 	type FaceKey,
-	FONTS,
 	type FontId,
 	faceKey,
+	hasItalic,
 	nearestWeight,
 } from "./fonts";
 import { METRICS } from "./metrics/index";
@@ -16,12 +17,24 @@ export type Faces = ReadonlyMap<FaceKey, Face>;
 
 /** The faces a set of text elements and a theme need. */
 export function facesOf(d: {
-	elements: readonly { type: string; font?: FontId; weight?: number }[];
+	elements: readonly {
+		type: string;
+		font?: FontId;
+		weight?: number;
+		italic?: boolean;
+	}[];
 }): FaceKey[] {
 	const keys = new Set<FaceKey>();
 	for (const el of d.elements) {
 		if (el.type === "text" && el.font) {
-			keys.add(faceKey(el.font, nearestWeight(el.font, el.weight ?? 400)));
+			const italic = Boolean(el.italic) && hasItalic(el.font);
+			keys.add(
+				faceKey(
+					el.font,
+					nearestWeight(el.font, el.weight ?? 400, italic),
+					italic,
+				),
+			);
 		}
 	}
 	return [...keys];
@@ -29,9 +42,7 @@ export function facesOf(d: {
 
 /** Every face of every font: what the designer's font picker needs. */
 export function allFaces(): FaceKey[] {
-	return (Object.keys(FONTS) as FontId[]).flatMap((id) =>
-		FONTS[id].weights.map((w) => faceKey(id, w)),
-	);
+	return [...FACES];
 }
 
 export async function loadFaces(keys: Iterable<FaceKey>): Promise<Faces> {

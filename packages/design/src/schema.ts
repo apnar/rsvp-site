@@ -11,13 +11,14 @@
  * format says (cardHeight), with y running down.
  */
 import { z } from "zod";
-import { FONT_IDS, FONTS, type FontId } from "./fonts";
+import { FONT_IDS, FONTS, type FontId, type FontInfo } from "./fonts";
 import { STICKER_IDS } from "./stickers";
 
 export const FORMATS = {
 	"5x7": { label: "5×7 card", w: 5, h: 7 },
 	"5x7l": { label: "5×7 card, landscape", w: 7, h: 5 },
 	square: { label: "Square 5.5×5.5", w: 5.5, h: 5.5 },
+	"8x10": { label: "8×10 card", w: 8, h: 10 },
 	half: { label: "Half letter", w: 5.5, h: 8.5 },
 	letter: { label: "Letter", w: 8.5, h: 11 },
 } as const;
@@ -102,6 +103,7 @@ export const textElement = z.object({
 	text: z.string().max(LIMITS.text),
 	font: z.enum(FONT_IDS),
 	weight: z.number().int().min(100).max(900).default(400),
+	italic: z.boolean().default(false),
 	size: num(4, 800),
 	color: hex,
 	align: z.enum(["left", "center", "right"]).default("left"),
@@ -264,10 +266,10 @@ export const design = designObject.superRefine((d, ctx) => {
 			});
 		}
 		seen.add(el.id);
-		if (el.type === "text" && !weightOf(el.font, el.weight)) {
+		if (el.type === "text" && !weightOf(el.font, el.weight, el.italic)) {
 			ctx.addIssue({
 				code: "custom",
-				message: `${FONTS[el.font].label} has no weight ${el.weight}`,
+				message: `${FONTS[el.font].label} has no ${el.italic ? "italic " : ""}weight ${el.weight}`,
 				path: ["elements", i, "weight"],
 			});
 		}
@@ -291,8 +293,9 @@ export const design = designObject.superRefine((d, ctx) => {
 	}
 });
 
-function weightOf(font: FontId, weight: number): boolean {
-	return (FONTS[font].weights as readonly number[]).includes(weight);
+function weightOf(font: FontId, weight: number, italic: boolean): boolean {
+	const info: FontInfo = FONTS[font];
+	return ((italic ? info.italics : info.weights) ?? []).includes(weight);
 }
 
 export type Design = z.output<typeof design>;

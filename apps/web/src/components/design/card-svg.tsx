@@ -403,6 +403,7 @@ function Glyphs({
 		<text
 			fontFamily={`"${n.family}"`}
 			fontWeight={n.weight}
+			fontStyle={n.italic ? "italic" : undefined}
 			fontSize={n.size}
 			fill={color}
 			style={TEXT_STYLE}

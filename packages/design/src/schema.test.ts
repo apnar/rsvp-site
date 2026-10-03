@@ -152,3 +152,33 @@ describe("refsBelongTo", () => {
 		expect(refsBelongTo(theirs.design, EVENT)).toBe(false);
 	});
 });
+
+describe("italics", () => {
+	it("accepts an italic the font has, and refuses one it lacks", () => {
+		expect(
+			parseDesign(
+				doc([text({ font: "merriweather", weight: 700, italic: true })]),
+			).ok,
+		).toBe(true);
+		expect(
+			parseDesign(doc([text({ font: "fraunces", weight: 400, italic: true })]))
+				.ok,
+		).toBe(false);
+	});
+});
+
+describe("template pictures", () => {
+	it("stand in with refs that point at the shipped files until picked", async () => {
+		const { previewAssets, templateAssetUrl } = await import(
+			"./templates/index"
+		);
+		const t = TEMPLATES.find((x) => x.assets);
+		if (!t) throw new Error("no template with pictures");
+		const placed = previewAssets(t);
+		const first = Object.entries(t.assets ?? {})[0];
+		if (!first) throw new Error("no assets");
+		const ref = placed[first[0]]?.ref ?? "";
+		expect(templateAssetUrl(ref)).toBe(`/templates/${t.id}/${first[1].file}`);
+		expect(templateAssetUrl(IMG)).toBeNull();
+	});
+});
