@@ -1,10 +1,7 @@
 import { ORPCError } from "@orpc/server";
-import type { Person } from "@rsvp-site/db/people";
 import { event, eventDesign } from "@rsvp-site/db/schema/event";
 import { basisOf } from "@rsvp-site/design/basis";
-import { hasPrintableQr } from "@rsvp-site/design/qr";
 import {
-	type Design,
 	designPrefix,
 	parseDesign,
 	refsBelongTo,
@@ -14,26 +11,17 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Context } from "../context";
+import { needsQr } from "../design-rules";
 import { savedDesign } from "../designs-store";
-import {
-	designValues,
-	type EventRow,
-	hostAccessTo,
-	refuseCanceled,
-} from "../events";
+import { designValues } from "../events";
+import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { sniffImage } from "../image-type";
 import { hostProcedure } from "../index";
+import { idInput } from "../inputs";
+import { fileBytes, imageFile, listPrefix, putImage } from "../media";
 
 type Env = Context["env"];
 
-const idInput = z.object({ eventId: z.string().min(1) });
-
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-const IMAGE_EXT: Record<(typeof IMAGE_TYPES)[number], string> = {
-	"image/jpeg": "jpg",
-	"image/png": "png",
-	"image/webp": "webp",
-};
 /** Uploads an event may hold at once, card images aside. */
 const MAX_IMAGES = 20;
 /**
@@ -47,50 +35,11 @@ const ORPHAN_GRACE_MS = 60 * 60 * 1000;
  */
 const MAX_CARDS = 30;
 
-const imageFile = z
-	.file()
-	.max(5 * 1024 * 1024, "Under 5 MB, please.")
-	.mime([...IMAGE_TYPES], "A JPEG, PNG or WebP, please.");
 const cardFile = z
 	.file()
 	.max(3 * 1024 * 1024, "The card image is too large.")
 	.mime(["image/jpeg"], "The card image must be a JPEG.");
 const basis = z.string().max(40);
-
-async function editable(
-	context: { db: Context["db"]; me: Pick<Person, "id" | "role"> },
-	eventId: string,
-) {
-	const { event: row } = await hostAccessTo(context.db, context.me, eventId);
-	refuseCanceled(row);
-	return row;
-}
-
-/** A paper event's guests answer by scanning; its card can't lack the code. */
-export function needsQr(
-	row: Pick<EventRow, "paper">,
-	designOn: boolean,
-	doc: Pick<Design, "format" | "elements"> | null,
-) {
-	// A hidden, invisible or off-card code prints nothing to scan.
-	if (row.paper && designOn && !(doc && hasPrintableQr(doc))) {
-		throw new ORPCError("BAD_REQUEST", {
-			message:
-				"This is a paper invitation: add a QR code to the design so guests can scan it to answer.",
-		});
-	}
-}
-
-async function listPrefix(env: Env, prefix: string): Promise<R2Object[]> {
-	const out: R2Object[] = [];
-	let cursor: string | undefined;
-	do {
-		const page = await env.MEDIA.list({ prefix, cursor, limit: 1000 });
-		out.push(...page.objects);
-		cursor = page.truncated ? page.cursor : undefined;
-	} while (cursor);
-	return out;
-}
 
 function isCard(key: string, prefix: string): boolean {
 	return key.slice(prefix.length).startsWith("card-");
@@ -145,39 +94,30 @@ async function alreadyHeld(
 	return held.find((o) => o.etag === md5)?.key ?? null;
 }
 
-/** Every object under an event's design prefix, for deleting the event. */
-export async function deleteDesignMedia(env: Env, eventId: string) {
-	const keys = (await listPrefix(env, designPrefix(eventId))).map((o) => o.key);
-	for (let i = 0; i < keys.length; i += 1000) {
-		await env.MEDIA.delete(keys.slice(i, i + 1000));
-	}
-}
-
 export const designsRouter = {
 	/** The design document and the event's uploaded images, for the designer. */
-	get: hostProcedure.input(idInput).handler(async ({ context, input }) => {
-		const { event: row } = await hostAccessTo(
-			context.db,
-			context.me,
-			input.eventId,
-		);
-		const prefix = designPrefix(row.id);
-		const [saved, objects] = await Promise.all([
-			savedDesign(context.db, row.id),
-			listPrefix(context.env, prefix),
-		]);
-		return {
-			doc: saved?.doc ?? null,
-			version: saved?.version ?? 0,
-			designOn: row.designOn,
-			cardKey: row.cardKey,
-			cardBasis: row.cardBasis,
-			images: objects
-				.filter((o) => !isCard(o.key, prefix))
-				.sort((a, b) => b.uploaded.getTime() - a.uploaded.getTime())
-				.map((o) => o.key),
-		};
-	}),
+	get: hostProcedure
+		.input(idInput)
+		.use(withHostEvent)
+		.handler(async ({ context }) => {
+			const row = context.event;
+			const prefix = designPrefix(row.id);
+			const [saved, objects] = await Promise.all([
+				savedDesign(context.db, row.id),
+				listPrefix(context.env, prefix),
+			]);
+			return {
+				doc: saved?.doc ?? null,
+				version: saved?.version ?? 0,
+				designOn: row.designOn,
+				cardKey: row.cardKey,
+				cardBasis: row.cardBasis,
+				images: objects
+					.filter((o) => !isCard(o.key, prefix))
+					.sort((a, b) => b.uploaded.getTime() - a.uploaded.getTime())
+					.map((o) => o.key),
+			};
+		}),
 
 	/**
 	 * Add an image to the event's design images. The browser shrinks it and
@@ -185,13 +125,14 @@ export const designsRouter = {
 	 */
 	uploadImage: hostProcedure
 		.input(idInput.extend({ file: imageFile }))
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const row = await editable(context, input.eventId);
+			const row = context.event;
 			const prefix = designPrefix(row.id);
 			const held = (await listPrefix(context.env, prefix)).filter(
 				(o) => !isCard(o.key, prefix),
 			);
-			const bytes = await (input.file as unknown as Blob).arrayBuffer();
+			const bytes = await fileBytes(input.file);
 			// The declared type is the client's word; the bytes decide.
 			const type = sniffImage(bytes);
 			if (!type) {
@@ -208,10 +149,9 @@ export const designsRouter = {
 					message: `An event holds up to ${MAX_IMAGES} images. Remove one you aren't using first.`,
 				});
 			}
-			const key = `${prefix}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
-			await context.env.MEDIA.put(key, bytes, {
-				httpMetadata: { contentType: type },
-				customMetadata: { eventId: row.id, uploadedBy: context.me.id },
+			const key = await putImage(context.env, prefix, type, bytes, {
+				eventId: row.id,
+				uploadedBy: context.me.id,
 			});
 			return { ref: key };
 		}),
@@ -219,8 +159,9 @@ export const designsRouter = {
 	/** Remove an image from the tray, unless the saved design still uses it. */
 	removeImage: hostProcedure
 		.input(idInput.extend({ ref: z.string().max(200) }))
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const row = await editable(context, input.eventId);
+			const row = context.event;
 			const prefix = designPrefix(row.id);
 			if (!input.ref.startsWith(prefix) || isCard(input.ref, prefix)) {
 				throw new ORPCError("BAD_REQUEST", {
@@ -243,8 +184,9 @@ export const designsRouter = {
 	 */
 	copyCover: hostProcedure
 		.input(idInput)
-		.handler(async ({ context, input }) => {
-			const row = await editable(context, input.eventId);
+		.use(withLiveHostEvent)
+		.handler(async ({ context }) => {
+			const row = context.event;
 			if (!row.coverKey) return { ref: null };
 			const cover = await context.env.MEDIA.get(row.coverKey);
 			if (!cover) return { ref: null };
@@ -257,10 +199,9 @@ export const designsRouter = {
 			if (!type) return { ref: null };
 			const same = await alreadyHeld(held, bytes);
 			if (same) return { ref: same };
-			const key = `${prefix}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
-			await context.env.MEDIA.put(key, bytes, {
-				httpMetadata: { contentType: type },
-				customMetadata: { eventId: row.id, uploadedBy: context.me.id },
+			const key = await putImage(context.env, prefix, type, bytes, {
+				eventId: row.id,
+				uploadedBy: context.me.id,
 			});
 			return { ref: key };
 		}),
@@ -279,8 +220,9 @@ export const designsRouter = {
 				designOn: z.boolean(),
 			}),
 		)
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const row = await editable(context, input.eventId);
+			const row = context.event;
 			const parsed = parseDesign(input.doc);
 			if (!parsed.ok) {
 				throw new ORPCError("BAD_REQUEST", { message: parsed.message });
@@ -361,12 +303,9 @@ export const designsRouter = {
 	 */
 	cardInputs: hostProcedure
 		.input(idInput)
-		.handler(async ({ context, input }) => {
-			const { event: row } = await hostAccessTo(
-				context.db,
-				context.me,
-				input.eventId,
-			);
+		.use(withHostEvent)
+		.handler(async ({ context }) => {
+			const row = context.event;
 			const saved = await savedDesign(context.db, row.id);
 			if (!saved?.doc) return null;
 			const values = designValues(row, "");
@@ -386,9 +325,10 @@ export const designsRouter = {
 	 */
 	uploadCard: hostProcedure
 		.input(idInput.extend({ card: cardFile, basis }))
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const row = await editable(context, input.eventId);
-			const bytes = await (input.card as unknown as Blob).arrayBuffer();
+			const row = context.event;
+			const bytes = await fileBytes(input.card);
 			if (sniffImage(bytes) !== "image/jpeg") {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "The card image must be a JPEG.",
@@ -405,8 +345,9 @@ export const designsRouter = {
 	/** Switch the design on or off without touching the document. */
 	setOn: hostProcedure
 		.input(idInput.extend({ on: z.boolean() }))
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const row = await editable(context, input.eventId);
+			const row = context.event;
 			if (input.on) {
 				const saved = await savedDesign(context.db, row.id);
 				if (!saved?.doc) {

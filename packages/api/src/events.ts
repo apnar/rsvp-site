@@ -4,6 +4,7 @@
  */
 
 import { ORPCError } from "@orpc/server";
+import type { Db } from "@rsvp-site/db";
 import { mapChunks } from "@rsvp-site/db/batch";
 import type { Person } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
@@ -20,10 +21,18 @@ import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
 import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
 import type { Design, DesignTheme, Format } from "@rsvp-site/design/schema";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import {
+	and,
+	asc,
+	eq,
+	inArray,
+	isNotNull,
+	isNull,
+	ne,
+	or,
+	sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-
-import type { Context } from "./context";
 import { readTheme, savedDesign } from "./designs-store";
 import {
 	type PotluckLine,
@@ -32,8 +41,6 @@ import {
 	tally,
 } from "./headcount";
 import { formatDate, formatTimeRange } from "./time";
-
-type Db = Context["db"];
 
 export type EventRow = typeof event.$inferSelect;
 export type GuestRow = typeof eventGuest.$inferSelect;
@@ -72,13 +79,40 @@ export async function findEventByShareToken(
 	return row ? cleanTheme(row) : null;
 }
 
+/** Owner first, then in the order they joined: the one order hosts are listed in. */
+const hostOrder = () => [
+	sql`${eventHost.isOwner} desc`,
+	asc(eventHost.createdAt),
+];
+
+/** Soonest first; undated last. Callers reverse it for "past". */
+export function byDate(a: { date: string | null }, b: { date: string | null }) {
+	return (a.date ?? "9999").localeCompare(b.date ?? "9999");
+}
+
+/** People who have the invitation and have not said no. */
+export async function stillComing(db: Db, eventId: string): Promise<string[]> {
+	const rows = await db
+		.select({ userId: eventGuest.userId })
+		.from(eventGuest)
+		.where(
+			and(
+				eq(eventGuest.eventId, eventId),
+				isNotNull(eventGuest.invitedAt),
+				or(isNull(eventGuest.response), ne(eventGuest.response, "no")),
+			),
+		)
+		.all();
+	return rows.map((r) => r.userId);
+}
+
 /** The ids of an event's hosts, owner first. */
 export async function hostIdsOf(db: Db, eventId: string): Promise<string[]> {
 	const rows = await db
 		.select({ userId: eventHost.userId })
 		.from(eventHost)
 		.where(eq(eventHost.eventId, eventId))
-		.orderBy(sql`${eventHost.isOwner} desc`, asc(eventHost.createdAt))
+		.orderBy(...hostOrder())
 		.all();
 	return rows.map((r) => r.userId);
 }
@@ -94,7 +128,7 @@ export async function hostsOf(db: Db, eventId: string) {
 		.from(eventHost)
 		.innerJoin(user, eq(user.id, eventHost.userId))
 		.where(eq(eventHost.eventId, eventId))
-		.orderBy(sql`${eventHost.isOwner} desc`, asc(eventHost.createdAt))
+		.orderBy(...hostOrder())
 		.all();
 }
 
@@ -320,24 +354,27 @@ export async function cardsFor(
 				.all(),
 		),
 	]);
-	return rows.map((row) => ({
-		id: row.id,
-		title: row.title,
-		status: row.status,
-		date: row.date,
-		dateLabel: row.date ? formatDate(row.date) : null,
-		timeLabel: formatTimeRange(row.startTime, row.endTime),
-		coverKey: row.coverKey,
-		card: cardOf(row),
-		hostLine: row.hostLine,
-		totals: tally(guests.filter((g) => g.eventId === row.id)),
-		potluck: row.potluckEnabled
-			? potluckLines(
-					items.filter((i) => i.eventId === row.id),
-					claims,
-				)
-			: [],
-	}));
+	return rows.map((row) => {
+		const { dateLabel, timeLabel } = labelsOf(row);
+		return {
+			id: row.id,
+			title: row.title,
+			status: row.status,
+			date: row.date,
+			dateLabel,
+			timeLabel,
+			coverKey: row.coverKey,
+			card: cardOf(row),
+			hostLine: row.hostLine,
+			totals: tally(guests.filter((g) => g.eventId === row.id)),
+			potluck: row.potluckEnabled
+				? potluckLines(
+						items.filter((i) => i.eventId === row.id),
+						claims,
+					)
+				: [],
+		};
+	});
 }
 
 /** "Sat, Oct 24" style labels for an event row, shared by pages and mail. */

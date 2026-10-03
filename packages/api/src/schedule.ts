@@ -12,6 +12,8 @@
  * hour forever -- and `email_send` stays the record of what actually went.
  */
 
+import type { EventStatus, HostAlerts } from "@rsvp-site/db/schema/event";
+
 import { addDays, siteInstant, todayOnSite } from "./time";
 
 /** Reminders go out mid-morning, when people read mail and can still plan. */
@@ -20,14 +22,14 @@ export const REMINDER_TIME = "10:00";
 export const DIGEST_TIME = "08:00";
 
 export type ScheduleEvent = {
-	status: "draft" | "published" | "canceled";
+	status: EventStatus;
 	date: string | null;
 	startTime: string | null;
 	rsvpDeadline: string | null;
 	remindDeadline: boolean;
 	remindDaysBefore: number;
 	remindDayBefore: boolean;
-	hostAlerts: "off" | "each" | "daily";
+	hostAlerts: HostAlerts;
 	/** Paper invitations hold guest email until the host releases it. */
 	paper: boolean;
 	emailsReleasedAt: Date | null;

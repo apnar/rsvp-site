@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
+import type { Db } from "@rsvp-site/db";
 import {
 	deactivate,
 	findOrCreatePeople,
@@ -15,15 +16,14 @@ import { getMailer } from "@rsvp-site/email/worker";
 import { count, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import type { Context } from "../context";
 import { adminProcedure, publicProcedure } from "../index";
+import { emailSchema } from "../inputs";
 import { sendWelcome } from "../mail";
 
-const emailSchema = z.email("That is not an email address.").max(254);
 const nameSchema = z.string().trim().max(60, "Shorter name, please.");
 const reasonSchema = z.string().trim().max(200, "Keep it short.").optional();
 
-async function requirePerson(db: Context["db"], userId: string) {
+async function requirePerson(db: Db, userId: string) {
 	const person = await findPerson(db, userId);
 	if (!person) {
 		throw new ORPCError("NOT_FOUND", { message: "Nobody by that id." });

@@ -1,3 +1,4 @@
+import type { Db } from "@rsvp-site/db";
 import { eventDesign } from "@rsvp-site/db/schema/event";
 import {
 	type Design,
@@ -6,10 +7,6 @@ import {
 	theme,
 } from "@rsvp-site/design/schema";
 import { eq } from "drizzle-orm";
-
-import type { Context } from "./context";
-
-type Db = Context["db"];
 
 /**
  * A stored document, checked again on the way out. Saves validate, but

@@ -13,6 +13,19 @@ const messageSchema = z.object({
 	body: z.string().trim().min(1, "Say something.").max(5000),
 });
 
+/**
+ * The send log keeps lists as JSON text. A row that is not an array (an old
+ * shape, a hand edit) reads as empty rather than taking the whole log down.
+ */
+function parseArray<T>(raw: string): T[] {
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		return Array.isArray(parsed) ? (parsed as T[]) : [];
+	} catch {
+		return [];
+	}
+}
+
 /** Admin mail: the site-wide message and the log of everything sent. */
 export const mailRouter = {
 	/** Whether emails actually leave the building (BREVO_API_KEY is set). */
@@ -95,8 +108,8 @@ export const mailRouter = {
 			.all();
 		return rows.map((row) => ({
 			...row,
-			messageIds: JSON.parse(row.messageIds) as string[],
-			errors: JSON.parse(row.errors) as { emails: string[]; error: string }[],
+			messageIds: parseArray<string>(row.messageIds),
+			errors: parseArray<{ emails: string[]; error: string }>(row.errors),
 		}));
 	}),
 };

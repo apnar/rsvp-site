@@ -4,7 +4,9 @@
  * cannot disagree about how many people are coming.
  */
 
-export type Answer = "yes" | "maybe" | "no";
+import type { GuestResponse } from "@rsvp-site/db/schema/event";
+
+export type Answer = GuestResponse;
 
 export type GuestCounts = {
 	response: Answer | null;
@@ -52,6 +54,29 @@ export function tally(guests: readonly GuestCounts[]): Totals {
 /** Everybody expected through the door. */
 export function headcount(t: Totals): number {
 	return t.adults + t.kids;
+}
+
+/** Households still to be heard from for certain: no reply, or a maybe. */
+export function deciding(t: Totals): number {
+	return t.waiting + t.maybe;
+}
+
+/**
+ * Guests who have the invitation and have not said no, for telling about a
+ * change or a cancellation. Same rule as the `stillComing` query.
+ */
+export function stillComingCount(
+	guests: readonly { invitedAt: Date | null; response: Answer | null }[],
+): number {
+	return guests.filter((g) => g.invitedAt !== null && g.response !== "no")
+		.length;
+}
+
+/** Guests the next Send would email: not yet invited, and mail can reach them. */
+export function notInvitedCount(
+	guests: readonly { invitedAt: Date | null; unreachable: boolean }[],
+): number {
+	return guests.filter((g) => g.invitedAt === null && !g.unreachable).length;
 }
 
 export type PotluckLine = {

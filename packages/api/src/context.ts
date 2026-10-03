@@ -7,7 +7,6 @@ export async function createContext({ req }: { req: Request }) {
 		headers: req.headers,
 	});
 	return {
-		auth: null,
 		session,
 		// Kept so procedures can call Better Auth's server-only endpoints as
 		// the caller (setting a password, for one).

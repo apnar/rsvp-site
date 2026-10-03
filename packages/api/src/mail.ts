@@ -29,11 +29,17 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import type { Context } from "./context";
 import { type EventRow, guestsOf, hostIdsOf, labelsOf } from "./events";
-import { tally } from "./headcount";
+import { type GuestCounts, headcount, tally } from "./headcount";
 
 type Db = Context["db"];
 
 export type { EmailKind };
+
+/** The reply tallies a host email shows, with "expecting" counted by headcount.ts. */
+export function hostTotals(guests: readonly GuestCounts[]) {
+	const t = tally(guests);
+	return { ...t, expecting: headcount(t) };
+}
 
 export type ListSendResult = ListResult & { sendId: string };
 
@@ -239,7 +245,7 @@ export async function alertHosts(
 			(id) => id !== replierId,
 		);
 		if (hostIds.length === 0) return;
-		const totals = tally(await guestsOf(db, row.id));
+		const totals = hostTotals(await guestsOf(db, row.id));
 		await sendToList(db, {
 			kind: "host_alert",
 			eventId: row.id,

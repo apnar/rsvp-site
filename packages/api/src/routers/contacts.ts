@@ -1,7 +1,11 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
 import { insertChunks } from "@rsvp-site/db/batch";
-import { findOrCreatePeople, parseAddresses } from "@rsvp-site/db/people";
+import {
+	findOrCreatePeople,
+	type Person,
+	parseAddresses,
+} from "@rsvp-site/db/people";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
@@ -24,7 +28,7 @@ const emailsSchema = z.string().max(20_000);
  * stranger's group is "no such group", the same as a wrong id.
  */
 async function ownGroup(
-	context: Pick<Context, "db"> & { me: { id: string; role: string } },
+	context: Pick<Context, "db"> & { me: Pick<Person, "id" | "role"> },
 	groupId: string,
 ) {
 	const row = await context.db

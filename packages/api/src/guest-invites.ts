@@ -8,7 +8,9 @@
  * grow by friends of the host's guests but never by friends of friends.
  */
 
-export type GuestSource = "host" | "group" | "guest" | "link";
+import type { GuestSource } from "@rsvp-site/db/schema/event";
+
+export type { GuestSource };
 
 export function canInviteOthers(source: GuestSource): boolean {
 	return source === "host" || source === "group";

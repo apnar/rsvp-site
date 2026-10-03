@@ -9,6 +9,7 @@ import {
 	parseGuestLines,
 	setRealEmail,
 } from "@rsvp-site/db/people";
+import { isAdmin } from "@rsvp-site/db/roles";
 import { contactGroup, contactGroupMember } from "@rsvp-site/db/schema/contact";
 import {
 	eventGuest,
@@ -24,57 +25,55 @@ import {
 	designFormatOf,
 	emailsHeld,
 	guestsOf,
-	hostAccessTo,
 	potluckOf,
-	refuseCanceled,
 } from "../events";
 import { canInviteOthers } from "../guest-invites";
-import { clampParty, headcount, tally } from "../headcount";
+import { clampParty, headcount, notInvitedCount, tally } from "../headcount";
+import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { hostProcedure, personProcedure } from "../index";
+import { emailSchema, idInput } from "../inputs";
 import { alertHosts, sendInvites } from "../mail";
 import { startsAt } from "../schedule";
 
-const idInput = z.object({ eventId: z.string().min(1) });
-
 export const guestsRouter = {
 	/** The host's guest list: every row, the totals, and the potluck. */
-	list: hostProcedure.input(idInput).handler(async ({ context, input }) => {
-		const { event: row } = await hostAccessTo(
-			context.db,
-			context.me,
-			input.eventId,
-		);
-		const [guests, potluck] = await Promise.all([
-			guestsOf(context.db, row.id),
-			potluckOf(context.db, row.id),
-		]);
-		const labels = new Map(potluck.lines.map((l) => [l.id, l.label]));
-		const totals = tally(guests);
-		return {
-			now: new Date().toISOString(),
-			event: {
-				id: row.id,
-				title: row.title,
-				status: row.status,
-				date: row.date,
-				rsvpDeadline: row.rsvpDeadline,
-				potluckEnabled: row.potluckEnabled,
-				paper: row.paper,
-				emailsReleasedAt: row.emailsReleasedAt,
-				emailsHeld: emailsHeld(row),
-				designFormat: await designFormatOf(context.db, row),
-			},
-			totals,
-			headcount: headcount(totals),
-			potluck: potluck.lines,
-			guests: guests.map((g) => ({
-				...g,
-				bringing: potluck.claims
-					.filter((c) => c.guestId === g.id)
-					.map((c) => labels.get(c.itemId) ?? ""),
-			})),
-		};
-	}),
+	list: hostProcedure
+		.input(idInput)
+		.use(withHostEvent)
+		.handler(async ({ context }) => {
+			const row = context.event;
+			const [guests, potluck] = await Promise.all([
+				guestsOf(context.db, row.id),
+				potluckOf(context.db, row.id),
+			]);
+			const labels = new Map(potluck.lines.map((l) => [l.id, l.label]));
+			const totals = tally(guests);
+			return {
+				now: new Date().toISOString(),
+				event: {
+					id: row.id,
+					title: row.title,
+					status: row.status,
+					date: row.date,
+					rsvpDeadline: row.rsvpDeadline,
+					potluckEnabled: row.potluckEnabled,
+					paper: row.paper,
+					emailsReleasedAt: row.emailsReleasedAt,
+					emailsHeld: emailsHeld(row),
+					designFormat: await designFormatOf(context.db, row),
+				},
+				totals,
+				headcount: headcount(totals),
+				notInvited: notInvitedCount(guests),
+				potluck: potluck.lines,
+				guests: guests.map((g) => ({
+					...g,
+					bringing: potluck.claims
+						.filter((c) => c.guestId === g.id)
+						.map((c) => labels.get(c.itemId) ?? ""),
+				})),
+			};
+		}),
 
 	/**
 	 * Put people on the list: pasted addresses, picks from the address book,
@@ -91,13 +90,9 @@ export const guestsRouter = {
 				userIds: z.array(z.string().min(1)).max(1000).default([]),
 			}),
 		)
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const { event: row } = await hostAccessTo(
-				context.db,
-				context.me,
-				input.eventId,
-			);
-			refuseCanceled(row);
+			const row = context.event;
 			// A paper event may also take bare names, one per line: people
 			// with no address who will only ever have the card.
 			const lines = row.paper
@@ -126,7 +121,7 @@ export const guestsRouter = {
 					.where(
 						and(
 							inArray(contactGroupMember.groupId, input.groupIds),
-							context.me.role === "admin"
+							isAdmin(context.me)
 								? undefined
 								: eq(contactGroup.ownerId, context.me.id),
 						),
@@ -200,13 +195,9 @@ export const guestsRouter = {
 				kids: z.number().int().min(0).max(50),
 			}),
 		)
+		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
-			const { event: row } = await hostAccessTo(
-				context.db,
-				context.me,
-				input.eventId,
-			);
-			refuseCanceled(row);
+			const row = context.event;
 			const update = context.db
 				.update(eventGuest)
 				.set({
@@ -249,12 +240,9 @@ export const guestsRouter = {
 	/** Take somebody off the list, and with them their answer and their claims. */
 	remove: hostProcedure
 		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
-			const { event: row } = await hostAccessTo(
-				context.db,
-				context.me,
-				input.eventId,
-			);
+			const row = context.event;
 			await context.db
 				.delete(eventGuest)
 				.where(
@@ -407,12 +395,9 @@ export const guestsRouter = {
 	 */
 	newPaperCode: hostProcedure
 		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
-			const { event: row } = await hostAccessTo(
-				context.db,
-				context.me,
-				input.eventId,
-			);
+			const row = context.event;
 			if (!row.paper) {
 				throw new ORPCError("BAD_REQUEST", { message: "Not a paper event." });
 			}
@@ -434,15 +419,12 @@ export const guestsRouter = {
 		.input(
 			idInput.extend({
 				guestId: z.string().min(1),
-				email: z.email("That doesn't look like an email address.").max(254),
+				email: emailSchema,
 			}),
 		)
+		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
-			const { event: row } = await hostAccessTo(
-				context.db,
-				context.me,
-				input.eventId,
-			);
+			const row = context.event;
 			const guest = await context.db
 				.select({ userId: eventGuest.userId })
 				.from(eventGuest)
@@ -480,7 +462,7 @@ export const guestsRouter = {
 	inviteFriend: personProcedure
 		.input(
 			idInput.extend({
-				email: z.email("That doesn't look like an email address.").max(254),
+				email: emailSchema,
 			}),
 		)
 		.handler(async ({ context, input }) => {

@@ -9,6 +9,7 @@
  * `meta.changes === 1` as the lock. Two overlapping passes cannot both send.
  */
 
+import type { Db } from "@rsvp-site/db";
 import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
 import {
@@ -30,14 +31,10 @@ import {
 	or,
 } from "drizzle-orm";
 
-import type { Context } from "../context";
 import { cleanTheme, type EventRow, guestsOf, hostIdsOf } from "../events";
-import { tally } from "../headcount";
-import { eventFacts, sendToList } from "../mail";
+import { eventFacts, hostTotals, sendToList } from "../mail";
 import { type Due, digestSince, dueEmails } from "../schedule";
 import { addDays, todayOnSite } from "../time";
-
-type Db = Context["db"];
 
 export type MailOutcome = {
 	eventId: string;
@@ -228,7 +225,7 @@ async function runDigest(
 			quiet: "No replies.",
 		};
 	}
-	const totals = tally(await guestsOf(db, row.id));
+	const totals = hostTotals(await guestsOf(db, row.id));
 	const sent = await sendToList(db, {
 		kind: "host_digest",
 		eventId: row.id,
