@@ -108,7 +108,9 @@ export function EventCard({
 				</div>
 				<ResponseBar totals={event.totals} />
 				<ResponseCounts totals={event.totals} />
-				<div className="relative z-10 mt-auto flex flex-wrap gap-2">{actions}</div>
+				<div className="relative z-10 mt-auto flex flex-wrap gap-2">
+					{actions}
+				</div>
 			</div>
 		</article>
 	);
