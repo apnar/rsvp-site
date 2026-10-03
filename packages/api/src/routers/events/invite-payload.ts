@@ -54,6 +54,7 @@ export async function invitePayload(
 		now: new Date().toISOString(),
 		startsAt: start?.toISOString() ?? null,
 		isHost: access.isHost,
+		canDelete: access.canDelete,
 		event: {
 			id: row.id,
 			title: row.title,

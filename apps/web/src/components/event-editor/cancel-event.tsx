@@ -1,6 +1,5 @@
 import { Button } from "@rsvp-site/ui/components/button";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
-import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -10,14 +9,26 @@ import { Field, Switch } from "@/components/controls";
 import { plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
-export function CancelEvent({
-	eventId,
+/**
+ * A button that opens the "tell the guests it's off" form: a note and
+ * whether to email it. Canceling uses it, and so does deleting an event
+ * guests are still expecting, which cancels it first.
+ */
+export function CallOff({
+	label,
+	question,
+	confirm,
 	stillComing,
+	pending,
+	onConfirm,
 }: {
-	eventId: string;
+	label: string;
+	question: string;
+	confirm: string;
 	stillComing: number;
+	pending: boolean;
+	onConfirm: (input: { note: string; notify: boolean }) => void;
 }) {
-	const navigate = useNavigate();
 	const [open, setOpen] = useState(false);
 	const [note, setNote] = useState("");
 	const [notify, setNotify] = useState(true);
@@ -31,18 +42,6 @@ export function CancelEvent({
 		else if (wasOpen.current) triggerRef.current?.focus();
 		wasOpen.current = open;
 	}, [open]);
-	const cancel = useMutation(
-		orpc.events.cancel.mutationOptions({
-			onSuccess: (r) => {
-				toast.success(
-					r.notified > 0
-						? `Canceled. Told ${plural(r.notified, "guest")}.`
-						: "Canceled.",
-				);
-				navigate({ to: "/events" });
-			},
-		}),
-	);
 	if (!open) {
 		return (
 			<Button
@@ -51,21 +50,18 @@ export function CancelEvent({
 				className="mr-auto"
 				onClick={() => setOpen(true)}
 			>
-				Cancel event
+				{label}
 			</Button>
 		);
 	}
+	const noteId = `${label.replaceAll(" ", "-").toLowerCase()}-note`;
 	return (
-		<div
-			className={cn(
-				"flex basis-full flex-col gap-3 rounded-[20px] border border-destructive/50 p-4",
-			)}
-		>
-			<b>Cancel this event?</b>
-			<Field label="A note for your guests (optional)" htmlFor="cancel-note">
+		<div className="flex basis-full flex-col gap-3 rounded-[20px] border border-destructive/50 p-4">
+			<b>{question}</b>
+			<Field label="A note for your guests (optional)" htmlFor={noteId}>
 				<Textarea
 					ref={noteRef}
-					id="cancel-note"
+					id={noteId}
 					value={note}
 					maxLength={1000}
 					onChange={(ev) => setNote(ev.target.value)}
@@ -82,15 +78,47 @@ export function CancelEvent({
 			<div className="flex gap-2">
 				<Button
 					variant="destructive"
-					disabled={cancel.isPending}
-					onClick={() => cancel.mutate({ eventId, note, notify })}
+					disabled={pending}
+					onClick={() => onConfirm({ note, notify })}
 				>
-					Yes, cancel it
+					{confirm}
 				</Button>
 				<Button variant="ghost" onClick={() => setOpen(false)}>
 					Never mind
 				</Button>
 			</div>
 		</div>
+	);
+}
+
+export function CancelEvent({
+	eventId,
+	stillComing,
+}: {
+	eventId: string;
+	stillComing: number;
+}) {
+	const navigate = useNavigate();
+	const cancel = useMutation(
+		orpc.events.cancel.mutationOptions({
+			onSuccess: (r) => {
+				toast.success(
+					r.notified > 0
+						? `Canceled. Told ${plural(r.notified, "guest")}.`
+						: "Canceled.",
+				);
+				navigate({ to: "/events" });
+			},
+		}),
+	);
+	return (
+		<CallOff
+			label="Cancel event"
+			question="Cancel this event?"
+			confirm="Yes, cancel it"
+			stillComing={stillComing}
+			pending={cancel.isPending}
+			onConfirm={(input) => cancel.mutate({ eventId, ...input })}
+		/>
 	);
 }

@@ -18,6 +18,7 @@ import { count } from "drizzle-orm";
 import { z } from "zod";
 
 import { detailsPatch, saveDetails, saveEmail } from "../details";
+import { erasePerson, removalPlan } from "../endings";
 import { adminProcedure, publicProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
 import { sendWelcome } from "../mail";
@@ -207,6 +208,52 @@ export const peopleRouter = {
 				headers: context.headers,
 			});
 			return { ok: true };
+		}),
+
+	/**
+	 * What deleting somebody would do to the events they own, for the
+	 * confirmation: which pass to a co-host, which go with them, and which
+	 * stop it because guests are still expecting them.
+	 */
+	removal: adminProcedure
+		.input(z.object({ userId: idSchema }))
+		.handler(async ({ context, input }) => {
+			await requirePerson(context.db, input.userId);
+			const plan = await removalPlan(context.db, input.userId);
+			return {
+				handOff: plan.handOff.map((h) => ({
+					title: h.event.title,
+					to: h.to.name,
+				})),
+				erase: plan.erase.map((e) => e.title),
+				blocking: plan.blocking.map((e) => e.title),
+			};
+		}),
+
+	/**
+	 * Gone for good, unlike a deactivation: their invitations, answers, address
+	 * books and sessions go with the row, so they can be added again later as
+	 * a stranger. Their events are handed off or erased as `removal` says.
+	 */
+	remove: adminProcedure
+		.input(z.object({ userId: idSchema }))
+		.handler(async ({ context, input }) => {
+			if (input.userId === context.me.id) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Find another admin to do that to you.",
+				});
+			}
+			await requirePerson(context.db, input.userId);
+			// Planned again here rather than trusted from the preview: an event
+			// may have gone out, or a co-host left, since it was shown.
+			const plan = await removalPlan(context.db, input.userId);
+			if (plan.blocking.length > 0) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: `Guests are still expecting ${plan.blocking.map((e) => e.title).join(", ")}. Cancel it or add a co-host first.`,
+				});
+			}
+			await erasePerson(context.db, context.env, input.userId, plan);
+			return { handedOff: plan.handOff.length, erased: plan.erase.length };
 		}),
 
 	/** Undo a deactivation; the only path that clears `banned`. */

@@ -3,7 +3,7 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { plural } from "@/lib/format";
 
 import { CancelEvent } from "./cancel-event";
-import { DeleteDraft } from "./delete-draft";
+import { DeleteEvent } from "./delete-event";
 import { type Loaded, sendLabel } from "./form";
 import type { EventDraft } from "./use-event-draft";
 import type { SaveEvent } from "./use-save-event";
@@ -32,8 +32,13 @@ export function ActionsBar({
 	return (
 		<>
 			<div className="flex flex-wrap justify-end gap-2.5">
-				{status === "draft" && eventId ? (
-					<DeleteDraft eventId={eventId} />
+				{loaded?.canDelete && eventId ? (
+					<DeleteEvent
+						eventId={eventId}
+						status={status}
+						expectingGuests={loaded.expectingGuests}
+						stillComing={loaded.stillComing}
+					/>
 				) : null}
 				{published && eventId ? (
 					<CancelEvent

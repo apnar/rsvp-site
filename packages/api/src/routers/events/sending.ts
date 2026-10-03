@@ -2,19 +2,19 @@ import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { inChunks } from "@rsvp-site/db/batch";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
-import { cancelEmail, nudgeEmail } from "@rsvp-site/email";
+import { nudgeEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { and, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 
 import { needsQr } from "../../design-rules";
 import { savedDesign } from "../../designs-store";
+import { callOff } from "../../endings";
 import {
 	type EventRow,
 	emailsHeld,
 	findEvent,
 	requireOpen,
-	stillComing,
 } from "../../events";
 import { withHostEvent, withLiveHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
@@ -139,23 +139,13 @@ export const sendingRouter = {
 					message: "Only a sent event can be canceled. Delete a draft instead.",
 				});
 			}
-			const result = await context.db
-				.update(event)
-				.set({ status: "canceled", canceledAt: new Date() })
-				.where(and(eq(event.id, row.id), eq(event.status, "published")))
-				.run();
-			if (result.meta.changes !== 1) return { notified: 0 };
-			// Held paper events tell nobody by email; the host knows who has a
-			// card and can tell them.
-			if (!input.notify || emailsHeld(row)) return { notified: 0 };
-			const sent = await sendToList(context.db, {
-				kind: "cancel",
-				eventId: row.id,
-				rendered: cancelEmail(eventFacts(row), input.note),
+			const notified = await callOff(context.db, row, {
+				note: input.note,
+				notify: input.notify,
 				sentBy: context.me.id,
-				onlyPersonIds: await stillComing(context.db, row.id),
+				pictures: true,
 			});
-			return { notified: sent?.sent ?? 0 };
+			return { notified };
 		}),
 
 	/**

@@ -2,7 +2,7 @@ import type { Role } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -273,14 +273,17 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 			</NativeSelect>
 			<span className="flex flex-wrap gap-1.5">
 				{off ? (
-					<Button
-						variant="outline"
-						size="sm"
-						disabled={reactivate.isPending}
-						onClick={() => reactivate.mutate({ userId: p.id })}
-					>
-						Reactivate
-					</Button>
+					<>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={reactivate.isPending}
+							onClick={() => reactivate.mutate({ userId: p.id })}
+						>
+							Reactivate
+						</Button>
+						<DeletePerson person={p} />
+					</>
 				) : (
 					<>
 						<Button
@@ -327,6 +330,7 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 								}}
 							/>
 						)}
+						{isYou ? null : <DeletePerson person={p} />}
 					</>
 				)}
 			</span>
@@ -342,6 +346,75 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 					onClose={() => setEditing(false)}
 				/>
 			) : null}
+		</div>
+	);
+}
+
+/**
+ * Delete somebody for good. Opening it asks the server what happens to the
+ * events they own, so the admin sees which pass to a co-host and which go
+ * with them before saying yes, and why it is refused when it would be.
+ */
+function DeletePerson({ person }: { person: Person }) {
+	const [open, setOpen] = useState(false);
+	const plan = useQuery({
+		...orpc.people.removal.queryOptions({ input: { userId: person.id } }),
+		enabled: open,
+	});
+	const remove = useMutation(
+		orpc.people.remove.mutationOptions({
+			onSuccess: () => toast.success(`${person.name} is deleted.`),
+		}),
+	);
+	if (!open) {
+		return (
+			<Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+				Delete
+			</Button>
+		);
+	}
+	const p = plan.data;
+	return (
+		<div className="flex basis-full flex-col gap-2.5 rounded-[20px] border border-destructive/50 p-4 text-[14px]">
+			<b>Delete {person.name} for good?</b>
+			<span className="text-soft">
+				Their invitations, answers, family and address-book entries go too.
+				Deactivating keeps all that and only shuts them out.
+			</span>
+			{p ? (
+				<>
+					{p.handOff.length > 0 ? (
+						<span>
+							Passes to a co-host:{" "}
+							{p.handOff.map((h) => `${h.title} (${h.to})`).join(", ")}
+						</span>
+					) : null}
+					{p.erase.length > 0 ? (
+						<span>Deleted with them: {p.erase.join(", ")}</span>
+					) : null}
+					{p.blocking.length > 0 ? (
+						<span className="text-destructive">
+							Guests are still expecting {p.blocking.join(", ")}. Cancel it or
+							add a co-host first.
+						</span>
+					) : null}
+				</>
+			) : (
+				<span className="text-haze">Checking their events…</span>
+			)}
+			<span className="flex gap-1.5">
+				<Button
+					variant="destructive"
+					size="sm"
+					disabled={!p || p.blocking.length > 0 || remove.isPending}
+					onClick={() => remove.mutate({ userId: person.id })}
+				>
+					Delete them
+				</Button>
+				<Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+					Keep
+				</Button>
+			</span>
 		</div>
 	);
 }

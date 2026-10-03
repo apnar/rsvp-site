@@ -99,3 +99,57 @@ export function csvCell(value: string): string {
 	const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 	return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
+
+/**
+ * Whether the caller may erase an event. A draft is any host's, as it
+ * always was; once it has gone out, deleting takes the guest list and every
+ * answer with it, so only the owner or an admin may. Co-hosts can cancel.
+ */
+export function mayDelete(
+	row: Pick<EventRow, "status">,
+	who: { isHost: boolean; isOwner: boolean; isAdmin: boolean },
+): boolean {
+	if (row.status === "draft") return who.isHost;
+	return who.isOwner || who.isAdmin;
+}
+
+/**
+ * Sent and not started: guests are still expecting it, so deleting it is
+ * canceling it first. Past, canceled and draft events just go.
+ */
+export function expectingGuests(
+	row: Pick<EventRow, "status" | "date" | "startTime">,
+	now: number = Date.now(),
+): boolean {
+	return openRefusal(row, now) === null;
+}
+
+/** One event the person being deleted owns, with who could take it over. */
+export type OwnedEvent = Pick<
+	EventRow,
+	"id" | "title" | "status" | "date" | "startTime"
+> & {
+	/** The co-host who would become owner: the first who may still host. */
+	heir: { id: string; name: string } | null;
+};
+
+/**
+ * What deleting a person does to the events they own. Co-hosted ones pass
+ * to the co-host; ones they host alone go with them, unless guests are still
+ * expecting one, which blocks the delete: erasing a party out from under
+ * its guests is a cancellation nobody was told about.
+ */
+export function planRemoval<T extends OwnedEvent>(
+	owned: T[],
+	now: number = Date.now(),
+) {
+	const handOff: { event: T; to: { id: string; name: string } }[] = [];
+	const erase: T[] = [];
+	const blocking: T[] = [];
+	for (const e of owned) {
+		if (e.heir) handOff.push({ event: e, to: e.heir });
+		else if (expectingGuests(e, now)) blocking.push(e);
+		else erase.push(e);
+	}
+	return { handOff, erase, blocking };
+}

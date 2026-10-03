@@ -1,6 +1,8 @@
 import { buttonVariants } from "@rsvp-site/ui/components/button";
 import { Link } from "@tanstack/react-router";
 
+import { DeleteEvent } from "@/components/event-editor/delete-event";
+
 import type { Invite } from "./types";
 
 /**
@@ -28,7 +30,16 @@ export function HostPanel({ data }: { data: Invite }) {
 					>
 						Guest list
 					</Link>
-					{e.status === "canceled" ? null : (
+					{e.status === "canceled" ? (
+						data.canDelete ? (
+							<DeleteEvent
+								eventId={e.id}
+								status={e.status}
+								expectingGuests={false}
+								stillComing={0}
+							/>
+						) : null
+					) : (
 						<Link
 							to="/e/$eventId/edit"
 							params={{ eventId: e.id }}

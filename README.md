@@ -60,7 +60,7 @@ There is one table of people, `user`: the accounts, the guests and the mailing l
 |---|---|
 | `user` (a guest) | answer the invitations they have, see those events, manage their own account |
 | `host` | everything a guest can, plus make events, invite anybody by email, keep contact groups |
-| `admin` | everything a host can, plus see and manage every event, add people, set roles, deactivate |
+| `admin` | everything a host can, plus see and manage every event, add people, set roles, deactivate or delete people |
 
 Roles live in `user.role` (null reads as `user`) and are read through `roleOf` / `canHost` / `isAdmin` in `packages/db/src/roles.ts`, which the web app and the API share. Better Auth's admin plugin only knows `admin` and `user`, so roles are written by `people.setRole`, not by its `setRole`.
 
@@ -81,6 +81,7 @@ Sessions last 180 days and roll forward. There is no session cookie cache: every
 
 - *Unsubscribed* stops the email and nothing else: they still sign in, and invitations still show up on the site and on the hosts' lists (marked "No email"). Set by the footer link, the account page, or Brevo's webhook; lifted from the account page or the footer's undo, which also lift Brevo's blocklist.
 - *Deactivated* is the lockout, and only an admin sets or lifts it. It sets Better Auth's `banned` in the same statement (closing the password door), revokes every session, and makes emailed links land on `/login?error=revoked`. Nothing is deleted.
+- *Deleted* is for good, and also admin only (People → Delete): the row goes, and D1's cascades take their invitations, answers, family membership, address-book entries, groups and sessions with it, so the address can come back later as a stranger. Events they own pass to the co-host who has hosted longest (if one may still host); events they host alone are deleted with them, and one guests are still expecting blocks the delete until it is canceled or given a co-host. The confirmation lists all of that first (`people.removal`). Brevo is not told: its blocklist keeps an address that unsubscribed or bounced unmailable if a host adds it again.
 
 **The first account on an empty database** cannot come from the site. Write your own row, then click your own link:
 
@@ -96,7 +97,7 @@ Open `https://rsvp.botch.com/api/auth/link?k=<that token>`. Then make hosts from
 
 ## Events, guests and the potluck
 
-- **An event** (`event`) is a draft until a host sends it. A draft can be saved without a date; sending needs one. Dates are `YYYY-MM-DD` and times `HH:MM` on the site's clock (America/New_York, `packages/api/src/time.ts`). Its settings say what to ask (plus-ones up to N, kids, dietary notes, a note to the host), whether guests see each other's names, the potluck, the share link and the email schedule. A published event can be canceled (with an optional note to everyone still coming) and a draft or canceled one deleted.
+- **An event** (`event`) is a draft until a host sends it. A draft can be saved without a date; sending needs one. Dates are `YYYY-MM-DD` and times `HH:MM` on the site's clock (America/New_York, `packages/api/src/time.ts`). Its settings say what to ask (plus-ones up to N, kids, dietary notes, a note to the host), whether guests see each other's names, the potluck, the share link and the email schedule. A published event can be canceled (with an optional note to everyone still coming), and any event deleted for good, guest list, answers, potluck and pictures included. Any host may delete a draft; once it has gone out only the owner or an admin may (co-hosts can still cancel). Deleting one guests are still expecting cancels it first, with the same note and email, sent without its pictures since they are about to go (`callOff` in `packages/api/src/endings.ts`).
 - **Details** come in two kinds. "The details" go wherever the invitation does: the invite page, the invitation and day-before emails, printed cards, and `{details}` on a designed card. "More details, on the invite page only" (`event.extra_details`) are shown only to guests who open the invite, under "Good to know": never emailed, printed or on the public share page, so a gate code or parking note stays with the people invited.
 - **Hosts** are rows in `event_host`; the creator is `is_owner`. Co-hosts are added in the editor's "Hosts" step, by address or from the hosts in your address book, on a new event (added when the draft is first saved) or an existing one. They must already be hosts on the site -- an admin makes somebody a host on `/admin/users`.
 - **The guest list** is `event_guest`: one row per person per event, and the invitation and the answer in one row -- `response` null means "no reply". `invited_at` records when their invitation went out; `source` says how they got on (typed by a host, from a group, or through the share link). Hosts add people on the editor or the guest list; nobody is emailed until the host presses Send, which mails everyone not yet invited, exactly once.

@@ -4,8 +4,10 @@ import {
 	csvCell,
 	describeChanges,
 	emailsHeld,
+	mayDelete,
 	movesGuestFacts,
 	openRefusal,
+	planRemoval,
 	rearmFor,
 } from "./event-rules";
 import { requireOpen } from "./events";
@@ -166,5 +168,73 @@ describe("emailsHeld", () => {
 			false,
 		);
 		expect(emailsHeld({ paper: false, emailsReleasedAt: null })).toBe(false);
+	});
+});
+
+describe("mayDelete", () => {
+	const nobody = { isHost: false, isOwner: false, isAdmin: false };
+	const cohost = { ...nobody, isHost: true };
+
+	it("lets any host delete a draft", () => {
+		expect(mayDelete({ status: "draft" }, cohost)).toBe(true);
+		expect(mayDelete({ status: "draft" }, nobody)).toBe(false);
+	});
+
+	it("keeps a sent or canceled event to the owner and admins", () => {
+		for (const status of ["published", "canceled"] as const) {
+			expect(mayDelete({ status }, cohost)).toBe(false);
+			expect(mayDelete({ status }, { ...cohost, isOwner: true })).toBe(true);
+			expect(mayDelete({ status }, { ...nobody, isAdmin: true })).toBe(true);
+		}
+	});
+});
+
+describe("planRemoval", () => {
+	const now = siteInstant("2026-10-10", "12:00").getTime();
+	const owned = (
+		id: string,
+		status: "draft" | "published" | "canceled",
+		date: string | null,
+		heir: { id: string; name: string } | null = null,
+	) => ({ id, title: id, status, date, startTime: "18:00", heir });
+	const dana = { id: "u2", name: "Dana" };
+
+	it("hands a co-hosted event over, even an upcoming one", () => {
+		const plan = planRemoval(
+			[owned("a", "published", "2026-10-24", dana)],
+			now,
+		);
+		expect(plan.handOff.map((h) => [h.event.id, h.to.id])).toEqual([
+			["a", "u2"],
+		]);
+		expect(plan.erase).toEqual([]);
+		expect(plan.blocking).toEqual([]);
+	});
+
+	it("erases drafts, canceled and past events hosted alone", () => {
+		const plan = planRemoval(
+			[
+				owned("draft", "draft", null),
+				owned("off", "canceled", "2026-10-24"),
+				owned("done", "published", "2026-10-01"),
+			],
+			now,
+		);
+		expect(plan.erase.map((e) => e.id)).toEqual(["draft", "off", "done"]);
+		expect(plan.blocking).toEqual([]);
+	});
+
+	it("blocks on an upcoming sent event nobody else hosts", () => {
+		const plan = planRemoval([owned("party", "published", "2026-10-24")], now);
+		expect(plan.blocking.map((e) => e.id)).toEqual(["party"]);
+		expect(plan.erase).toEqual([]);
+	});
+
+	it("counts one that has started as past", () => {
+		const started = planRemoval(
+			[{ ...owned("today", "published", "2026-10-10"), startTime: "09:00" }],
+			now,
+		);
+		expect(started.erase.map((e) => e.id)).toEqual(["today"]);
 	});
 });

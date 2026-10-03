@@ -42,7 +42,7 @@ import {
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 import { readTheme, savedDesign } from "./designs-store";
-import { emailsHeld, openRefusal } from "./event-rules";
+import { emailsHeld, mayDelete, openRefusal } from "./event-rules";
 import { type GuestCounts, potluckLines, tally } from "./headcount";
 import { formatDate, formatTimeRange } from "./time";
 
@@ -164,6 +164,8 @@ export type Access = {
 	event: EventRow;
 	/** May edit it, see the whole list, send for it. */
 	isHost: boolean;
+	/** May erase it: `mayDelete`, decided here where the role is known. */
+	canDelete: boolean;
 	/** The caller's own invitation, when they have one. */
 	guest: GuestRow | null;
 };
@@ -182,7 +184,7 @@ export async function accessTo(
 	if (!row) throw notFound();
 	const [hostRow, guest] = await Promise.all([
 		db
-			.select({ userId: eventHost.userId })
+			.select({ isOwner: eventHost.isOwner })
 			.from(eventHost)
 			.where(and(eq(eventHost.eventId, eventId), eq(eventHost.userId, me.id)))
 			.get(),
@@ -195,9 +197,16 @@ export async function accessTo(
 	// The row alone is not enough: a demoted co-host keeps it, and must fall
 	// back to an ordinary guest (or a stranger) the moment the role changes.
 	const isHost = (Boolean(hostRow) && canHost(me)) || isAdmin(me);
-	if (isHost) return { event: row, isHost, guest: guest ?? null };
+	if (isHost) {
+		const canDelete = mayDelete(row, {
+			isHost,
+			isOwner: Boolean(hostRow?.isOwner) && canHost(me),
+			isAdmin: isAdmin(me),
+		});
+		return { event: row, isHost, canDelete, guest: guest ?? null };
+	}
 	if (!guest || row.status === "draft") throw notFound();
-	return { event: row, isHost: false, guest };
+	return { event: row, isHost: false, canDelete: false, guest };
 }
 
 /** Access that must be a host's, or it is the same "no such event". */

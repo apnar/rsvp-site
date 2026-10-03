@@ -29,7 +29,7 @@ async function paperAccess(
 	const row = await findEvent(db, found.guest.eventId);
 	if (!row || row.status === "draft") throw notFound();
 	return {
-		access: { event: row, isHost: false, guest: found.guest },
+		access: { event: row, isHost: false, canDelete: false, guest: found.guest },
 		who: {
 			id: found.guest.userId,
 			name: found.name,

@@ -237,6 +237,13 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   what it needs through `auth.api`. Using a new Better Auth endpoint from
   the browser means taking it off that list.
 - The half-hourly Cron Trigger calls `runEventMail`.
+- Deleting is `packages/api/src/endings.ts`: `callOff` (cancel, shared by
+  `events.cancel` and `events.remove`), `deleteEventMedia` (R2, which the
+  cascades cannot reach) and `erasePerson`. Every foreign key to `event`
+  and `user` is CASCADE or SET NULL, so a delete is one statement; keep it
+  that way when adding a table. Who may erase an event is `mayDelete`
+  (`Access.canDelete`); what a person's delete does to their events is
+  `planRemoval`, both pure in `event-rules.ts`.
 
 ### Events, guests and roles
 

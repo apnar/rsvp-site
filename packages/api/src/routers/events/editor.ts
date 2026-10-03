@@ -16,7 +16,13 @@ import { updateEmail } from "@rsvp-site/email";
 import { siteUrl } from "@rsvp-site/email/worker";
 import { and, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
-import { describeChanges, movesGuestFacts, rearmFor } from "../../event-rules";
+import { callOff, deleteEventMedia } from "../../endings";
+import {
+	describeChanges,
+	expectingGuests,
+	movesGuestFacts,
+	rearmFor,
+} from "../../event-rules";
 import {
 	designedCard,
 	emailsHeld,
@@ -37,7 +43,6 @@ import {
 import { hostProcedure } from "../../index";
 import { emailSchema, idInput, idSchema } from "../../inputs";
 import { eventFacts, sendToList } from "../../mail";
-import { deleteDesignMedia } from "../../media";
 
 // A real calendar date and clock time, not just the right shape: 2026-13-01
 // would otherwise be stored and then throw in formatDate on every page.
@@ -104,6 +109,8 @@ export const editorRouter = {
 			]);
 			return {
 				event: row,
+				canDelete: context.access.canDelete,
+				expectingGuests: expectingGuests(row),
 				emailsHeld: emailsHeld(row),
 				hasDesign: designed !== undefined,
 				card: card?.scene ?? null,
@@ -310,20 +317,37 @@ export const editorRouter = {
 			return { ok: true };
 		}),
 
-	/** Delete a draft or a canceled event. A live one must be canceled first. */
+	/**
+	 * Erase an event for good, with its guest list, answers, potluck and
+	 * design. One that guests are still expecting is canceled first, with the
+	 * same email `cancel` sends, so nobody is left holding an invitation to
+	 * nothing.
+	 */
 	remove: hostProcedure
-		.input(idInput)
+		.input(
+			idInput.extend({
+				note: z.string().trim().max(1000).default(""),
+				notify: z.boolean().default(true),
+			}),
+		)
 		.use(withHostEvent)
-		.handler(async ({ context }) => {
+		.handler(async ({ context, input }) => {
 			const row = context.event;
-			if (row.status === "published") {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "Cancel it first, so the guests hear about it.",
+			if (!context.access.canDelete) {
+				throw new ORPCError("FORBIDDEN", {
+					message: "Only the owner can delete it. You can cancel it.",
 				});
 			}
+			const notified = expectingGuests(row)
+				? await callOff(context.db, row, {
+						note: input.note,
+						notify: input.notify,
+						sentBy: context.me.id,
+						pictures: false,
+					})
+				: 0;
 			await context.db.delete(event).where(eq(event.id, row.id));
-			if (row.coverKey) await context.env.MEDIA.delete(row.coverKey);
-			await deleteDesignMedia(context.env, row.id);
-			return { ok: true };
+			await deleteEventMedia(context.env, row);
+			return { notified };
 		}),
 };
