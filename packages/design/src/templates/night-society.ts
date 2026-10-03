@@ -165,13 +165,7 @@ export const nightSociety: Template = {
 					weight: 700,
 					italic: true,
 				}),
-				line(
-					"body",
-					760.8,
-					75.9,
-					"Please join the gathering for good company\nand magic of the practical variety.",
-					{ lineHeight: 1.64, fit: "none" },
-				),
+				line("details", 760.8, 92, "{details}", { lineHeight: 1.64 }),
 				line("when", 864.5, 32.4, "{date} @ {time}"),
 				line("where", 907, 32.4, "{location}"),
 				line("host", 1201, 22, "Hosted by {host}", {

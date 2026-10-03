@@ -94,6 +94,16 @@ describe("layoutText", () => {
 		expect(floored.size).toBeCloseTo(40);
 	});
 
+	it("ends with an ellipsis what won't fit even at its smallest", () => {
+		const l = layoutText({
+			...box,
+			text: "abcd ".repeat(400).trim(),
+			fit: "shrink",
+		});
+		expect(l.lines.length * l.size).toBeLessThanOrEqual(100.01);
+		expect(l.lines.at(-1)?.chars.at(-1)).toBe("…");
+	});
+
 	it("bottom-aligns a block in its box", () => {
 		const l = layoutText({ ...box, h: 300, text: "ab", valign: "bottom" });
 		expect(l.lines[0]?.y).toBeCloseTo(280);

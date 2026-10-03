@@ -193,6 +193,9 @@ export function layoutText(box: TextBox): TextLayout {
 		}
 	}
 	const lh = size * box.lineHeight;
+	if (box.fit === "shrink") {
+		lines = { ...lines, lines: clampLines(box, lines.lines, size, lh) };
+	}
 	const k = size / 1000;
 	const glyphH = (box.face.asc - box.face.desc) * k;
 	const blockH = lines.lines.length * lh;
@@ -222,6 +225,29 @@ export function layoutText(box: TextBox): TextLayout {
 			};
 		}),
 	};
+}
+
+/**
+ * A "shrink" box that still overflows at its smallest size keeps the lines
+ * that fit and ends the last one with an ellipsis, rather than running
+ * over whatever sits below it. Long free text, like {details}, needs this.
+ */
+function clampLines(
+	box: TextBox,
+	lines: string[],
+	size: number,
+	lh: number,
+): string[] {
+	const room = Math.max(1, Math.floor((box.h + 0.01) / lh));
+	if (lines.length <= room) return lines;
+	const kept = lines.slice(0, room);
+	let last = `${kept[room - 1] ?? ""}`.trimEnd();
+	const fits = (t: string) =>
+		run(box.face, t, size, box.tracking).width <= box.w + 0.01;
+	while (last && !fits(`${last}…`))
+		last = Array.from(last).slice(0, -1).join("").trimEnd();
+	kept[room - 1] = `${last}…`;
+	return kept;
 }
 
 /** Characters the face can't print, which would come out as boxes on paper. */
