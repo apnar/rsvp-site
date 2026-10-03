@@ -43,6 +43,15 @@ describe("parseAddresses", () => {
 			{ email: "bare@x.com", name: null },
 		]);
 	});
+
+	it("reads the format the guest box suggests, one per line", () => {
+		expect(
+			parseAddresses("Linh Nguyen <linh@x.com>\nMarcus Taylor <Marcus@X.com>"),
+		).toEqual([
+			{ email: "linh@x.com", name: "Linh Nguyen" },
+			{ email: "marcus@x.com", name: "Marcus Taylor" },
+		]);
+	});
 });
 
 describe("roleOf", () => {
@@ -85,6 +94,13 @@ describe("parseGuestLines", () => {
 				{ email: "bo@x.com", name: null },
 			],
 			names: ["The Parks", "Coach Dana"],
+		});
+	});
+
+	it("reads the paper box's suggestion: name and email, or a name alone", () => {
+		expect(parseGuestLines("Linh Nguyen <linh@x.com>\nGrandma Rose")).toEqual({
+			addresses: [{ email: "linh@x.com", name: "Linh Nguyen" }],
+			names: ["Grandma Rose"],
 		});
 	});
 });

@@ -575,15 +575,15 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 								}
 							/>
 							<label htmlFor="new-emails" className="sr-only">
-								Email addresses
+								Guests to invite
 							</label>
 							<Textarea
 								id="new-emails"
 								value={emails}
 								placeholder={
 									form.paper
-										? "One per line: an email, or just a name for a card-only guest"
-										: "Add emails, separated by commas or new lines"
+										? "First Last <email@domain.com>\nFirst Last\n\nOne guest per line: a name and email, or just a name for a card-only guest."
+										: "First Last <email@domain.com>\nFirst Last <email@domain.com>\n\nOne guest per line (or separated by commas). An email alone works too."
 								}
 								onChange={(ev) => setEmails(ev.target.value)}
 							/>
