@@ -31,11 +31,23 @@ const DROP_EVENTS = new Map<string, UnsubscribeReason>([
 
 type BrevoEvent = { event?: string; email?: string; reason?: string };
 
+/** Workers' addition to Web Crypto, missing from the DOM's types. */
+const subtle = crypto.subtle as SubtleCrypto & {
+	timingSafeEqual(a: ArrayBufferView, b: ArrayBufferView): boolean;
+};
+
+/** Compared in constant time, so the answer's timing can't spell it out. */
+function sameSecret(given: string, expected: string): boolean {
+	const a = new TextEncoder().encode(given);
+	const b = new TextEncoder().encode(expected);
+	return a.byteLength === b.byteLength && subtle.timingSafeEqual(a, b);
+}
+
 brevoWebhook.post("/", async (c) => {
 	const secret = env.BREVO_WEBHOOK_SECRET;
 	if (!secret) return c.text("Not found.", 404);
 	const auth = c.req.header("authorization") ?? "";
-	if (auth !== `Bearer ${secret}`) return c.text("Forbidden.", 403);
+	if (!sameSecret(auth, `Bearer ${secret}`)) return c.text("Forbidden.", 403);
 
 	let payload: unknown;
 	try {

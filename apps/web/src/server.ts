@@ -22,9 +22,23 @@ const entry = createServerEntry({
 			url.host = canonical.host;
 			return Response.redirect(url.toString(), 301);
 		}
-		return handler.fetch(request, requestOpts);
+		return withSecurityHeaders(await handler.fetch(request, requestOpts));
 	},
 });
+
+/**
+ * Nothing here is meant to be framed (the RSVP buttons and the admin pages
+ * would be clickjacking bait), sniffed into another type, or announced in
+ * a Referer to other sites.
+ */
+function withSecurityHeaders(response: Response): Response {
+	const out = new Response(response.body, response);
+	out.headers.set("x-frame-options", "DENY");
+	out.headers.set("content-security-policy", "frame-ancestors 'none'");
+	out.headers.set("x-content-type-options", "nosniff");
+	out.headers.set("referrer-policy", "same-origin");
+	return out;
+}
 
 export default {
 	fetch: entry.fetch,
