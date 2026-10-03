@@ -61,6 +61,11 @@ import { client, orpc } from "@/utils/orpc";
  */
 export const Route = createFileRoute("/_auth/e/$eventId/design")({
 	ssr: false,
+	// Never show a remembered load while a fresh one runs: the designer
+	// decides from it whether there is a design to open or a template to
+	// pick, and an earlier visit's "nothing saved yet" would send a host
+	// who has since saved straight back to the templates.
+	gcTime: 0,
 	loader: async ({ context, params }) => {
 		const input = { input: { eventId: params.eventId } };
 		const [design, event, faces] = await Promise.all([
@@ -145,6 +150,14 @@ function Designer() {
 	// design must never reset work in progress.
 	const [epoch, setEpoch] = useState(0);
 	const copied = useRef(new Map<string, Placed>());
+	// A saved design that arrives after the page did (a refetch) opens, as
+	// long as nothing has been picked yet.
+	useEffect(() => {
+		if (start && !first) {
+			setFirst(start);
+			setPicking(false);
+		}
+	}, [start, first]);
 
 	return (
 		<div className="flex flex-col">
@@ -582,7 +595,10 @@ function Editor({
 					? "Saved. Guests see this card."
 					: "Saved. Guests still see the plain invitation.",
 			);
-			await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: orpc.events.key() }),
+				queryClient.invalidateQueries({ queryKey: orpc.designs.key() }),
+			]);
 		} catch (error) {
 			toast.error((error as Error).message);
 		} finally {
