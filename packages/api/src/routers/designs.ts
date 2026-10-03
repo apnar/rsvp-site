@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import { needsQr } from "../design-rules";
 import { savedDesign } from "../designs-store";
-import { designValues } from "../events";
+import { designValues, NOBODY } from "../events";
 import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { sniffImage } from "../image-type";
 import { hostProcedure } from "../index";
@@ -353,7 +353,7 @@ export const designsRouter = {
 			const row = context.event;
 			const saved = await savedDesign(context.db, row.id);
 			if (!saved?.doc) return null;
-			const values = designValues(row, "");
+			const values = designValues(row, NOBODY);
 			const basis = basisOf(saved.version, values);
 			return {
 				doc: saved.doc,

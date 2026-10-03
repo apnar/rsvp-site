@@ -2,13 +2,14 @@ import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import { APIError } from "@rsvp-site/auth/errors";
 import { findPerson } from "@rsvp-site/db/people";
-import { account, user } from "@rsvp-site/db/schema/auth";
+import { account } from "@rsvp-site/db/schema/auth";
 import { resubscribe, unsubscribe } from "@rsvp-site/db/status";
 import { rotateLinkToken } from "@rsvp-site/db/tokens";
 import { getMailer } from "@rsvp-site/email/worker";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
+import { detailsPatch, saveDetails } from "../details";
 import { personProcedure } from "../index";
 
 /**
@@ -22,6 +23,15 @@ export const accountRouter = {
 		return {
 			id: me.id,
 			name: me.name,
+			firstName: me.firstName,
+			lastName: me.lastName,
+			phone: me.phone,
+			addressLine1: me.addressLine1,
+			addressLine2: me.addressLine2,
+			city: me.city,
+			region: me.region,
+			postalCode: me.postalCode,
+			country: me.country,
 			email: me.email,
 			emailVerified: me.emailVerified,
 			role: me.role,
@@ -30,14 +40,14 @@ export const accountRouter = {
 		};
 	}),
 
-	/** The name hosts and other guests see. */
-	setName: personProcedure
-		.input(z.object({ name: z.string().trim().min(1, "Name?").max(60) }))
+	/**
+	 * Their own details: the name hosts and other guests see, and the phone
+	 * and address their hosts may use. Signing in made the record theirs.
+	 */
+	setDetails: personProcedure
+		.input(detailsPatch)
 		.handler(async ({ context, input }) => {
-			await context.db
-				.update(user)
-				.set({ name: input.name })
-				.where(eq(user.id, context.me.id));
+			await saveDetails(context.db, context.me.id, input, false);
 			return { ok: true };
 		}),
 

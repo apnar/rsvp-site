@@ -2,20 +2,22 @@ import { waitUntil } from "cloudflare:workers";
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import type { Db } from "@rsvp-site/db";
+import { splitName } from "@rsvp-site/db/names";
 import {
 	findOrCreatePeople,
 	findPerson,
 	findReachablePersonByEmail,
 	listPeople,
 } from "@rsvp-site/db/people";
-import { ROLES, user } from "@rsvp-site/db/schema/auth";
+import { ROLES } from "@rsvp-site/db/schema/auth";
 import { eventGuest, eventHost } from "@rsvp-site/db/schema/event";
 import { deactivate, reactivate, setRole } from "@rsvp-site/db/status";
 import { rotateLinkToken } from "@rsvp-site/db/tokens";
 import { getMailer } from "@rsvp-site/email/worker";
-import { count, eq } from "drizzle-orm";
+import { count } from "drizzle-orm";
 import { z } from "zod";
 
+import { detailsPatch, saveDetails, saveEmail } from "../details";
 import { adminProcedure, publicProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
 import { sendWelcome } from "../mail";
@@ -73,7 +75,7 @@ export const peopleRouter = {
 		.handler(async ({ context, input }) => {
 			const [person] = await findOrCreatePeople(
 				context.db,
-				[input.email],
+				[{ email: input.email, ...splitName(input.name ?? "") }],
 				"admin",
 			);
 			if (!person) {
@@ -83,12 +85,6 @@ export const peopleRouter = {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "They are deactivated. Reactivate them first.",
 				});
-			}
-			if (person.created && input.name) {
-				await context.db
-					.update(user)
-					.set({ name: input.name })
-					.where(eq(user.id, person.id));
 			}
 			if (input.role !== "user" || person.created) {
 				await setRole(context.db, person.id, input.role);
@@ -104,6 +100,38 @@ export const peopleRouter = {
 				emailed: outcome.ok,
 				dryRun: getMailer().dryRun,
 			};
+		}),
+
+	/** Change any of somebody's details, signed in or not. */
+	update: adminProcedure
+		.input(detailsPatch.extend({ userId: idSchema }))
+		.handler(async ({ context, input }) => {
+			const { userId, ...patch } = input;
+			await requirePerson(context.db, userId);
+			await saveDetails(context.db, userId, patch, false);
+			return { ok: true };
+		}),
+
+	/**
+	 * Change somebody's address. An address that is already somebody else's
+	 * is refused: merging two people is done by hand, not guessed at.
+	 */
+	setEmail: adminProcedure
+		.input(z.object({ userId: idSchema, email: emailSchema }))
+		.handler(async ({ context, input }) => {
+			await requirePerson(context.db, input.userId);
+			const outcome = await saveEmail(
+				context.db,
+				input.userId,
+				input.email,
+				false,
+			);
+			if (outcome === "taken") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Somebody else already has that address.",
+				});
+			}
+			return { ok: true };
 		}),
 
 	/**

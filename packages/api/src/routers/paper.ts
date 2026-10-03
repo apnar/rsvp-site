@@ -3,7 +3,7 @@ import { findPaperInvite } from "@rsvp-site/db/paper";
 import { z } from "zod";
 
 import { answer, answerInput } from "../answers";
-import { type Access, findEvent, notFound } from "../events";
+import { type Access, type Addressee, findEvent, notFound } from "../events";
 import { publicProcedure } from "../index";
 import { invitePayload } from "./events/invite-payload";
 
@@ -23,14 +23,19 @@ const tokenInput = z.object({ token: z.string().min(1).max(64) });
 async function paperAccess(
 	db: Db,
 	token: string,
-): Promise<{ access: Access; who: { id: string; name: string } }> {
+): Promise<{ access: Access; who: Addressee & { id: string } }> {
 	const found = await findPaperInvite(db, token);
 	if (!found || found.status === "deactivated") throw notFound();
 	const row = await findEvent(db, found.guest.eventId);
 	if (!row || row.status === "draft") throw notFound();
 	return {
 		access: { event: row, isHost: false, guest: found.guest },
-		who: { id: found.guest.userId, name: found.name },
+		who: {
+			id: found.guest.userId,
+			name: found.name,
+			firstName: found.firstName,
+			lastName: found.lastName,
+		},
 	};
 }
 

@@ -12,8 +12,10 @@ import {
 
 import { normalizeEmail } from "./addresses";
 import { batchAll, insertChunks, mapChunks } from "./batch";
+import { detailColumns, fillBlanks } from "./details";
 import { isUniqueViolation } from "./errors";
 import type { Db } from "./index";
+import { displayName, nameFor } from "./names";
 import { roleOf } from "./roles";
 import { NO_EMAIL_DOMAIN, type PersonSource, user } from "./schema/auth";
 import { newToken } from "./tokens";
@@ -52,20 +54,27 @@ export function mailableWhere() {
  */
 export async function createNameOnlyPeople(
 	db: Db,
-	names: readonly string[],
+	people: readonly Typed[],
 	source: PersonSource,
 ): Promise<{ id: string; name: string }[]> {
-	const rows = names.map((name) => ({
-		id: crypto.randomUUID(),
-		name,
-		email: `${crypto.randomUUID()}@${NO_EMAIL_DOMAIN}`,
-		emailVerified: false,
-		noEmail: true,
-		role: "user",
-		source,
-		linkToken: newToken(),
-		unsubscribeToken: newToken(),
-	}));
+	const rows = people.map((p) => {
+		const firstName = p.firstName ?? "";
+		const lastName = p.lastName ?? "";
+		return {
+			id: crypto.randomUUID(),
+			name: displayName(firstName, lastName),
+			firstName,
+			lastName,
+			phone: p.phone ?? null,
+			email: `${crypto.randomUUID()}@${NO_EMAIL_DOMAIN}`,
+			emailVerified: false,
+			noEmail: true,
+			role: "user",
+			source,
+			linkToken: newToken(),
+			unsubscribeToken: newToken(),
+		};
+	});
 	await batchAll(
 		db,
 		insertChunks(user, rows).map((slice) => db.insert(user).values(slice)),
@@ -107,6 +116,8 @@ export async function setRealEmail(
 const personColumns = {
 	id: user.id,
 	name: user.name,
+	...detailColumns,
+	claimedAt: user.claimedAt,
 	email: user.email,
 	emailVerified: user.emailVerified,
 	role: user.role,
@@ -224,6 +235,13 @@ export type FoundPerson = Awaited<ReturnType<typeof selectByEmail>>[number] & {
 	created: boolean;
 };
 
+/** What somebody typed about a person, all of it optional. */
+export type Typed = {
+	firstName?: string;
+	lastName?: string;
+	phone?: string | null;
+};
+
 /**
  * The people behind these addresses, creating a plain `user` for each one
  * nobody has used yet. This is how anybody gets an account now: a host types
@@ -233,17 +251,19 @@ export type FoundPerson = Awaited<ReturnType<typeof selectByEmail>>[number] & {
  * `createUser`, which is an admin endpoint that refuses hosts. Both tokens
  * go in with the insert, so there is no moment when a person exists with no
  * way in -- the same promise `stampTokens` keeps for rows Better Auth makes.
- * Deactivated people come back as found, never revived; callers skip them.
+ * A name or phone typed for somebody who already exists only fills a blank
+ * (`fillBlanks`). Deactivated people come back as found, never revived;
+ * callers skip them.
  */
 export async function findOrCreatePeople(
 	db: Db,
-	entries: readonly (string | { email: string; name: string | null })[],
+	entries: readonly (string | ({ email: string } & Typed))[],
 	source: PersonSource,
 ): Promise<FoundPerson[]> {
-	const names = new Map<string, string>();
+	const typed = new Map<string, Typed>();
 	for (const e of entries) {
-		if (typeof e !== "string" && e.name)
-			names.set(normalizeEmail(e.email), e.name);
+		if (typeof e !== "string" && (e.firstName || e.phone))
+			typed.set(normalizeEmail(e.email), e);
 	}
 	const wanted = [
 		...new Set(
@@ -254,16 +274,24 @@ export async function findOrCreatePeople(
 	const before = await selectByEmail(db, wanted);
 	const known = new Set(before.map((p) => p.email));
 	const missing = wanted.filter((email) => !known.has(email));
-	const newRows = missing.map((email) => ({
-		id: crypto.randomUUID(),
-		email,
-		name: names.get(email) ?? email.split("@")[0] ?? email,
-		emailVerified: false,
-		role: "user",
-		source,
-		linkToken: newToken(),
-		unsubscribeToken: newToken(),
-	}));
+	const newRows = missing.map((email) => {
+		const t = typed.get(email);
+		const firstName = t?.firstName ?? "";
+		const lastName = t?.lastName ?? "";
+		return {
+			id: crypto.randomUUID(),
+			email,
+			name: nameFor(firstName, lastName, email),
+			firstName,
+			lastName,
+			phone: t?.phone ?? null,
+			emailVerified: false,
+			role: "user",
+			source,
+			linkToken: newToken(),
+			unsubscribeToken: newToken(),
+		};
+	});
 	// One batch: one round trip, and a long list lands whole or not at all.
 	await batchAll(
 		db,
@@ -275,6 +303,15 @@ export async function findOrCreatePeople(
 				// dropped and the re-read below finds the winner's.
 				.onConflictDoNothing({ target: user.email }),
 		),
+	);
+	await fillBlanks(
+		db,
+		before.flatMap((p) => {
+			const t = typed.get(p.email);
+			return t && p.status !== "deactivated"
+				? [{ id: p.id, email: p.email, typed: t }]
+				: [];
+		}),
 	);
 	const after = missing.length ? await selectByEmail(db, wanted) : before;
 	const order = new Map(wanted.map((email, i) => [email, i]));

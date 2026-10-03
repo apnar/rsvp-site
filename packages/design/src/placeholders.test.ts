@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { fill, SAMPLE_VALUES, usesPlaceholder } from "./placeholders";
+import {
+	fill,
+	SAMPLE_VALUES,
+	usesGuest,
+	usesPlaceholder,
+} from "./placeholders";
 
 describe("fill", () => {
 	it("fills all eight", () => {
@@ -49,6 +54,8 @@ describe("basisOf", () => {
 		const { basisOf } = await import("./basis");
 		const a = basisOf(3, SAMPLE_VALUES);
 		expect(basisOf(3, { ...SAMPLE_VALUES, guest: "Someone else" })).toBe(a);
+		expect(basisOf(3, { ...SAMPLE_VALUES, guestFirst: "Bo" })).toBe(a);
+		expect(basisOf(3, { ...SAMPLE_VALUES, guestLast: "Li" })).toBe(a);
 		expect(basisOf(4, SAMPLE_VALUES)).not.toBe(a);
 		expect(basisOf(3, { ...SAMPLE_VALUES, date: "Sunday" })).not.toBe(a);
 	});
@@ -95,4 +102,44 @@ describe("{guest's}", () => {
 		expect(usesPlaceholder("At {guest's} place", "guest")).toBe(true);
 		expect(usesPlaceholder("At {guest} place", "guest's")).toBe(true);
 	});
+});
+
+describe("{first name} and {last name}", () => {
+	it("fill from the split name, in any spelling", () => {
+		expect(fill("{first name} {last name}", SAMPLE_VALUES)).toBe("Linh Nguyen");
+		expect(fill("{ First  Name }/{LAST NAME}", SAMPLE_VALUES)).toBe(
+			"Linh/Nguyen",
+		);
+	});
+
+	it("make the first name possessive, with either apostrophe", () => {
+		expect(fill("{first name's}", SAMPLE_VALUES)).toBe("Linh’s");
+		expect(fill("{ First  Name’s }", SAMPLE_VALUES)).toBe("Linh’s");
+		expect(fill("{first name}", SAMPLE_VALUES)).toBe("Linh");
+	});
+
+	it("leave {guest} alone", () => {
+		expect(fill("{guest} {guest's}", SAMPLE_VALUES)).toBe(
+			"The Nguyens The Nguyens’",
+		);
+	});
+});
+
+describe("usesGuest", () => {
+	it.each([
+		"{guest}",
+		"{ Guest’s }",
+		"Hi {first name}",
+		"{first name's} place",
+		"Mr. {last name}",
+	])("is true for %s", (text) => {
+		expect(usesGuest(text)).toBe(true);
+	});
+
+	it.each(["{title}", "{guests}", "{first names}", "plain"])(
+		"is false for %s",
+		(text) => {
+			expect(usesGuest(text)).toBe(false);
+		},
+	);
 });

@@ -100,11 +100,17 @@ export function capitalize(text: string): string {
  * only the query needs folding.
  */
 export function matchesPerson(
-	p: { name: string; email: string },
+	p: { name: string; email: string; phone?: string | null },
 	query: string,
 ): boolean {
 	const q = query.trim().toLowerCase();
-	return !q || p.name.toLowerCase().includes(q) || p.email.includes(q);
+	if (!q) return true;
+	if (p.name.toLowerCase().includes(q) || p.email.includes(q)) return true;
+	// Phones are stored as digits, so a typed "301-555" finds them by digits.
+	const digits = q.replace(/\D/g, "");
+	return (
+		digits.length >= 3 && (p.phone ?? "").replace(/\D/g, "").includes(digits)
+	);
 }
 
 /** "The Nguyens, Priya S., the Okafors, Coach Dana and 38 more" */

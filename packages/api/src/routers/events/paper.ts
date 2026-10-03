@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { firstNameOf } from "@rsvp-site/db/names";
 import { user } from "@rsvp-site/db/schema/auth";
 import { eventGuest } from "@rsvp-site/db/schema/event";
 import { paperCardUrl } from "@rsvp-site/email/links";
@@ -11,6 +12,7 @@ import {
 	designValues,
 	guestsOf,
 	labelsOf,
+	NOBODY,
 	potluckOf,
 } from "../../events";
 import { withHostEvent } from "../../host-event";
@@ -51,6 +53,8 @@ export const paperRouter = {
 				.select({
 					id: eventGuest.id,
 					name: user.name,
+					firstName: user.firstName,
+					lastName: user.lastName,
 					token: eventGuest.paperToken,
 				})
 				.from(eventGuest)
@@ -62,7 +66,7 @@ export const paperRouter = {
 			return {
 				// Laid out in the browser, which has the time and the fonts.
 				design,
-				values: designValues(row, ""),
+				values: designValues(row, NOBODY),
 				event: {
 					title: row.title,
 					hostLine: row.hostLine,
@@ -77,6 +81,8 @@ export const paperRouter = {
 								{
 									id: r.id,
 									name: r.name,
+									firstName: firstNameOf(r),
+									lastName: r.lastName,
 									url: paperCardUrl(siteUrl(), r.token),
 								},
 							]

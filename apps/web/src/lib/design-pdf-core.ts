@@ -64,7 +64,13 @@ const BLEED_PT = 9;
 const SLUG_PT = 18;
 const MARK_PT = 12;
 
-export type DesignGuest = { id: string; name: string; url: string };
+export type DesignGuest = {
+	id: string;
+	name: string;
+	firstName: string;
+	lastName: string;
+	url: string;
+};
 
 type DesignAssets = {
 	/** Metrics, for the layout. */
@@ -686,7 +692,7 @@ function runsOf(
 
 export async function layoutDesignInvites(input: {
 	design: Design;
-	/** The event's facts; {guest} is filled per card. */
+	/** The event's facts; {guest}, {first name} and {last name} are filled per card. */
 	values: Values;
 	guests: DesignGuest[];
 	layout: PrintLayout;
@@ -701,16 +707,21 @@ export async function layoutDesignInvites(input: {
 	const bleed = design.bleed && !sheetNoBleed;
 	const b = bleed ? BLEED_PT : 0;
 	const s = W / 1000;
-	const sceneFor = (name: string) =>
+	const sceneFor = (guest: DesignGuest | undefined) =>
 		layoutCard(design, {
-			values: { ...input.values, guest: name },
+			values: {
+				...input.values,
+				guest: guest?.name ?? "",
+				guestFirst: guest?.firstName ?? "",
+				guestLast: guest?.lastName ?? "",
+			},
 			mode: "paper",
 			faces: assets.faces,
 			bleed,
 		});
 
 	// The shared runs, each drawn once on a page of a scratch document.
-	const base = sceneFor(input.guests[0]?.name ?? "");
+	const base = sceneFor(input.guests[0]);
 	const runs = runsOf(base.nodes);
 	const scratch = await PDFDocument.create();
 	scratch.registerFontkit(fontkit);
@@ -745,7 +756,7 @@ export async function layoutDesignInvites(input: {
 			.entries()) {
 			const slot = sheet.slots[slotIndex];
 			if (!slot) continue;
-			const scene = sceneFor(guest.name);
+			const scene = sceneFor(guest);
 			let piece = 0;
 			for (const run of runsOf(scene.nodes)) {
 				if (!run.dynamic) {

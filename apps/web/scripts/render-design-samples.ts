@@ -77,16 +77,22 @@ const guests = [
 	{
 		id: "1",
 		name: "The Nguyens",
+		firstName: "Linh",
+		lastName: "Nguyen",
 		url: card("0123456789abcdef"),
 	},
 	{
 		id: "2",
 		name: "Priya",
+		firstName: "Priya",
+		lastName: "",
 		url: card("fedcba9876543210"),
 	},
 	{
 		id: "3",
 		name: "Grandma and Grandpa Featherstonehaugh-Whittingham",
+		firstName: "Grandma",
+		lastName: "Featherstonehaugh-Whittingham",
 		url: card("0000000000000000"),
 	},
 ];

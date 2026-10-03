@@ -1,11 +1,14 @@
+import { formatPhone } from "@rsvp-site/db/phone";
 import { canHost } from "@rsvp-site/db/roles";
+import { possessive } from "@rsvp-site/design/placeholders";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Avatar } from "@/components/brand";
@@ -13,6 +16,10 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
 import { NativeSelect } from "@/components/native-select";
 import { Page, PageHead, Panel } from "@/components/page";
+import {
+	type DetailsPatch,
+	PersonDetailsDialog,
+} from "@/components/person-details";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { initials, matchesPerson, plural } from "@/lib/format";
@@ -138,22 +145,214 @@ function AddressBook({ book }: { book: Book }) {
 	);
 }
 
+/**
+ * A value that turns into input(s) on click. One edit at a time; Enter or
+ * leaving the field saves, Esc puts it back. The pencil is there for
+ * keyboard users, who can't click the text.
+ */
+function InlineEdit({
+	label,
+	display,
+	inputs,
+	onSave,
+	editable,
+	className,
+}: {
+	label: string;
+	display: ReactNode;
+	inputs: { key: string; label: string; value: string; type?: string }[];
+	onSave: (values: Record<string, string>) => Promise<unknown>;
+	editable: boolean;
+	className?: string;
+}) {
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState<Record<string, string>>({});
+	const [busy, setBusy] = useState(false);
+	const pencil = useRef<HTMLButtonElement>(null);
+
+	if (!editable) {
+		return <span className={cn("block truncate", className)}>{display}</span>;
+	}
+
+	const start = () => {
+		setDraft(Object.fromEntries(inputs.map((i) => [i.key, i.value])));
+		setEditing(true);
+	};
+	const stop = () => {
+		setEditing(false);
+		// Put focus back where the keyboard was.
+		requestAnimationFrame(() => pencil.current?.focus());
+	};
+	const commit = async () => {
+		const changed = Object.fromEntries(
+			inputs
+				.filter((i) => (draft[i.key] ?? "").trim() !== i.value.trim())
+				.map((i) => [i.key, draft[i.key] ?? ""]),
+		);
+		if (Object.keys(changed).length === 0) return setEditing(false);
+		setBusy(true);
+		try {
+			await onSave(changed);
+			setEditing(false);
+		} catch {
+			// Already toasted; keep the input so it can be fixed.
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	if (editing) {
+		return (
+			<fieldset
+				aria-label={label}
+				className="m-0 flex gap-1.5 border-0 p-0"
+				onBlur={(e) => {
+					if (!e.currentTarget.contains(e.relatedTarget) && !busy) {
+						void commit();
+					}
+				}}
+			>
+				{inputs.map((i, n) => (
+					<Input
+						key={i.key}
+						aria-label={i.label}
+						type={i.type}
+						value={draft[i.key] ?? ""}
+						disabled={busy}
+						autoFocus={n === 0}
+						onChange={(e) =>
+							setDraft((d) => ({ ...d, [i.key]: e.target.value }))
+						}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								void commit();
+							} else if (e.key === "Escape") {
+								e.preventDefault();
+								stop();
+							}
+						}}
+						className="min-h-8 min-w-0 flex-1 rounded-[10px] px-2.5 py-1 text-[14px]"
+					/>
+				))}
+			</fieldset>
+		);
+	}
+	return (
+		<span className={cn("flex items-center gap-1", className)}>
+			<button
+				type="button"
+				onClick={start}
+				className="min-w-0 cursor-text truncate rounded text-left hover:underline"
+			>
+				{display}
+			</button>
+			<button
+				ref={pencil}
+				type="button"
+				onClick={start}
+				aria-label={`Edit ${label}`}
+				className="cursor-pointer text-[12px] text-haze hover:text-ink"
+			>
+				<Pencil aria-hidden className="size-3" />
+			</button>
+		</span>
+	);
+}
+
 /** One person, with a chip per group to put them in or take them out. */
 function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 	const setMember = useMutation(orpc.contacts.setMember.mutationOptions());
 	const remove = useMutation(orpc.contacts.removePerson.mutationOptions());
+	const update = useMutation(orpc.contacts.update.mutationOptions());
+	const setEmail = useMutation(
+		orpc.contacts.setEmail.mutationOptions({
+			onSuccess: (r) => {
+				if (r.moved) {
+					toast.success(
+						`That address is ${possessive(r.name)}, so this entry is theirs now.`,
+					);
+				}
+			},
+		}),
+	);
+	const [open, setOpen] = useState(false);
+	// The server's rule (`canEditDetails`), said the way it applies here.
+	const reason = p.claimed
+		? "They've signed in, so their details are theirs to change."
+		: "Only they or an admin can change a host's details.";
+	const saveDetails = (patch: DetailsPatch) =>
+		update.mutateAsync({ userId: p.userId, ...patch });
+	const saveEmail = (email: string) =>
+		setEmail.mutateAsync({ userId: p.userId, email });
 	return (
 		<li className="flex flex-col gap-2 border-line border-t py-3">
 			<div className="flex items-center gap-3">
 				<Avatar initials={initials(p.name)} className="size-9 text-[12px]" />
 				<span className="min-w-0 flex-1">
-					<b className="block truncate">{p.name}</b>
-					<span className="block truncate text-[13px] text-haze">
-						{p.noEmail
-							? "No email · paper only"
-							: `${p.email}${p.unsubscribed ? " · no email" : ""}`}
-					</span>
+					<InlineEdit
+						label={`${p.name}'s name`}
+						editable={p.editable}
+						display={<b>{p.name}</b>}
+						className="block"
+						inputs={[
+							{
+								key: "firstName",
+								label: "First name",
+								value: p.firstName ?? "",
+							},
+							{ key: "lastName", label: "Last name", value: p.lastName ?? "" },
+						]}
+						onSave={saveDetails}
+					/>
+					<InlineEdit
+						label={`${p.name}'s email`}
+						editable={p.editable}
+						className="text-[13px] text-haze"
+						display={
+							p.noEmail
+								? "No email · paper only"
+								: `${p.email}${p.unsubscribed ? " · no email" : ""}`
+						}
+						inputs={[
+							{
+								key: "email",
+								label: "Email",
+								type: "email",
+								value: p.noEmail ? "" : p.email,
+							},
+						]}
+						onSave={(v) => saveEmail(v.email ?? "")}
+					/>
+					{p.editable || p.phone ? (
+						<InlineEdit
+							label={`${p.name}'s phone`}
+							editable={p.editable}
+							className="text-[13px] text-haze"
+							display={p.phone ? formatPhone(p.phone) : "Add a phone"}
+							inputs={[
+								{
+									key: "phone",
+									label: "Mobile phone",
+									type: "tel",
+									value: formatPhone(p.phone),
+								},
+							]}
+							onSave={saveDetails}
+						/>
+					) : null}
+					{p.claimed ? (
+						<span className="block text-[12px] text-haze">signed in</span>
+					) : null}
 				</span>
+				<Button
+					variant="ghost"
+					size="sm"
+					onClick={() => setOpen(true)}
+					aria-label={`Edit ${p.name}`}
+				>
+					Edit
+				</Button>
 				<ConfirmAction
 					size="xs"
 					confirm="Remove"
@@ -168,6 +367,17 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 					}}
 				/>
 			</div>
+			{open ? (
+				<PersonDetailsDialog
+					person={p}
+					editable={p.editable}
+					lockedReason={reason}
+					pending={update.isPending || setEmail.isPending}
+					onSave={saveDetails}
+					onSaveEmail={saveEmail}
+					onClose={() => setOpen(false)}
+				/>
+			) : null}
 			{groups.length > 0 ? (
 				<div className="flex flex-wrap gap-1.5 pl-12">
 					{groups.map((g) => {
@@ -222,19 +432,20 @@ function AddPeople() {
 			}}
 		>
 			<h2 className="m-0 text-[20px]">Add people</h2>
-			<Field
-				label="Emails, separated by commas or new lines"
-				htmlFor="book-add"
-			>
+			<Field label="People, one per line" htmlFor="book-add">
 				<Textarea
 					id="book-add"
 					value={emails}
-					placeholder='"Linh Nguyen" <linh@example.com>, priya@example.com'
+					placeholder={
+						"Linh Nguyen <linh@example.com> 301-555-1212\nPriya Shah"
+					}
 					onChange={(e) => setEmails(e.target.value)}
 				/>
 			</Field>
 			<p className="m-0 text-[13px] text-haze">
-				Nobody is invited or emailed; they just join your book.
+				Name, email and phone, one person per line. A name alone is fine for
+				paper invitations. Nobody is invited or emailed; they just join your
+				book.
 			</p>
 			<Button
 				type="submit"

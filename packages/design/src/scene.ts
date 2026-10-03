@@ -10,7 +10,7 @@ import type { Faces } from "./faces";
 import { type FaceKey, type FontId, faceFor, family } from "./fonts";
 import { type LinearEnds, linearEnds, sortedStops } from "./paint";
 import { confetti, type PatternShape, type Tile, tileOf } from "./patterns";
-import { textContent, usesPlaceholder, type Values } from "./placeholders";
+import { textContent, usesGuest, type Values } from "./placeholders";
 import {
 	bleedUnits,
 	CARD_W,
@@ -142,11 +142,7 @@ export function shows(el: Element, mode: Mode): boolean {
 	if (el.type === "qr") return mode === "paper";
 	if (mode === "paper") return el.show !== "screen";
 	if (el.show === "paper") return false;
-	if (
-		mode === "image" &&
-		el.type === "text" &&
-		usesPlaceholder(el.text, "guest")
-	) {
+	if (mode === "image" && el.type === "text" && usesGuest(el.text)) {
 		return false;
 	}
 	return true;
@@ -373,7 +369,7 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 			const laid = hit.laid;
 			return {
 				...common,
-				dynamic: opts.mode === "paper" && usesPlaceholder(el.text, "guest"),
+				dynamic: opts.mode === "paper" && usesGuest(el.text),
 				k: "text",
 				face: key,
 				family: family(el.font),

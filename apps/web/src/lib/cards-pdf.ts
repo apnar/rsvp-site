@@ -6,7 +6,8 @@
 import type { Values } from "@rsvp-site/design/placeholders";
 import type { Design } from "@rsvp-site/design/schema";
 
-import type { PaperEvent, PaperGuest } from "./paper-pdf-core";
+import type { DesignGuest } from "./design-pdf-core";
+import type { PaperEvent } from "./paper-pdf-core";
 import {
 	layoutsFor,
 	PAPER_SIZES,
@@ -24,7 +25,7 @@ export type CardsSource =
 
 export async function buildCardsPdf(input: {
 	source: CardsSource;
-	guests: PaperGuest[];
+	guests: DesignGuest[];
 	print: Print;
 	title: string;
 }): Promise<Uint8Array> {

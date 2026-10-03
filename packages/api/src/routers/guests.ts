@@ -1,6 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
-import { parseAddresses, parseGuestLines } from "@rsvp-site/db/addresses";
+import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import { newPaperToken } from "@rsvp-site/db/paper";
 import {
@@ -91,10 +91,11 @@ export const guestsRouter = {
 			const row = context.event;
 			// A paper event may also take bare names, one per line: people
 			// with no address who will only ever have the card.
-			const lines = row.paper
-				? parseGuestLines(input.emails)
-				: { addresses: parseAddresses(input.emails), names: [] };
-			const typed = lines.addresses;
+			const parsed = parseGuests(input.emails);
+			const typed = parsed.flatMap((t) =>
+				t.email ? [{ ...t, email: t.email }] : [],
+			);
+			const names = row.paper ? parsed.filter((t) => !t.email) : [];
 
 			// Groups only count if they are the caller's own -- or anybody's, for
 			// an admin -- so a guessed group id reveals and adds nothing.
@@ -127,14 +128,14 @@ export const guestsRouter = {
 			// those counted once. Checked before anybody is created, so a
 			// refused request leaves no accounts behind.
 			const known = new Set([...picked, ...members.map((m) => m.userId)]);
-			const total = typed.length + lines.names.length + known.size;
+			const total = typed.length + names.length + known.size;
 			if (total > 500) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: `That's ${total} people, counting groups and picks. Add them 500 at a time.`,
 				});
 			}
 			const people = await findOrCreatePeople(context.db, typed, "host");
-			const named = await createNameOnlyPeople(context.db, lines.names, "host");
+			const named = await createNameOnlyPeople(context.db, names, "host");
 
 			const usable = people.filter((p) => p.status !== "deactivated");
 			const rows = [

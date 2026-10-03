@@ -99,6 +99,8 @@ function valuesOf(
 		rsvpBy: labels.deadlineLabel ?? SAMPLE_VALUES.rsvpBy,
 		details: event.details || SAMPLE_VALUES.details,
 		guest: SAMPLE_VALUES.guest,
+		guestFirst: SAMPLE_VALUES.guestFirst,
+		guestLast: SAMPLE_VALUES.guestLast,
 	};
 }
 
@@ -111,6 +113,8 @@ const RAW_VALUES: Values = {
 	rsvpBy: "{rsvp by}",
 	details: "{details}",
 	guest: "{guest}",
+	guestFirst: "{first name}",
+	guestLast: "{last name}",
 };
 
 function Designer() {
@@ -296,6 +300,8 @@ function Editor({
 				source: { design: doc, values },
 				guests: [
 					{
+						firstName: values.guestFirst,
+						lastName: values.guestLast,
 						id: "sample",
 						name: values.guest,
 						// A real key's length, so the code prints at its real size.

@@ -25,7 +25,13 @@ export function newPaperToken(): string {
  */
 export async function findPaperInvite(db: Db, token: string) {
 	const row = await db
-		.select({ guest: eventGuest, name: user.name, status: user.status })
+		.select({
+			guest: eventGuest,
+			name: user.name,
+			firstName: user.firstName,
+			lastName: user.lastName,
+			status: user.status,
+		})
 		.from(eventGuest)
 		.innerJoin(user, eq(user.id, eventGuest.userId))
 		.where(eq(eventGuest.paperToken, token.toLowerCase()))

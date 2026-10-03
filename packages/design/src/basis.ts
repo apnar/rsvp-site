@@ -16,6 +16,6 @@ function fnv(s: string): string {
 }
 
 export function basisOf(version: number, values: Values): string {
-	const { guest: _, ...facts } = values;
+	const { guest: _g, guestFirst: _f, guestLast: _l, ...facts } = values;
 	return `${version}.${fnv(JSON.stringify(facts))}`;
 }

@@ -1,13 +1,16 @@
 import type { Db } from "@rsvp-site/db";
+import { firstNameOf } from "@rsvp-site/db/names";
 
 import {
 	type Access,
+	type Addressee,
 	designedCard,
 	guestsOf,
 	hostsOf,
 	labelsOf,
 	NO_POTLUCK,
 	potluckOf,
+	YOUR_GUEST,
 } from "../../events";
 import { inviteRefusal, invitesLeft } from "../../guest-invites";
 import { headcount, tally } from "../../headcount";
@@ -16,7 +19,7 @@ import { startsAt } from "../../schedule";
 /** The page a guest sees. Hosts see the same page, with everything. */
 export async function invitePayload(
 	db: Db,
-	me: { id: string; name: string },
+	me: Addressee & { id: string },
 	access: Access,
 ) {
 	const row = access.event;
@@ -26,7 +29,7 @@ export async function invitePayload(
 		guestsOf(db, row.id),
 		row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
 		hostsOf(db, row.id),
-		designedCard(db, row, "web", access.guest ? me.name : "your guest"),
+		designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
 	]);
 	const totals = tally(guests);
 	const mine = access.guest;
@@ -80,6 +83,7 @@ export async function invitePayload(
 					note: mine.note,
 					claims: myClaims,
 					name: me.name,
+					firstName: firstNameOf(me),
 					friends: myFriends.map((g) => ({
 						guestId: g.id,
 						name: g.name,

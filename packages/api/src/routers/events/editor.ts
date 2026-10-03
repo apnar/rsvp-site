@@ -26,6 +26,7 @@ import {
 	labelsOf,
 	potluckOf,
 	stillComing,
+	YOUR_GUEST,
 } from "../../events";
 import { notInvitedCount, stillComingCount } from "../../headcount";
 import {
@@ -99,7 +100,7 @@ export const editorRouter = {
 					.from(eventDesign)
 					.where(eq(eventDesign.eventId, row.id))
 					.get(),
-				designedCard(context.db, row, "web", "your guest"),
+				designedCard(context.db, row, "web", YOUR_GUEST),
 			]);
 			return {
 				event: row,

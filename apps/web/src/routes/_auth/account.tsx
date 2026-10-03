@@ -10,11 +10,16 @@ import {
 	useNavigate,
 	useRouter,
 } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ChangeEvent, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field, SettingRow, Switch } from "@/components/controls";
 import { Page, PageHead, Panel } from "@/components/page";
+import {
+	changedDetails,
+	type DetailKey,
+	draftOf,
+} from "@/components/person-details";
 import { pageTitle } from "@/content/site";
 import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/utils/orpc";
@@ -65,9 +70,10 @@ function AccountPage() {
 function NameAndEmail() {
 	const router = useRouter();
 	const { data: me } = useSuspenseQuery(meQuery());
-	const [name, setName] = useState(me.name);
+	const [draft, setDraft] = useState(() => draftOf(me));
+	const patch = changedDetails(me, draft);
 	const save = useMutation(
-		orpc.account.setName.mutationOptions({
+		orpc.account.setDetails.mutationOptions({
 			onSuccess: async () => {
 				toast.success("Saved.");
 				// The header reads the name from the session, which is not a
@@ -76,23 +82,30 @@ function NameAndEmail() {
 			},
 		}),
 	);
+	const field = (k: DetailKey, max = 100) => ({
+		id: `me-${k}`,
+		value: draft[k],
+		maxLength: max,
+		onChange: (e: ChangeEvent<HTMLInputElement>) =>
+			setDraft((d) => ({ ...d, [k]: e.target.value })),
+	});
 	return (
 		<Panel
 			as="form"
 			onSubmit={(e) => {
 				e.preventDefault();
-				save.mutate({ name });
+				save.mutate(patch);
 			}}
 		>
 			<h2 className="m-0 text-[20px]">You</h2>
-			<Field label="Your name, as hosts and guests see it" htmlFor="name">
-				<Input
-					id="name"
-					value={name}
-					maxLength={60}
-					onChange={(e) => setName(e.target.value)}
-				/>
-			</Field>
+			<div className="grid grid-cols-2 gap-3">
+				<Field label="First name" htmlFor="me-firstName">
+					<Input {...field("firstName", 60)} autoComplete="given-name" />
+				</Field>
+				<Field label="Last name" htmlFor="me-lastName">
+					<Input {...field("lastName", 60)} autoComplete="family-name" />
+				</Field>
+			</div>
 			<Field label="Email" htmlFor="email">
 				<Input
 					id="email"
@@ -101,11 +114,43 @@ function NameAndEmail() {
 					disabled
 				/>
 			</Field>
+			<Field label="Mobile phone" htmlFor="me-phone">
+				<Input {...field("phone", 40)} type="tel" autoComplete="tel" />
+			</Field>
+			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+				<legend className="mb-2 p-0 font-bold text-[14px]">
+					Mailing address
+				</legend>
+				<Field label="Street address" htmlFor="me-addressLine1">
+					<Input {...field("addressLine1")} autoComplete="address-line1" />
+				</Field>
+				<Field label="Apt / suite" htmlFor="me-addressLine2">
+					<Input {...field("addressLine2")} autoComplete="address-line2" />
+				</Field>
+				<div className="grid grid-cols-2 gap-3">
+					<Field label="City" htmlFor="me-city">
+						<Input {...field("city", 60)} autoComplete="address-level2" />
+					</Field>
+					<Field label="State / region" htmlFor="me-region">
+						<Input {...field("region", 60)} autoComplete="address-level1" />
+					</Field>
+					<Field label="ZIP / postal code" htmlFor="me-postalCode">
+						<Input {...field("postalCode", 20)} autoComplete="postal-code" />
+					</Field>
+					<Field label="Country" htmlFor="me-country">
+						<Input {...field("country", 60)} autoComplete="country-name" />
+					</Field>
+				</div>
+			</fieldset>
 			<p className="m-0 text-[14px] text-haze">{ROLE_LINE[me.role]}</p>
 			<Button
 				type="submit"
 				className="self-start"
-				disabled={save.isPending || !name.trim() || name === me.name}
+				disabled={
+					save.isPending ||
+					Object.keys(patch).length === 0 ||
+					!draft.firstName.trim()
+				}
 			>
 				Save
 			</Button>

@@ -1,4 +1,5 @@
 import { createDb } from "@rsvp-site/db";
+import { markClaimed } from "@rsvp-site/db/details";
 import * as schema from "@rsvp-site/db/schema/auth";
 import { stampTokens } from "@rsvp-site/db/tokens";
 import { resetPasswordEmail, scrubEmails } from "@rsvp-site/email";
@@ -59,6 +60,21 @@ export function createAuth() {
 							// here would surface as a failed sign-up with a real row
 							// already written. ensureLinkToken picks up the slack.
 							console.error("token stamp failed", error);
+						}
+					},
+				},
+			},
+			session: {
+				create: {
+					// The first session claims the record: from then on only they
+					// and an admin change their details. Here rather than in each
+					// way in (the emailed link, a password, a reset), so a new one
+					// can't forget it. Never fails the sign-in.
+					after: async (session) => {
+						try {
+							await markClaimed(db, session.userId);
+						} catch (error) {
+							console.error("claim stamp failed", error);
 						}
 					},
 				},

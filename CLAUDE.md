@@ -23,7 +23,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0015 applied |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0017 applied |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
 | Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` sign-in and "email me my link", and per person on guests inviting friends |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
@@ -367,6 +367,15 @@ decide → claim → send.
 - Self-service paths (`resubscribe`, the unsubscribe form, the Brevo
   webhook) never touch a deactivated row; the guards are in the `where`
   clauses. Turning email back on also calls `getMailer().unblock`.
+- Details (`first_name`, `last_name`, `phone`, the address columns) are
+  the person's own, written only through `details.ts` and
+  `findOrCreatePeople`; `name` is always rewritten beside the pair
+  (`nameFor`), since Better Auth and every email read it. `claimed_at` is
+  the first sign-in (the session-create hook): before it a host with them
+  in their book may edit a plain guest's details, after it only they and
+  an admin. `canEditDetails` decides and the UPDATE repeats the condition.
+  Pastes only fill blanks (`fillBlanks`). Phones are stored by
+  `normalizePhone` and shown by `formatPhone`.
 - `link_token` and `unsubscribe_token` are stamped at insert by
   `findOrCreatePeople`, and by the Better Auth `user.create.after` hook
   (`stampTokens`) for rows it makes, so nobody exists with no way in.

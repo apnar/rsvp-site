@@ -47,6 +47,29 @@ describe("layoutCard", async () => {
 		expect(scene.nodes.map((n) => n.id)).not.toContain("greeting");
 	});
 
+	it("treats {first name} like {guest}: per card on paper, off the shared image", () => {
+		const first = {
+			...design,
+			elements: design.elements.map((el) =>
+				el.type === "text" && el.id === "greeting"
+					? { ...el, text: "Hi {first name}" }
+					: el,
+			),
+		};
+		const paper = layoutCard(first, {
+			values: SAMPLE_VALUES,
+			mode: "paper",
+			faces,
+		});
+		expect(paper.nodes.find((n) => n.id === "greeting")?.dynamic).toBe(true);
+		const image = layoutCard(first, {
+			values: SAMPLE_VALUES,
+			mode: "image",
+			faces,
+		});
+		expect(image.nodes.map((n) => n.id)).not.toContain("greeting");
+	});
+
 	it("reaches into the bleed only on paper that asks for it", () => {
 		const web = layoutCard(design, {
 			values: SAMPLE_VALUES,

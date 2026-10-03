@@ -62,8 +62,31 @@ export const NO_EMAIL_DOMAIN = "no-email.invalid";
  */
 export const user = sqliteTable("user", {
 	id: text("id").primaryKey(),
+	/**
+	 * What everybody reads: always written alongside the name pair, as
+	 * `displayName(first, last)` or, with neither, the address's local part.
+	 * Better Auth needs it, and every email greets by it.
+	 */
 	name: text("name").notNull(),
+	firstName: text("first_name").notNull().default(""),
+	lastName: text("last_name").notNull().default(""),
 	email: text("email").notNull().unique(),
+	/** Normalized by `normalizePhone`: `+13015551212`. */
+	phone: text("phone"),
+	addressLine1: text("address_line1").notNull().default(""),
+	addressLine2: text("address_line2").notNull().default(""),
+	city: text("city").notNull().default(""),
+	region: text("region").notNull().default(""),
+	postalCode: text("postal_code").notNull().default(""),
+	country: text("country").notNull().default(""),
+	/**
+	 * When they first signed in. Until then a host who has them in their
+	 * address book may correct their details; from then on the record is
+	 * theirs, and only they and an admin change it. Stamped by the session
+	 * hook in packages/auth, so every way in counts and a paper card's QR
+	 * code (which opens no session) does not.
+	 */
+	claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
 	emailVerified: integer("email_verified", { mode: "boolean" })
 		.default(false)
 		.notNull(),

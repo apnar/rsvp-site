@@ -12,6 +12,10 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
 import { NativeSelect } from "@/components/native-select";
 import { Panel } from "@/components/page";
+import {
+	type DetailsPatch,
+	PersonDetailsDialog,
+} from "@/components/person-details";
 import { PillTabs } from "@/components/pill-tabs";
 import { DRY_RUN_SUFFIX, pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
@@ -212,6 +216,9 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 			},
 		}),
 	);
+	const update = useMutation(orpc.people.update.mutationOptions());
+	const setEmail = useMutation(orpc.people.setEmail.mutationOptions());
+	const [editing, setEditing] = useState(false);
 	const deactivate = useMutation(orpc.people.deactivate.mutationOptions());
 	const reactivate = useMutation(orpc.people.reactivate.mutationOptions());
 	const off = p.status === "deactivated";
@@ -279,6 +286,14 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 						<Button
 							variant="ghost"
 							size="sm"
+							onClick={() => setEditing(true)}
+							aria-label={`Edit ${p.name}`}
+						>
+							Edit
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
 							disabled={sendLink.isPending}
 							onClick={() => sendLink.mutate({ userId: p.id })}
 						>
@@ -315,6 +330,18 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 					</>
 				)}
 			</span>
+			{editing ? (
+				<PersonDetailsDialog
+					person={p}
+					editable
+					pending={update.isPending || setEmail.isPending}
+					onSave={(patch: DetailsPatch) =>
+						update.mutateAsync({ userId: p.id, ...patch })
+					}
+					onSaveEmail={(email) => setEmail.mutateAsync({ userId: p.id, email })}
+					onClose={() => setEditing(false)}
+				/>
+			) : null}
 		</div>
 	);
 }

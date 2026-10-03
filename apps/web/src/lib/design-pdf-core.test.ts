@@ -61,12 +61,22 @@ const guests = [
 	{
 		id: "1",
 		name: "The Nguyens",
+		firstName: "Linh",
+		lastName: "Nguyen",
 		url: "https://rsvp.botch.com/p/a",
 	},
-	{ id: "2", name: "Priya", url: "https://rsvp.botch.com/p/b" },
+	{
+		id: "2",
+		name: "Priya",
+		firstName: "Priya",
+		lastName: "",
+		url: "https://rsvp.botch.com/p/b",
+	},
 	{
 		id: "3",
 		name: "Coach Dana",
+		firstName: "Coach",
+		lastName: "Dana",
 		url: "https://rsvp.botch.com/p/c",
 	},
 ];

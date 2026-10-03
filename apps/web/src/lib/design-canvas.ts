@@ -231,7 +231,7 @@ export async function renderCard(
 ): Promise<Blob> {
 	const faces = await loadFaces(facesOf(design));
 	const scene = layoutCard(design, {
-		values: { ...values, guest: "" },
+		values: { ...values, guest: "", guestFirst: "", guestLast: "" },
 		mode: "image",
 		faces,
 	});

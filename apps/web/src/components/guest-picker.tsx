@@ -192,8 +192,8 @@ export function GuestPicker({
 				value={value.emails}
 				placeholder={
 					paper
-						? "First Last <email@domain.com>\nFirst Last\n\nOne guest per line: a name and email, or just a name for a card-only guest."
-						: "First Last <email@domain.com>\nFirst Last <email@domain.com>\n\nOne guest per line (or separated by commas). An email alone works too."
+						? "Linh Nguyen <linh@example.com> 301-555-1212\nPriya Shah\n\nOne guest per line: name, email, phone. A name alone works for a card-only guest."
+						: "Linh Nguyen <linh@example.com> 301-555-1212\npriya@example.com\n\nOne guest per line: name, email, phone. An email alone works too."
 				}
 				onChange={(ev) => onChange({ ...value, emails: ev.target.value })}
 			/>

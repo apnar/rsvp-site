@@ -120,6 +120,13 @@
 			"when": 1791036107752,
 			"tag": "0016_guest_invites_sent",
 			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "6",
+			"when": 1791043970628,
+			"tag": "0017_person_details",
+			"breakpoints": true
 		}
 	]
 }

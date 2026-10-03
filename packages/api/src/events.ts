@@ -6,6 +6,7 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { mapChunks } from "@rsvp-site/db/batch";
+import { firstNameOf } from "@rsvp-site/db/names";
 import type { Person } from "@rsvp-site/db/people";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
@@ -418,8 +419,21 @@ export function labelsOf(row: EventRow) {
 	};
 }
 
+/** Who a card is addressed to, as its placeholders read them. */
+export type Addressee = { name: string; firstName: string; lastName: string };
+
+/** A card for nobody in particular: the shared picture, a sheet of blanks. */
+export const NOBODY: Addressee = { name: "", firstName: "", lastName: "" };
+
+/** What a host previewing the page sees where a guest's name would be. */
+export const YOUR_GUEST: Addressee = {
+	name: "your guest",
+	firstName: "your guest",
+	lastName: "",
+};
+
 /** The event's facts as a design's placeholders read them. */
-export function designValues(row: EventRow, guest: string): Values {
+export function designValues(row: EventRow, guest: Addressee): Values {
 	const labels = labelsOf(row);
 	return {
 		title: row.title,
@@ -429,7 +443,9 @@ export function designValues(row: EventRow, guest: string): Values {
 		host: row.hostLine,
 		rsvpBy: labels.deadlineLabel ?? "",
 		details: row.details,
-		guest,
+		guest: guest.name,
+		guestFirst: firstNameOf(guest),
+		guestLast: guest.lastName,
 	};
 }
 
@@ -452,7 +468,7 @@ export async function designedCard(
 	db: Db,
 	row: EventRow,
 	mode: Mode,
-	guest: string,
+	guest: Addressee,
 ): Promise<{ scene: Scene; version: number } | null> {
 	const saved = await designedDoc(db, row);
 	if (!saved) return null;

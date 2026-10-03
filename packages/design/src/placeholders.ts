@@ -14,6 +14,9 @@ export const PLACEHOLDERS = [
 	"details",
 	"guest",
 	"guest's",
+	"first name",
+	"first name's",
+	"last name",
 ] as const;
 
 export type Placeholder = (typeof PLACEHOLDERS)[number];
@@ -32,9 +35,16 @@ export type Values = {
 	details: string;
 	/** The addressee on paper, the signed-in guest on the page. */
 	guest: string;
+	/** The addressee's first name; {guest} stays the full display name. */
+	guestFirst: string;
+	/** The addressee's last name, empty for a guest with only one name. */
+	guestLast: string;
 };
 
-/** Which value each placeholder reads; {guest's} is {guest}, made possessive. */
+/**
+ * Which value each placeholder reads; {guest's} and {first name's} are
+ * {guest} and {first name}, made possessive.
+ */
 const KEY: Record<Placeholder, keyof Values> = {
 	title: "title",
 	date: "date",
@@ -45,12 +55,20 @@ const KEY: Record<Placeholder, keyof Values> = {
 	details: "details",
 	guest: "guest",
 	"guest's": "guest",
+	"first name": "guestFirst",
+	"first name's": "guestFirst",
+	"last name": "guestLast",
 };
 
-// {guest's} is matched before {guest}, with a straight or curly apostrophe
-// (a phone's keyboard types the curly one).
+const POSSESSIVE: ReadonlySet<Placeholder> = new Set([
+	"guest's",
+	"first name's",
+]);
+
+// The possessive forms are matched before the plain ones, with a straight
+// or curly apostrophe (a phone's keyboard types the curly one).
 const PATTERN =
-	/\{\s*(title|date|time|location|host|rsvp\s*by|details|guest['’]s|guest)\s*\}/gi;
+	/\{\s*(title|date|time|location|host|rsvp\s*by|details|guest['’]s|guest|first\s*name['’]s|first\s*name|last\s*name)\s*\}/gi;
 
 function nameOf(raw: string): Placeholder {
 	return raw
@@ -79,7 +97,7 @@ export function fill(text: string, values: Values): string {
 	return text.replace(PATTERN, (_, raw: string) => {
 		const name = nameOf(raw);
 		const value = values[KEY[name]];
-		return name === "guest's" ? possessive(value) : value;
+		return POSSESSIVE.has(name) ? possessive(value) : value;
 	});
 }
 
@@ -100,6 +118,19 @@ export function usesPlaceholder(text: string, name: Placeholder): boolean {
 	return false;
 }
 
+/**
+ * Whether a text reads anything about the addressee, so it differs per
+ * guest: the page hides it in image mode and paper draws it per card.
+ */
+export function usesGuest(text: string): boolean {
+	for (const m of text.matchAll(PATTERN)) {
+		const key = KEY[nameOf(m[1] ?? "")];
+		if (key === "guest" || key === "guestFirst" || key === "guestLast")
+			return true;
+	}
+	return false;
+}
+
 /** Stand-ins for the designer and the template picker. */
 export const SAMPLE_VALUES: Values = {
 	title: "Ava turns nine",
@@ -111,4 +142,6 @@ export const SAMPLE_VALUES: Values = {
 	details:
 		"Bring a blanket and a camp chair. Popcorn bar, then the movie under the stars.",
 	guest: "The Nguyens",
+	guestFirst: "Linh",
+	guestLast: "Nguyen",
 };

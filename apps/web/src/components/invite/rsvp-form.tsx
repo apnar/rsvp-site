@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { AnswerPicker, Field, Stepper } from "@/components/controls";
 import type { Outputs } from "@/lib/api-types";
-import { firstName } from "@/lib/format";
 import { PotluckClaims } from "./potluck-claims";
 import type { Invite } from "./types";
 
@@ -113,9 +112,7 @@ export function RsvpForm({
 						RSVP by {e.deadlineLabel}
 					</span>
 				) : null}
-				<h2 className="mt-1.5 mb-0 text-[30px]">
-					You coming, {firstName(me.name)}?
-				</h2>
+				<h2 className="mt-1.5 mb-0 text-[30px]">You coming, {me.firstName}?</h2>
 			</div>
 			<AnswerPicker value={answer} onChange={setAnswer} pending={pending} />
 
