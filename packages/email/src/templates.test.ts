@@ -13,6 +13,7 @@ import {
 	dayBeforeEmail,
 	deadlineReminderEmail,
 	type EventFacts,
+	type HostTotals,
 	hostAlertEmail,
 	hostDigestEmail,
 	inviteEmail,
@@ -20,7 +21,6 @@ import {
 	messageEmail,
 	nudgeEmail,
 	resetPasswordEmail,
-	type Totals,
 	updateEmail,
 	welcomeEmail,
 } from "./templates";
@@ -40,7 +40,7 @@ const facts: EventFacts = {
 	siteUrl: site,
 };
 
-const totals: Totals = {
+const totals: HostTotals = {
 	yes: 3,
 	maybe: 1,
 	no: 1,

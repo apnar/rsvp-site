@@ -4,7 +4,32 @@
  */
 
 import type { EventRow } from "./events";
+import { startsAt } from "./schedule";
 import { formatDate, formatTimeRange } from "./time";
+
+/**
+ * A paper event whose host has not pressed "Start emails" yet: no guest
+ * email of any kind may go, so the printed card arrives first.
+ */
+export function emailsHeld(row: Pick<EventRow, "paper" | "emailsReleasedAt">) {
+	return row.paper && row.emailsReleasedAt === null;
+}
+
+/**
+ * Why nothing can be asked of an event's guests right now, or null while it
+ * is open: published, not canceled, not started. One wording per refusal,
+ * so answering, inviting a friend and nudging cannot drift apart.
+ */
+export function openRefusal(
+	row: Pick<EventRow, "status" | "date" | "startTime">,
+	now: number = Date.now(),
+): string | null {
+	if (row.status === "canceled") return "It's been canceled.";
+	if (row.status !== "published") return "It hasn't gone out yet.";
+	const start = startsAt(row);
+	if (start && now >= start.getTime()) return "It's already started.";
+	return null;
+}
 
 /** Fields a guest would want to hear changed. Details and notes are not. */
 export const NOTIFY_FIELDS = [

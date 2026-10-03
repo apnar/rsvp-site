@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
-import { newToken, normalizeEmail } from "@rsvp-site/db/people";
+import { normalizeEmail } from "@rsvp-site/db/addresses";
+import { batchAll } from "@rsvp-site/db/batch";
 import { canHost } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
@@ -10,6 +11,7 @@ import {
 	HOST_ALERTS,
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
+import { newToken } from "@rsvp-site/db/tokens";
 import { updateEmail } from "@rsvp-site/email";
 import { siteUrl } from "@rsvp-site/email/worker";
 import { and, eq, notInArray } from "drizzle-orm";
@@ -26,7 +28,11 @@ import {
 	stillComing,
 } from "../../events";
 import { notInvitedCount, stillComingCount } from "../../headcount";
-import { withHostEvent, withLiveHostEvent } from "../../host-event";
+import {
+	liveHostEvent,
+	withHostEvent,
+	withLiveHostEvent,
+} from "../../host-event";
 import { hostProcedure } from "../../index";
 import { emailSchema, idInput, idSchema } from "../../inputs";
 import { eventFacts, sendToList } from "../../mail";
@@ -97,6 +103,7 @@ export const editorRouter = {
 			]);
 			return {
 				event: row,
+				emailsHeld: emailsHeld(row),
 				hasDesign: designed !== undefined,
 				card: card?.scene ?? null,
 				labels: labelsOf(row),
@@ -143,14 +150,9 @@ export const editorRouter = {
 	 */
 	update: hostProcedure
 		.input(idInput.extend({ fields: eventFields.partial() }))
-		.use(withHostEvent)
+		.use(liveHostEvent("It's canceled. Make a new one instead."))
 		.handler(async ({ context, input }) => {
 			const before = context.event;
-			if (before.status === "canceled") {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "It's canceled. Make a new one instead.",
-				});
-			}
 			const fields = { ...input.fields };
 			// Answers close and reminders fire off the date, so only a draft
 			// may be without one.
@@ -171,18 +173,24 @@ export const editorRouter = {
 			}
 			const moved = movesGuestFacts(before, fields);
 			const rearm = rearmFor(before, fields);
-			await context.db
-				.update(event)
-				.set({ ...fields, ...rearm })
-				.where(eq(event.id, before.id));
-			if (fields.paper === false && before.paper) {
-				// Cards printed for a draft that goes back to email must not keep
-				// signing anybody in.
-				await context.db
-					.update(eventGuest)
-					.set({ paperToken: null })
-					.where(eq(eventGuest.eventId, before.id));
-			}
+			// One batch (atomic on D1): the edit and, when a draft goes back to
+			// email, the end of its printed keys land together or not at all.
+			await batchAll(context.db, [
+				context.db
+					.update(event)
+					.set({ ...fields, ...rearm })
+					.where(eq(event.id, before.id)),
+				...(fields.paper === false && before.paper
+					? [
+							// Cards printed for a draft that goes back to email must not
+							// keep signing anybody in.
+							context.db
+								.update(eventGuest)
+								.set({ paperToken: null })
+								.where(eq(eventGuest.eventId, before.id)),
+						]
+					: []),
+			]);
 			const after = (await findEvent(context.db, before.id)) ?? before;
 
 			let notified = 0;

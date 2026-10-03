@@ -41,17 +41,22 @@ export type ScheduleEvent = {
 
 export type DueKind = "deadline_reminder" | "day_before" | "host_digest";
 
-export type Due = {
-	kind: DueKind;
-	/** `send` when its moment is now; `skip` to stamp it resolved quietly. */
-	action: "send" | "skip";
-	/**
-	 * For the digest, the slot being claimed: today's DIGEST_TIME. The claim
-	 * only succeeds while the stored stamp is older, which is what keeps a
-	 * repeating email to once a day.
-	 */
-	slot?: Date;
-};
+export type Due =
+	| {
+			kind: Exclude<DueKind, "host_digest">;
+			/** `send` when its moment is now; `skip` to stamp it resolved quietly. */
+			action: "send" | "skip";
+	  }
+	| {
+			kind: "host_digest";
+			action: "send";
+			/**
+			 * The slot being claimed: today's DIGEST_TIME. The claim only
+			 * succeeds while the stored stamp is older, which is what keeps a
+			 * repeating email to once a day.
+			 */
+			slot: Date;
+	  };
 
 /** When the event starts, or null when it has no date yet. */
 export function startsAt(e: Pick<ScheduleEvent, "date" | "startTime">) {

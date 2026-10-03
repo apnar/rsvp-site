@@ -1,6 +1,6 @@
 import { createDb } from "@rsvp-site/db";
-import { stampTokens } from "@rsvp-site/db/people";
 import * as schema from "@rsvp-site/db/schema/auth";
+import { stampTokens } from "@rsvp-site/db/tokens";
 import { resetPasswordEmail, scrubEmails } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { env } from "@rsvp-site/env/server";

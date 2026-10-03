@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
-import { accessTo, byDate, cardsFor } from "../../events";
+import { accessTo, byDate, cardsFor, cleanTheme } from "../../events";
 import { deciding, openSlots } from "../../headcount";
 import { hostProcedure, personProcedure } from "../../index";
 import { idInput } from "../../inputs";
@@ -39,7 +39,7 @@ export const dashboardRouter = {
 		)
 		.handler(async ({ context, input }) => {
 			const all = input.all && isAdmin(context.me);
-			const rows = all
+			const found = all
 				? await context.db.select().from(event).all()
 				: await context.db
 						.select(eventColumns)
@@ -47,6 +47,8 @@ export const dashboardRouter = {
 						.innerJoin(eventHost, eq(eventHost.eventId, event.id))
 						.where(eq(eventHost.userId, context.me.id))
 						.all();
+			// The theme is unchecked JSON until it has been through the parse.
+			const rows = found.map(cleanTheme);
 			const today = todayOnSite();
 			const cards = await cardsFor(context.db, rows);
 			const upcoming = cards
@@ -117,14 +119,16 @@ export const dashboardRouter = {
 
 	/** The caller's own invitations, upcoming first, for "My invites". */
 	invites: personProcedure.handler(async ({ context }) => {
-		const rows = await context.db
-			.select({ ...eventColumns, response: eventGuest.response })
-			.from(eventGuest)
-			.innerJoin(event, eq(event.id, eventGuest.eventId))
-			.where(
-				and(eq(eventGuest.userId, context.me.id), ne(event.status, "draft")),
-			)
-			.all();
+		const rows = (
+			await context.db
+				.select({ ...eventColumns, response: eventGuest.response })
+				.from(eventGuest)
+				.innerJoin(event, eq(event.id, eventGuest.eventId))
+				.where(
+					and(eq(eventGuest.userId, context.me.id), ne(event.status, "draft")),
+				)
+				.all()
+		).map(cleanTheme);
 		const cards = await cardsFor(context.db, rows);
 		const today = todayOnSite();
 		const response = new Map(rows.map((r) => [r.id, r.response]));

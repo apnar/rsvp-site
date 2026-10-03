@@ -1,10 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 
-import { insertChunks, mapChunks } from "./batch";
-import type { createDb } from "./index";
+import { batchAll, insertChunks, mapChunks } from "./batch";
+import type { Db } from "./index";
 import { contact } from "./schema/contact";
-
-type Db = ReturnType<typeof createDb>;
 
 /**
  * Put people in a host's address book. Called wherever a host adds somebody
@@ -19,9 +17,12 @@ export async function remember(
 ): Promise<void> {
 	const ids = [...new Set(userIds)].filter((id) => id !== ownerId);
 	const rows = ids.map((userId) => ({ ownerId, userId }));
-	for (const slice of insertChunks(contact, rows)) {
-		await db.insert(contact).values(slice).onConflictDoNothing();
-	}
+	await batchAll(
+		db,
+		insertChunks(contact, rows).map((slice) =>
+			db.insert(contact).values(slice).onConflictDoNothing(),
+		),
+	);
 }
 
 /** Which of these people are in the host's book; the rest are refused. */

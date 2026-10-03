@@ -1,6 +1,6 @@
 import { createDb } from "@rsvp-site/db";
-import { unsubscribe } from "@rsvp-site/db/people";
 import type { UnsubscribeReason } from "@rsvp-site/db/schema/auth";
+import { unsubscribe } from "@rsvp-site/db/status";
 import { redactEmail } from "@rsvp-site/email";
 import { env } from "@rsvp-site/env/server";
 import { Hono } from "hono";

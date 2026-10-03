@@ -1,43 +1,40 @@
 import type { Db } from "@rsvp-site/db";
 
 import {
-	type accessTo,
+	type Access,
 	designedCard,
-	emailsHeld,
 	guestsOf,
 	hostsOf,
 	labelsOf,
+	NO_POTLUCK,
 	potluckOf,
 } from "../../events";
-import { canInviteOthers, invitesLeft } from "../../guest-invites";
+import { inviteRefusal, invitesLeft } from "../../guest-invites";
 import { headcount, tally } from "../../headcount";
 import { startsAt } from "../../schedule";
 
 /** The page a guest sees. Hosts see the same page, with everything. */
 export async function invitePayload(
 	db: Db,
-	me: { id: string },
-	access: Awaited<ReturnType<typeof accessTo>>,
+	me: { id: string; name: string },
+	access: Access,
 ) {
 	const row = access.event;
-	const [guests, potluck, hosts] = await Promise.all([
+	// The card says the viewer's own name, which is the caller's: so the
+	// layout needs nothing from the other reads and runs beside them.
+	const [guests, potluck, hosts, card] = await Promise.all([
 		guestsOf(db, row.id),
-		row.potluckEnabled
-			? potluckOf(db, row.id)
-			: Promise.resolve({ lines: [], claims: [] }),
+		row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
 		hostsOf(db, row.id),
+		designedCard(db, row, "web", access.guest ? me.name : "your guest"),
 	]);
-	const myName = access.guest
-		? (guests.find((g) => g.id === access.guest?.id)?.name ?? "")
-		: "your guest";
-	const card = await designedCard(db, row, "web", myName);
 	const totals = tally(guests);
 	const mine = access.guest;
 	const myFriends = mine
 		? guests.filter((g) => g.source === "guest" && g.addedBy === mine.userId)
 		: [];
 	const myClaims = mine
-		? potluck.claims.filter((c) => c.guestId === mine.id).map((c) => c.itemId)
+		? (potluck.byGuest.get(mine.id) ?? []).map((c) => c.itemId)
 		: [];
 	const showNames = row.showGuestNames || access.isHost;
 	const names = (answer: "yes" | "maybe") =>
@@ -82,7 +79,7 @@ export async function invitePayload(
 					dietary: mine.dietary,
 					note: mine.note,
 					claims: myClaims,
-					name: guests.find((g) => g.id === mine.id)?.name ?? "",
+					name: me.name,
 					friends: myFriends.map((g) => ({
 						guestId: g.id,
 						name: g.name,
@@ -90,12 +87,8 @@ export async function invitePayload(
 						response: g.response,
 					})),
 					// Asked here rather than on the page, so the form shows only when
-					// the API would take it.
-					canInvite:
-						row.guestInvites &&
-						row.status === "published" &&
-						!emailsHeld(row) &&
-						canInviteOthers(mine.source),
+					// the API would take it: the same rule `guests.inviteFriend` applies.
+					canInvite: inviteRefusal(row, mine) === null,
 					invitesLeft: invitesLeft(row.guestInviteLimit, mine.invitesSent),
 				}
 			: null,

@@ -59,7 +59,7 @@ export const mailRouter = {
 					rendered,
 					{
 						tags: ["message", "test"],
-						params: { name: me.name, unsubscribeUrl, key },
+						params: { unsubscribeUrl, key },
 					},
 				);
 				if (!outcome.ok) {

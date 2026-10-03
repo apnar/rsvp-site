@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
 	csvCell,
 	describeChanges,
+	emailsHeld,
 	movesGuestFacts,
+	openRefusal,
 	rearmFor,
 } from "./event-rules";
+import { requireOpen } from "./events";
+import { siteInstant } from "./time";
 
 const base = {
 	date: "2026-10-24" as string | null,
@@ -109,5 +113,58 @@ describe("rearmFor", () => {
 			dayBeforeAt: null,
 			deadlineReminderAt: null,
 		});
+	});
+});
+
+describe("openRefusal and requireOpen", () => {
+	const live = {
+		status: "published" as const,
+		date: "2026-10-24" as string | null,
+		startTime: "18:00" as string | null,
+	};
+	const before = siteInstant("2026-10-24", "17:59").getTime();
+	const after = siteInstant("2026-10-24", "18:00").getTime();
+
+	it("is open while published and not yet started", () => {
+		expect(openRefusal(live, before)).toBeNull();
+		expect(() => requireOpen(live, before)).not.toThrow();
+	});
+
+	it("says one thing for each way it is closed", () => {
+		expect(openRefusal({ ...live, status: "canceled" }, before)).toBe(
+			"It's been canceled.",
+		);
+		expect(openRefusal({ ...live, status: "draft" }, before)).toBe(
+			"It hasn't gone out yet.",
+		);
+		expect(openRefusal(live, after)).toBe("It's already started.");
+		expect(() => requireOpen(live, after)).toThrow("It's already started.");
+	});
+
+	it("is closed by a cancellation even after it started", () => {
+		expect(openRefusal({ ...live, status: "canceled" }, after)).toBe(
+			"It's been canceled.",
+		);
+	});
+
+	it("stays open without a date, which has no start to pass", () => {
+		expect(openRefusal({ ...live, date: null }, after)).toBeNull();
+	});
+
+	it("counts a date with no time as starting at midnight", () => {
+		const midnight = siteInstant("2026-10-24", "00:00").getTime();
+		expect(openRefusal({ ...live, startTime: null }, midnight)).toBe(
+			"It's already started.",
+		);
+	});
+});
+
+describe("emailsHeld", () => {
+	it("holds a paper event until its emails are released", () => {
+		expect(emailsHeld({ paper: true, emailsReleasedAt: null })).toBe(true);
+		expect(emailsHeld({ paper: true, emailsReleasedAt: new Date() })).toBe(
+			false,
+		);
+		expect(emailsHeld({ paper: false, emailsReleasedAt: null })).toBe(false);
 	});
 });

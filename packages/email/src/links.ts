@@ -37,19 +37,13 @@ export function rsvpLink(
 }
 
 /**
- * A cover photo's public address. Deliberately carries no token: images are
- * fetched by mail proxies and pasted around, and anyone holding the URL has
- * seen nothing but a picture.
+ * A stored picture's public address: a cover photo (`covers/<random>.<ext>`)
+ * or a design's card image (`designs/<event id>/card-<random>.jpg`).
+ * Deliberately carries no token: images are fetched by mail proxies and
+ * pasted around, and anyone holding the URL has seen nothing but a picture.
  */
-export function coverUrl(siteUrl: string, coverKey: string): string {
-	// Keys are `covers/<random>.<ext>`, so this is /api/covers/<random>.<ext>.
-	return `${siteUrl}/api/${coverKey}`;
-}
-
-/** A design's card image, public for the same reasons as a cover. */
-export function cardUrl(siteUrl: string, cardKey: string): string {
-	// Keys are `designs/<event id>/card-<random>.jpg`.
-	return `${siteUrl}/api/${cardKey}`;
+export function mediaUrl(siteUrl: string, key: string): string {
+	return `${siteUrl}/api/${key}`;
 }
 
 /**

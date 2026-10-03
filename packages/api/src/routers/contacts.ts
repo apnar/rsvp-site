@@ -1,11 +1,9 @@
 import { ORPCError } from "@orpc/server";
+import type { Db } from "@rsvp-site/db";
 import { inBook, remember } from "@rsvp-site/db/address-book";
-import { insertChunks } from "@rsvp-site/db/batch";
-import {
-	findOrCreatePeople,
-	type Person,
-	parseAddresses,
-} from "@rsvp-site/db/people";
+import { parseAddresses } from "@rsvp-site/db/addresses";
+import { batchAll, insertChunks } from "@rsvp-site/db/batch";
+import { findOrCreatePeople, type Person } from "@rsvp-site/db/people";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
@@ -16,7 +14,6 @@ import {
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
-import type { Context } from "../context";
 import { hostProcedure } from "../index";
 import { idSchema } from "../inputs";
 
@@ -29,7 +26,7 @@ const emailsSchema = z.string().max(20_000);
  * stranger's group is "no such group", the same as a wrong id.
  */
 async function ownGroup(
-	context: Pick<Context, "db"> & { me: Pick<Person, "id" | "role"> },
+	context: { db: Db; me: Pick<Person, "id" | "role"> },
 	groupId: string,
 ) {
 	const row = await context.db
@@ -45,7 +42,7 @@ async function ownGroup(
 
 /** Addresses into people, and those people into the host's book. */
 async function addToBook(
-	context: Pick<Context, "db">,
+	context: { db: Db },
 	ownerId: string,
 	raw: string,
 ): Promise<string[]> {
@@ -63,22 +60,23 @@ async function addToBook(
 
 /** Put people in a group; they must be in the group owner's book already. */
 async function join(
-	context: Pick<Context, "db">,
+	context: { db: Db },
 	groupId: string,
 	userIds: readonly string[],
 ): Promise<number> {
-	let added = 0;
 	const members = userIds.map((userId) => ({ groupId, userId }));
-	for (const slice of insertChunks(contactGroupMember, members)) {
-		const rows = await context.db
-			.insert(contactGroupMember)
-			.values(slice)
-			.onConflictDoNothing()
-			.returning({ userId: contactGroupMember.userId })
-			.all();
-		added += rows.length;
-	}
-	return added;
+	// One batch: a long list joins whole or not at all.
+	const inserted = await batchAll(
+		context.db,
+		insertChunks(contactGroupMember, members).map((slice) =>
+			context.db
+				.insert(contactGroupMember)
+				.values(slice)
+				.onConflictDoNothing()
+				.returning({ userId: contactGroupMember.userId }),
+		),
+	);
+	return inserted.flat().length;
 }
 
 /**
@@ -125,6 +123,15 @@ export const contactsRouter = {
 			.innerJoin(contactGroup, eq(contactGroup.id, contactGroupMember.groupId))
 			.where(eq(contactGroup.ownerId, context.me.id))
 			.all();
+		// Grouped once, not filtered per person and per group.
+		const groupsOf = new Map<string, string[]>();
+		const countOf = new Map<string, number>();
+		for (const m of members) {
+			const mine = groupsOf.get(m.userId);
+			if (mine) mine.push(m.groupId);
+			else groupsOf.set(m.userId, [m.groupId]);
+			countOf.set(m.groupId, (countOf.get(m.groupId) ?? 0) + 1);
+		}
 		return {
 			people: people.map(({ unsubscribedAt, role, status, ...p }) => ({
 				...p,
@@ -133,13 +140,11 @@ export const contactsRouter = {
 				// A placeholder address is never shown, not even to its host.
 				email: p.noEmail ? "" : p.email,
 				unsubscribed: unsubscribedAt !== null,
-				groupIds: members
-					.filter((m) => m.userId === p.userId)
-					.map((m) => m.groupId),
+				groupIds: groupsOf.get(p.userId) ?? [],
 			})),
 			groups: groups.map((g) => ({
 				...g,
-				count: members.filter((m) => m.groupId === g.id).length,
+				count: countOf.get(g.id) ?? 0,
 			})),
 		};
 	}),

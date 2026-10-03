@@ -10,9 +10,9 @@
 
 import type { Rendered } from "../brevo";
 import {
-	coverUrl,
 	emailLink,
 	eventLink,
+	mediaUrl,
 	type RsvpAnswer,
 	rsvpLink,
 } from "../links";
@@ -101,7 +101,7 @@ function render(facts: EventFacts, parts: Parts): Rendered {
 		subject: parts.subject,
 		kicker: parts.kicker,
 		heading: facts.title,
-		coverUrl: facts.coverKey ? coverUrl(facts.siteUrl, facts.coverKey) : null,
+		coverUrl: facts.coverKey ? mediaUrl(facts.siteUrl, facts.coverKey) : null,
 		look: facts.look,
 		list: true,
 		blocks: [
@@ -249,7 +249,8 @@ export type ReplyLine = {
 	note: string;
 };
 
-export type Totals = {
+/** The reply tallies a host email shows (not the api's `Totals`, which has no `expecting`). */
+export type HostTotals = {
 	yes: number;
 	maybe: number;
 	no: number;
@@ -267,7 +268,7 @@ function partyLine(r: ReplyLine): string {
 	return `${ANSWER_WORD[r.response]} · ${people.join(", ")}`;
 }
 
-function totalsLine(t: Totals): string {
+function totalsLine(t: HostTotals): string {
 	return `${t.yes} yes · ${t.maybe} maybe · ${t.no} can't · ${t.waiting} waiting · expecting ${t.expecting}`;
 }
 
@@ -280,7 +281,7 @@ function hostRender(
 	subject: string,
 	heading: string,
 	replies: ReplyLine[],
-	totals: Totals,
+	totals: HostTotals,
 ): Rendered {
 	const note = (r: ReplyLine) => r.note.trim();
 	const rows: Block = {
@@ -317,7 +318,7 @@ function hostRender(
 export function hostAlertEmail(
 	facts: EventFacts,
 	reply: ReplyLine,
-	totals: Totals,
+	totals: HostTotals,
 ): Rendered {
 	return hostRender(
 		facts,
@@ -332,7 +333,7 @@ export function hostAlertEmail(
 export function hostDigestEmail(
 	facts: EventFacts,
 	replies: ReplyLine[],
-	totals: Totals,
+	totals: HostTotals,
 ): Rendered {
 	const n = replies.length;
 	return hostRender(

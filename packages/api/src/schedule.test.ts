@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
 	dayBeforeAt,
 	deadlineReminderAt,
+	digestSince,
 	dueEmails,
 	type ScheduleEvent,
+	startsAt,
 } from "./schedule";
 import { siteInstant } from "./time";
 
@@ -164,5 +166,42 @@ describe("paper invitations", () => {
 			"deadline_reminder:skip",
 			"host_digest:send",
 		]);
+	});
+});
+
+describe("startsAt", () => {
+	it("is the start time on the site's clock", () => {
+		expect(startsAt(base)).toEqual(at("2026-10-24", "17:00"));
+	});
+
+	it("is midnight when there is a date and no time", () => {
+		expect(startsAt({ date: "2026-10-24", startTime: null })).toEqual(
+			at("2026-10-24", "00:00"),
+		);
+	});
+
+	it("is nothing without a date", () => {
+		expect(startsAt({ date: null, startTime: "17:00" })).toBeNull();
+	});
+});
+
+describe("digestSince", () => {
+	const published = at("2026-10-01", "12:00");
+
+	it("reaches back to the last digest", () => {
+		const last = at("2026-10-05", "08:00");
+		expect(digestSince({ digestAt: last, publishedAt: published })).toBe(last);
+	});
+
+	it("starts at publishing for the first one", () => {
+		expect(digestSince({ digestAt: null, publishedAt: published })).toBe(
+			published,
+		);
+	});
+
+	it("covers everything for an event with neither stamp", () => {
+		expect(digestSince({ digestAt: null, publishedAt: null })).toEqual(
+			new Date(0),
+		);
 	});
 });

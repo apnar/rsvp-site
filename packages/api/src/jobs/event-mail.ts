@@ -31,7 +31,7 @@ import {
 	or,
 } from "drizzle-orm";
 
-import { cleanTheme, type EventRow, guestsOf, hostIdsOf } from "../events";
+import { cleanTheme, type EventRow, guestCountsOf, hostIdsOf } from "../events";
 import { eventFacts, hostTotals, sendToList } from "../mail";
 import { type Due, digestSince, dueEmails } from "../schedule";
 import { addDays, todayOnSite } from "../time";
@@ -134,7 +134,7 @@ async function runDue(
 	due: Due,
 	now: Date,
 ): Promise<MailOutcome | null> {
-	if (due.kind === "host_digest") return runDigest(db, row, due, now);
+	if (due.kind === "host_digest") return runDigest(db, row, due);
 	const column = COLUMN[due.kind];
 	if (due.action === "skip") {
 		await claim(db, row.id, column, now);
@@ -177,10 +177,9 @@ async function runDue(
 async function runDigest(
 	db: Db,
 	row: EventRow,
-	due: Due,
-	now: Date,
+	due: Extract<Due, { kind: "host_digest" }>,
 ): Promise<MailOutcome | null> {
-	const slot = due.slot ?? now;
+	const slot = due.slot;
 	const since = digestSince(row);
 	const result = await db
 		.update(event)
@@ -194,6 +193,31 @@ async function runDigest(
 		.run();
 	if (result.meta.changes !== 1) return null;
 
+	// Past this point the slot is claimed. Anything that stops the send
+	// short of the mail leaving puts the old stamp back, so the next pass
+	// tries this morning again instead of skipping the digest for a day.
+	const giveBack = () =>
+		db
+			.update(event)
+			.set({ digestAt: row.digestAt })
+			.where(and(eq(event.id, row.id), eq(event.digestAt, slot)));
+	try {
+		const outcome = await digestFor(db, row, since, slot);
+		// Every batch refused: nothing reached the hosts, so the slot goes back.
+		if (outcome.sent === 0 && outcome.failed > 0) await giveBack();
+		return outcome;
+	} catch (error) {
+		await giveBack();
+		throw error;
+	}
+}
+
+async function digestFor(
+	db: Db,
+	row: EventRow,
+	since: Date,
+	slot: Date,
+): Promise<MailOutcome> {
 	const replies = await db
 		.select({
 			name: user.name,
@@ -225,7 +249,7 @@ async function runDigest(
 			quiet: "No replies.",
 		};
 	}
-	const totals = hostTotals(await guestsOf(db, row.id));
+	const totals = hostTotals(await guestCountsOf(db, row.id));
 	const sent = await sendToList(db, {
 		kind: "host_digest",
 		eventId: row.id,

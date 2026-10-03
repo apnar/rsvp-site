@@ -1,12 +1,10 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
-import { built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
+import { parseAddresses, parseGuestLines } from "@rsvp-site/db/addresses";
+import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
-	newToken,
-	parseAddresses,
-	parseGuestLines,
 	setRealEmail,
 } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
@@ -16,9 +14,10 @@ import {
 	GUEST_RESPONSES,
 	potluckClaim,
 } from "@rsvp-site/db/schema/event";
-import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { newToken } from "@rsvp-site/db/tokens";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-
+import { answer, answerInput } from "../answers";
 import {
 	type Access,
 	accessTo,
@@ -27,13 +26,12 @@ import {
 	guestsOf,
 	potluckOf,
 } from "../events";
-import { canInviteOthers } from "../guest-invites";
-import { clampParty, headcount, notInvitedCount, tally } from "../headcount";
+import { inviteRefusal } from "../guest-invites";
+import { headcount, notInvitedCount, tally } from "../headcount";
 import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { hostProcedure, personProcedure } from "../index";
 import { emailSchema, idInput, idSchema } from "../inputs";
-import { alertHosts, sendInvites } from "../mail";
-import { startsAt } from "../schedule";
+import { sendInvites } from "../mail";
 
 export const guestsRouter = {
 	/** The host's guest list: every row, the totals, and the potluck. */
@@ -42,11 +40,11 @@ export const guestsRouter = {
 		.use(withHostEvent)
 		.handler(async ({ context }) => {
 			const row = context.event;
-			const [guests, potluck] = await Promise.all([
+			const [guests, potluck, designFormat] = await Promise.all([
 				guestsOf(context.db, row.id),
 				potluckOf(context.db, row.id),
+				designFormatOf(context.db, row),
 			]);
-			const labels = new Map(potluck.lines.map((l) => [l.id, l.label]));
 			const totals = tally(guests);
 			return {
 				now: new Date().toISOString(),
@@ -60,7 +58,7 @@ export const guestsRouter = {
 					paper: row.paper,
 					emailsReleasedAt: row.emailsReleasedAt,
 					emailsHeld: emailsHeld(row),
-					designFormat: await designFormatOf(context.db, row),
+					designFormat,
 				},
 				totals,
 				headcount: headcount(totals),
@@ -68,9 +66,7 @@ export const guestsRouter = {
 				potluck: potluck.lines,
 				guests: guests.map((g) => ({
 					...g,
-					bringing: potluck.claims
-						.filter((c) => c.guestId === g.id)
-						.map((c) => labels.get(c.itemId) ?? ""),
+					bringing: (potluck.byGuest.get(g.id) ?? []).map((c) => c.label),
 				})),
 			};
 		}),
@@ -99,13 +95,6 @@ export const guestsRouter = {
 				? parseGuestLines(input.emails)
 				: { addresses: parseAddresses(input.emails), names: [] };
 			const typed = lines.addresses;
-			if (typed.length + lines.names.length > 500) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "That's a lot of people. Add them 500 at a time.",
-				});
-			}
-			const people = await findOrCreatePeople(context.db, typed, "host");
-			const named = await createNameOnlyPeople(context.db, lines.names, "host");
 
 			// Groups only count if they are the caller's own -- or anybody's, for
 			// an admin -- so a guessed group id reveals and adds nothing.
@@ -133,6 +122,20 @@ export const guestsRouter = {
 			// adds nobody.
 			const picked = await inBook(context.db, context.me.id, input.userIds);
 
+			// The cap is on everybody this one request adds, however they were
+			// named: typed lines, picks and whole groups, a person in two of
+			// those counted once. Checked before anybody is created, so a
+			// refused request leaves no accounts behind.
+			const known = new Set([...picked, ...members.map((m) => m.userId)]);
+			const total = typed.length + lines.names.length + known.size;
+			if (total > 500) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: `That's ${total} people, counting groups and picks. Add them 500 at a time.`,
+				});
+			}
+			const people = await findOrCreatePeople(context.db, typed, "host");
+			const named = await createNameOnlyPeople(context.db, lines.names, "host");
+
 			const usable = people.filter((p) => p.status !== "deactivated");
 			const rows = [
 				...usable.map((p) => ({ userId: p.id, source: "host" as const })),
@@ -144,7 +147,6 @@ export const guestsRouter = {
 				...members.map((m) => ({ userId: m.userId, source: "group" as const })),
 			];
 			const unique = [...new Map(rows.map((r) => [r.userId, r])).values()];
-			let added = 0;
 			const guestRows = unique.map((r) => ({
 				id: crypto.randomUUID(),
 				eventId: row.id,
@@ -152,15 +154,18 @@ export const guestsRouter = {
 				source: r.source,
 				addedBy: context.me.id,
 			}));
-			for (const slice of insertChunks(eventGuest, guestRows)) {
-				const inserted = await context.db
-					.insert(eventGuest)
-					.values(slice)
-					.onConflictDoNothing()
-					.returning({ id: eventGuest.id })
-					.all();
-				added += inserted.length;
-			}
+			// One batch: the list lands whole or not at all.
+			const inserted = await batchAll(
+				context.db,
+				insertChunks(eventGuest, guestRows).map((slice) =>
+					context.db
+						.insert(eventGuest)
+						.values(slice)
+						.onConflictDoNothing()
+						.returning({ id: eventGuest.id }),
+				),
+			);
+			const added = inserted.flat().length;
 			// Whoever the host chose is in their book from now on.
 			await remember(
 				context.db,
@@ -262,131 +267,10 @@ export const guestsRouter = {
 	 * cannot both get it. A claim that lost comes back in `full`.
 	 */
 	respond: personProcedure
-		.input(
-			idInput.extend({
-				response: z.enum(GUEST_RESPONSES),
-				adults: z.number().int().min(0).max(50).default(1),
-				kids: z.number().int().min(0).max(50).default(0),
-				dietary: z.string().trim().max(300).default(""),
-				note: z.string().trim().max(1000).default(""),
-				claims: z.array(idSchema).max(40).default([]),
-			}),
-		)
+		.input(idInput.merge(answerInput))
 		.handler(async ({ context, input }) => {
 			const access = await accessTo(context.db, context.me, input.eventId);
-			const row = access.event;
-			if (!access.guest) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "You're hosting this one, not on its list.",
-				});
-			}
-			if (row.status !== "published") {
-				throw new ORPCError("BAD_REQUEST", {
-					message:
-						row.status === "canceled"
-							? "It's been canceled."
-							: "It hasn't gone out yet.",
-				});
-			}
-			const start = startsAt(row);
-			if (start && Date.now() >= start.getTime()) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "It's already started. Tell the hosts directly.",
-				});
-			}
-
-			const guest = access.guest;
-			const party =
-				input.response === "no"
-					? { adults: 1, kids: 0 }
-					: clampParty(input, row);
-			// A "no" brings nothing; otherwise keep exactly what was ticked.
-			const wanted = [
-				...new Set(
-					input.response === "no" || !row.potluckEnabled ? [] : input.claims,
-				),
-			];
-			// What this guest already holds: a claim insert that changes nothing
-			// is either "you have it" or "it's full", and only this tells them
-			// apart without a read per item.
-			const held = new Set(
-				(
-					await context.db
-						.select({ itemId: potluckClaim.itemId })
-						.from(potluckClaim)
-						.where(eq(potluckClaim.guestId, guest.id))
-						.all()
-				).map((c) => c.itemId),
-			);
-			// One batch (atomic on D1): the answer, the dropped claims and each
-			// guarded claim land together or not at all.
-			const results = await rawBatch(context.db.$client, [
-				built(
-					context.db
-						.update(eventGuest)
-						.set({
-							response: input.response,
-							...party,
-							dietary: row.askDietary ? input.dietary : "",
-							note: row.askNote ? input.note : "",
-							respondedAt: new Date(),
-						})
-						.where(eq(eventGuest.id, guest.id)),
-				),
-				built(
-					context.db
-						.delete(potluckClaim)
-						.where(
-							wanted.length
-								? and(
-										eq(potluckClaim.guestId, guest.id),
-										notInArray(potluckClaim.itemId, wanted),
-									)
-								: eq(potluckClaim.guestId, guest.id),
-						),
-				),
-				// Plain names, not drizzle columns: in a raw template drizzle may
-				// write `"id"` unqualified, which would resolve against the wrong
-				// table here (see CLAUDE.md).
-				...wanted.map((itemId) =>
-					built(sql`
-						insert into potluck_claim (item_id, guest_id)
-						select ${itemId}, ${guest.id}
-						where exists (
-							select 1 from potluck_item i
-							where i.id = ${itemId}
-								and i.event_id = ${row.id}
-								and i.quantity > (
-									select count(*) from potluck_claim c where c.item_id = i.id
-								)
-						)
-						on conflict do nothing
-					`),
-				),
-			]);
-			const full = wanted.filter(
-				(itemId, i) => results[i + 2]?.meta.changes !== 1 && !held.has(itemId),
-			);
-
-			const changed =
-				guest.response !== input.response ||
-				guest.adults !== party.adults ||
-				guest.kids !== party.kids;
-			if (changed) {
-				await alertHosts(
-					context.db,
-					row,
-					{
-						name: context.me.name,
-						response: input.response,
-						adults: party.adults,
-						kids: party.kids,
-						note: row.askNote ? input.note : "",
-					},
-					context.me.id,
-				);
-			}
-			return { ok: true, full };
+			return answer(context.db, access, context.me, input);
 		}),
 
 	/**
@@ -589,36 +473,11 @@ export const guestsRouter = {
  * guest invites, it is out and not over, and the host chose them.
  */
 function requireInviter(access: Access) {
-	const row = access.event;
-	const guest = access.guest;
-	if (!guest || !canInviteOthers(guest.source)) {
-		throw new ORPCError("FORBIDDEN", {
-			message: "Only guests the hosts invited can invite others.",
+	const refusal = inviteRefusal(access.event, access.guest);
+	if (refusal || !access.guest) {
+		throw new ORPCError(refusal?.code ?? "FORBIDDEN", {
+			message: refusal?.message,
 		});
 	}
-	if (!row.guestInvites) {
-		throw new ORPCError("FORBIDDEN", {
-			message: "The hosts aren't taking extra guests for this one.",
-		});
-	}
-	// The friend's invitation goes out by email at once; a paper event holds
-	// all guest email until the hosts release it.
-	if (emailsHeld(row)) {
-		throw new ORPCError("BAD_REQUEST", {
-			message: "Invitations for this one aren't going out by email yet.",
-		});
-	}
-	if (row.status !== "published") {
-		throw new ORPCError("BAD_REQUEST", {
-			message:
-				row.status === "canceled"
-					? "It's been canceled."
-					: "It hasn't gone out.",
-		});
-	}
-	const start = startsAt(row);
-	if (start && Date.now() >= start.getTime()) {
-		throw new ORPCError("BAD_REQUEST", { message: "It's already started." });
-	}
-	return guest;
+	return access.guest;
 }

@@ -20,7 +20,12 @@ import {
 import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
 import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
-import type { Design, DesignTheme, Format } from "@rsvp-site/design/schema";
+import {
+	type Design,
+	type DesignTheme,
+	FORMAT_IDS,
+	type Format,
+} from "@rsvp-site/design/schema";
 import {
 	and,
 	asc,
@@ -33,33 +38,49 @@ import {
 	sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import { z } from "zod";
 import { readTheme, savedDesign } from "./designs-store";
-import {
-	type PotluckLine,
-	potluckLines,
-	type Totals,
-	tally,
-} from "./headcount";
+import { emailsHeld, openRefusal } from "./event-rules";
+import { type GuestCounts, potluckLines, tally } from "./headcount";
 import { formatDate, formatTimeRange } from "./time";
 
-export type EventRow = typeof event.$inferSelect;
+export { emailsHeld };
+
+/** A row as D1 hands it over: the theme is unchecked JSON. */
+export type RawEventRow = typeof event.$inferSelect;
+/**
+ * An event as the rest of the API sees it. The theme reaches a raw <style>
+ * and email HTML, so it only exists here once `cleanTheme` has parsed it:
+ * the compiler refuses a raw row anywhere an `EventRow` is wanted.
+ */
+export type EventRow = Omit<RawEventRow, "theme"> & {
+	theme: DesignTheme | null;
+};
 export type GuestRow = typeof eventGuest.$inferSelect;
 
-/**
- * The theme column is JSON that ends up in a raw <style> and in email
- * HTML, so a row is only handed on with a theme that parses.
- */
 export function cleanTheme<T extends { theme: unknown }>(
 	row: T,
-): T & { theme: DesignTheme | null } {
+): Omit<T, "theme"> & { theme: DesignTheme | null } {
 	return { ...row, theme: readTheme(row.theme) };
 }
 
 /** A canceled event is read-only: nothing a host does to it can matter. */
-export function refuseCanceled(row: Pick<EventRow, "status">) {
+export function refuseCanceled(
+	row: Pick<EventRow, "status">,
+	message = "It's canceled.",
+) {
 	if (row.status === "canceled") {
-		throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
+		throw new ORPCError("BAD_REQUEST", { message });
 	}
+}
+
+/** Refuse unless the event is published, not canceled and not yet started. */
+export function requireOpen(
+	row: Pick<EventRow, "status" | "date" | "startTime">,
+	now: number = Date.now(),
+) {
+	const refusal = openRefusal(row, now);
+	if (refusal) throw new ORPCError("BAD_REQUEST", { message: refusal });
 }
 
 export async function findEvent(db: Db, id: string): Promise<EventRow | null> {
@@ -192,48 +213,16 @@ export function notFound() {
 	return new ORPCError("NOT_FOUND", { message: "No such event." });
 }
 
-export type GuestListRow = {
-	id: string;
-	userId: string;
-	name: string;
-	email: string;
-	source: GuestRow["source"];
-	response: GuestRow["response"];
-	adults: number;
-	kids: number;
-	dietary: string;
-	note: string;
-	invitedAt: Date | null;
-	respondedAt: Date | null;
-	nudgedAt: Date | null;
-	createdAt: Date;
-	/** Mail cannot reach them: unsubscribed, or deactivated. */
-	unreachable: boolean;
-	/** Who put them on the list. */
-	addedBy: string | null;
-	addedByName: string | null;
-	/** Added by name alone, for paper: no address, never mailed. */
-	noEmail: boolean;
-	/** Their paper card has a QR code issued. */
-	hasPaper: boolean;
-};
-
-/**
- * A paper event whose host has not pressed "Start emails" yet: no guest
- * email of any kind may go, so the printed card arrives first.
- */
-export function emailsHeld(row: Pick<EventRow, "paper" | "emailsReleasedAt">) {
-	return row.paper && row.emailsReleasedAt === null;
-}
-
 /** The person who added a guest, joined a second time under its own name. */
 const adder = alias(user, "adder");
 
-/** Everybody on an event's list, with the person behind each row. */
-export async function guestsOf(
-	db: Db,
-	eventId: string,
-): Promise<GuestListRow[]> {
+/**
+ * Everybody on an event's list, with the person behind each row.
+ * `unreachable` means mail cannot reach them (unsubscribed, deactivated, no
+ * address); `addedBy` is who put them on the list; `hasPaper` says their
+ * printed card has a QR code issued.
+ */
+export async function guestsOf(db: Db, eventId: string) {
 	const rows = await db
 		.select({
 			id: eventGuest.id,
@@ -273,7 +262,23 @@ export async function guestsOf(
 	}));
 }
 
-/** The potluck with who took what. */
+/** Rows under their key, in the order they came. */
+function groupBy<T>(rows: readonly T[], key: (row: T) => string) {
+	const groups = new Map<string, T[]>();
+	for (const row of rows) {
+		const k = key(row);
+		const group = groups.get(k);
+		if (group) group.push(row);
+		else groups.set(k, [row]);
+	}
+	return groups;
+}
+
+/**
+ * The potluck with who took what. `byGuest` is the one place a guest's
+ * picks are worked out: the host's list, the CSV and a guest's own page
+ * all read it rather than filtering the claims themselves.
+ */
 export async function potluckOf(db: Db, eventId: string) {
 	const [items, claims] = await Promise.all([
 		db
@@ -293,38 +298,53 @@ export async function potluckOf(db: Db, eventId: string) {
 			.where(eq(potluckItem.eventId, eventId))
 			.all(),
 	]);
-	return { lines: potluckLines(items, claims), claims };
+	const labels = new Map(items.map((i) => [i.id, i.label]));
+	const byGuest = new Map(
+		[...groupBy(claims, (c) => c.guestId)].map(([guestId, picks]) => [
+			guestId,
+			picks.map((c) => ({
+				itemId: c.itemId,
+				label: labels.get(c.itemId) ?? "",
+			})),
+		]),
+	);
+	return { lines: potluckLines(items, claims), byGuest };
 }
 
-export type EventCard = {
-	id: string;
-	title: string;
-	status: EventRow["status"];
-	date: string | null;
-	dateLabel: string | null;
-	timeLabel: string | null;
-	/** HH:MM, so a card can show the start alone without parsing a label. */
-	startTime: string | null;
-	coverKey: string | null;
-	/** The designed card's picture, when the design is on, and its page colour. */
-	card: { key: string; bg: string } | null;
-	hostLine: string;
-	totals: Totals;
-	potluck: PotluckLine[];
-};
+export type Potluck = Awaited<ReturnType<typeof potluckOf>>;
 
-function cardOf(row: EventRow): EventCard["card"] {
-	const theme = readTheme(row.theme);
-	return row.designOn && row.cardKey && theme
-		? { key: row.cardKey, bg: theme.bg }
+/** What an event without a potluck has: nothing, and nobody bringing it. */
+export const NO_POTLUCK: Potluck = { lines: [], byGuest: new Map() };
+
+/**
+ * Only what the totals read, for the places that count and never show
+ * names: no join to the people behind the rows.
+ */
+export function guestCountsOf(db: Db, eventId: string): Promise<GuestCounts[]> {
+	return db
+		.select({
+			response: eventGuest.response,
+			adults: eventGuest.adults,
+			kids: eventGuest.kids,
+		})
+		.from(eventGuest)
+		.where(eq(eventGuest.eventId, eventId))
+		.all();
+}
+
+function cardOf(row: EventRow) {
+	return row.designOn && row.cardKey && row.theme
+		? { key: row.cardKey, bg: row.theme.bg }
 		: null;
 }
 
-/** Totals for a set of events in a few queries, for the dashboard. */
-export async function cardsFor(
-	db: Db,
-	rows: readonly EventRow[],
-): Promise<EventCard[]> {
+/**
+ * Totals for a set of events in a few queries, for the dashboard. Each
+ * card has the event's facts, its picture (`card`, when the design is on,
+ * with the page colour) and, as HH:MM, `startTime` so a card can show the
+ * start alone without parsing a label.
+ */
+export async function cardsFor(db: Db, rows: readonly EventRow[]) {
 	if (rows.length === 0) return [];
 	const ids = rows.map((r) => r.id);
 	// D1 caps a statement at 100 bound parameters, so the ids go in slices.
@@ -363,6 +383,11 @@ export async function cardsFor(
 				.all(),
 		),
 	]);
+	// Grouped once, so a long dashboard is not a scan of every guest per event.
+	const guestsBy = groupBy(guests, (g) => g.eventId);
+	const itemsBy = groupBy(items, (i) => i.eventId);
+	const eventOfItem = new Map(items.map((i) => [i.id, i.eventId]));
+	const claimsBy = groupBy(claims, (c) => eventOfItem.get(c.itemId) ?? "");
 	return rows.map((row) => {
 		const { dateLabel, timeLabel } = labelsOf(row);
 		return {
@@ -376,12 +401,9 @@ export async function cardsFor(
 			coverKey: row.coverKey,
 			card: cardOf(row),
 			hostLine: row.hostLine,
-			totals: tally(guests.filter((g) => g.eventId === row.id)),
+			totals: tally(guestsBy.get(row.id) ?? []),
 			potluck: row.potluckEnabled
-				? potluckLines(
-						items.filter((i) => i.eventId === row.id),
-						claims,
-					)
+				? potluckLines(itemsBy.get(row.id) ?? [], claimsBy.get(row.id) ?? [])
 				: [],
 		};
 	});
@@ -442,9 +464,13 @@ export async function designedCard(
 	};
 }
 
+const formatSchema = z.enum(FORMAT_IDS);
+
 /**
  * The card's format, when the event's design is on: the guest list needs
- * it to offer print layouts, and nothing else of the document.
+ * it to offer print layouts, and nothing else of the document. Checked
+ * again here: the column is JSON, and a format that no longer exists
+ * would otherwise reach the print layouts.
  */
 export async function designFormatOf(
 	db: Db,
@@ -453,10 +479,11 @@ export async function designFormatOf(
 	if (!row.designOn) return null;
 	const found = await db
 		.select({
-			format: sql<Format>`json_extract(${eventDesign.doc}, '$.format')`,
+			format: sql<unknown>`json_extract(${eventDesign.doc}, '$.format')`,
 		})
 		.from(eventDesign)
 		.where(eq(eventDesign.eventId, row.id))
 		.get();
-	return found?.format ?? null;
+	const parsed = formatSchema.safeParse(found?.format);
+	return parsed.success ? parsed.data : null;
 }

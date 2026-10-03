@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { built, rawBatch } from "@rsvp-site/db/batch";
 import { event, eventDesign } from "@rsvp-site/db/schema/event";
 import { basisOf } from "@rsvp-site/design/basis";
 import {
@@ -7,10 +8,9 @@ import {
 	refsBelongTo,
 	refsOf,
 } from "@rsvp-site/design/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, exists, not, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import type { Context } from "../context";
 import { needsQr } from "../design-rules";
 import { savedDesign } from "../designs-store";
 import { designValues } from "../events";
@@ -18,9 +18,7 @@ import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { sniffImage } from "../image-type";
 import { hostProcedure } from "../index";
 import { idInput } from "../inputs";
-import { fileBytes, imageFile, listPrefix, putImage } from "../media";
-
-type Env = Context["env"];
+import { type Env, fileBytes, imageFile, listPrefix, putImage } from "../media";
 
 /** Uploads an event may hold at once, card images aside. */
 const MAX_IMAGES = 20;
@@ -52,20 +50,6 @@ const basis = z.string().max(40);
 
 function isCard(key: string, prefix: string): boolean {
 	return key.slice(prefix.length).startsWith("card-");
-}
-
-async function putCard(
-	env: Env,
-	eventId: string,
-	bytes: ArrayBuffer,
-	by: string,
-) {
-	const key = `${designPrefix(eventId)}card-${crypto.randomUUID()}.jpg`;
-	await env.MEDIA.put(key, bytes, {
-		httpMetadata: { contentType: "image/jpeg" },
-		customMetadata: { eventId, uploadedBy: by },
-	});
-	return key;
 }
 
 /**
@@ -128,6 +112,34 @@ async function alreadyHeld(
 	return held.find((o) => o.etag === md5)?.key ?? null;
 }
 
+/**
+ * Add an image to an event's design images: the same picture again is the
+ * one already held (a template picked twice, a photo added twice), not
+ * another copy toward the limit. Null when the bytes are not an image the
+ * site takes -- the declared type is the client's word, the bytes decide.
+ */
+async function storeDesignImage(
+	env: Env,
+	eventId: string,
+	uploadedBy: string,
+	bytes: ArrayBuffer,
+): Promise<string | null> {
+	const prefix = designPrefix(eventId);
+	const held = (await listPrefix(env, prefix)).filter(
+		(o) => !isCard(o.key, prefix),
+	);
+	const type = sniffImage(bytes);
+	if (!type) return null;
+	const same = await alreadyHeld(held, bytes);
+	if (same) return same;
+	if (held.length >= MAX_IMAGES) {
+		throw new ORPCError("BAD_REQUEST", {
+			message: `An event holds up to ${MAX_IMAGES} images. Remove one you aren't using first.`,
+		});
+	}
+	return putImage(env, prefix, type, bytes, { eventId, uploadedBy });
+}
+
 export const designsRouter = {
 	/** The design document and the event's uploaded images, for the designer. */
 	get: hostProcedure
@@ -162,32 +174,18 @@ export const designsRouter = {
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
-			const prefix = designPrefix(row.id);
-			const held = (await listPrefix(context.env, prefix)).filter(
-				(o) => !isCard(o.key, prefix),
+			const ref = await storeDesignImage(
+				context.env,
+				row.id,
+				context.me.id,
+				await fileBytes(input.file),
 			);
-			const bytes = await fileBytes(input.file);
-			// The declared type is the client's word; the bytes decide.
-			const type = sniffImage(bytes);
-			if (!type) {
+			if (!ref) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "A JPEG, PNG or WebP, please.",
 				});
 			}
-			// The same picture again (a template picked twice, a photo added
-			// twice) is the one already here, not another copy toward the limit.
-			const same = await alreadyHeld(held, bytes);
-			if (same) return { ref: same };
-			if (held.length >= MAX_IMAGES) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: `An event holds up to ${MAX_IMAGES} images. Remove one you aren't using first.`,
-				});
-			}
-			const key = await putImage(context.env, prefix, type, bytes, {
-				eventId: row.id,
-				uploadedBy: context.me.id,
-			});
-			return { ref: key };
+			return { ref };
 		}),
 
 	/** Remove an image from the tray, unless the saved design still uses it. */
@@ -224,20 +222,13 @@ export const designsRouter = {
 			if (!row.coverKey) return { ref: null };
 			const cover = await context.env.MEDIA.get(row.coverKey);
 			if (!cover) return { ref: null };
-			const prefix = designPrefix(row.id);
-			const bytes = await cover.arrayBuffer();
-			const held = (await listPrefix(context.env, prefix)).filter(
-				(o) => !isCard(o.key, prefix),
+			const ref = await storeDesignImage(
+				context.env,
+				row.id,
+				context.me.id,
+				await cover.arrayBuffer(),
 			);
-			const type = sniffImage(bytes);
-			if (!type) return { ref: null };
-			const same = await alreadyHeld(held, bytes);
-			if (same) return { ref: same };
-			const key = await putImage(context.env, prefix, type, bytes, {
-				eventId: row.id,
-				uploadedBy: context.me.id,
-			});
-			return { ref: key };
+			return { ref };
 		}),
 
 	/**
@@ -280,29 +271,53 @@ export const designsRouter = {
 			needsQr(row, input.designOn, design);
 
 			const version = input.version + 1;
-			const claimed =
+			// One atomic batch: the document and the event's on/off and theme
+			// land together or not at all, so a failure between them can't leave
+			// a page whose colours are the old design's. Both statements are
+			// guarded on the version this save started from -- the state before
+			// either runs -- so a stale save changes neither, and a co-host's
+			// newer version is never mistaken for ours.
+			const heldDesign = (...also: SQL[]) =>
+				exists(
+					context.db
+						.select({ one: sql`1` })
+						.from(eventDesign)
+						.where(and(eq(eventDesign.eventId, row.id), ...also)),
+				);
+			const unchanged =
 				input.version === 0
-					? await context.db
-							.insert(eventDesign)
-							.values({
-								eventId: row.id,
-								doc: design,
-								version,
-								updatedBy: context.me.id,
-							})
-							.onConflictDoNothing()
-							.run()
-					: await context.db
-							.update(eventDesign)
-							.set({ doc: design, version, updatedBy: context.me.id })
-							.where(
-								and(
-									eq(eventDesign.eventId, row.id),
-									eq(eventDesign.version, input.version),
+					? not(heldDesign())
+					: heldDesign(eq(eventDesign.version, input.version));
+			const [, claimed] = await rawBatch(context.db.$client, [
+				built(
+					context.db
+						.update(event)
+						.set({ designOn: input.designOn, theme: design.theme })
+						.where(and(eq(event.id, row.id), unchanged)),
+				),
+				built(
+					input.version === 0
+						? context.db
+								.insert(eventDesign)
+								.values({
+									eventId: row.id,
+									doc: design,
+									version,
+									updatedBy: context.me.id,
+								})
+								.onConflictDoNothing()
+						: context.db
+								.update(eventDesign)
+								.set({ doc: design, version, updatedBy: context.me.id })
+								.where(
+									and(
+										eq(eventDesign.eventId, row.id),
+										eq(eventDesign.version, input.version),
+									),
 								),
-							)
-							.run();
-			if (claimed.meta.changes !== 1) {
+				),
+			]);
+			if (claimed?.meta.changes !== 1) {
 				// Say who: a host's own second tab is the usual culprit, and
 				// "someone else" sends them looking for a co-host who isn't there.
 				const now = await context.db
@@ -318,10 +333,6 @@ export const designsRouter = {
 				});
 			}
 
-			await context.db
-				.update(event)
-				.set({ designOn: input.designOn, theme: design.theme })
-				.where(eq(event.id, row.id));
 			await prune(
 				context.env,
 				row.id,
@@ -369,7 +380,14 @@ export const designsRouter = {
 				});
 			}
 			await makeRoomForCard(context.env, row.id, row.cardKey);
-			const key = await putCard(context.env, row.id, bytes, context.me.id);
+			const key = await putImage(
+				context.env,
+				designPrefix(row.id),
+				"image/jpeg",
+				bytes,
+				{ eventId: row.id, uploadedBy: context.me.id },
+				"card-",
+			);
 			await context.db
 				.update(event)
 				.set({ cardKey: key, cardBasis: input.basis })

@@ -23,11 +23,17 @@ export const withHostEvent = o.middleware(
 	},
 );
 
-/** `withHostEvent`, and a canceled event is refused: it is read-only. */
-export const withLiveHostEvent = o.middleware(
-	async ({ context, next }, input: { eventId: string }) => {
+/**
+ * `withHostEvent`, and a canceled event is refused: it is read-only. A
+ * procedure whose refusal needs its own words (the editor tells the host
+ * what to do instead) makes its own with `liveHostEvent`.
+ */
+export function liveHostEvent(canceled?: string) {
+	return o.middleware(async ({ context, next }, input: { eventId: string }) => {
 		const access = await hostAccessTo(context.db, context.me, input.eventId);
-		refuseCanceled(access.event);
+		refuseCanceled(access.event, canceled);
 		return next({ context: { access, event: access.event } });
-	},
-);
+	});
+}
+
+export const withLiveHostEvent = liveHostEvent();

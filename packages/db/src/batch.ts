@@ -1,5 +1,8 @@
 import { getTableColumns, type SQL, type Table } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
+
+import type { Db } from "./index";
 
 export function chunk<T>(items: readonly T[], size: number): T[][] {
 	const out: T[][] = [];
@@ -36,6 +39,20 @@ export async function mapChunks<T, R>(
 	const out: R[] = [];
 	for (const slice of inChunks(items)) out.push(...(await run(slice)));
 	return out;
+}
+
+/**
+ * Every statement of a chunked write in one atomic D1 batch: one round trip,
+ * and a long list lands whole or not at all. Builders only -- raw `sql`
+ * needs `rawBatch`.
+ */
+export async function batchAll<Q extends BatchItem<"sqlite">>(
+	db: Db,
+	queries: readonly Q[],
+) {
+	const [first, ...rest] = queries;
+	if (!first) return [];
+	return db.batch([first, ...rest]);
 }
 
 /** A statement as D1 takes it. */

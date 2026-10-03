@@ -1,9 +1,9 @@
 import { createDb } from "@rsvp-site/db";
 import {
-	findPersonByUnsubscribeToken,
 	resubscribe,
 	unsubscribe as unsubscribePerson,
-} from "@rsvp-site/db/people";
+} from "@rsvp-site/db/status";
+import { findPersonByUnsubscribeToken } from "@rsvp-site/db/tokens";
 import {
 	COLORS,
 	escapeHtml,

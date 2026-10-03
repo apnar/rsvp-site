@@ -1,8 +1,10 @@
 import { ORPCError } from "@orpc/server";
+import type { Db } from "@rsvp-site/db";
+import { inChunks } from "@rsvp-site/db/batch";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
 import { cancelEmail, nudgeEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
-import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 
 import { needsQr } from "../../design-rules";
@@ -11,9 +13,10 @@ import {
 	type EventRow,
 	emailsHeld,
 	findEvent,
+	requireOpen,
 	stillComing,
 } from "../../events";
-import { withHostEvent } from "../../host-event";
+import { withHostEvent, withLiveHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
 import { idInput, idSchema } from "../../inputs";
 import { eventFacts, sendInvites, sendToList } from "../../mail";
@@ -27,8 +30,30 @@ function requirePublishable(row: EventRow) {
 			message: "Give it a date before sending.",
 		});
 	}
-	if (row.status === "canceled") {
-		throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
+}
+
+/**
+ * Give back a nudge's claim, keyed on its own stamp like `releaseInvites`,
+ * so a send that never left leaves the guests nudgeable instead of waiting
+ * out twelve hours for an email they never got.
+ */
+async function releaseNudges(
+	db: Db,
+	eventId: string,
+	stamp: Date,
+	guestIds: readonly string[],
+) {
+	for (const slice of inChunks(guestIds)) {
+		await db
+			.update(eventGuest)
+			.set({ nudgedAt: null })
+			.where(
+				and(
+					eq(eventGuest.eventId, eventId),
+					eq(eventGuest.nudgedAt, stamp),
+					inArray(eventGuest.id, slice),
+				),
+			);
 	}
 }
 
@@ -42,7 +67,7 @@ export const sendingRouter = {
 	 */
 	send: hostProcedure
 		.input(idInput)
-		.use(withHostEvent)
+		.use(withLiveHostEvent)
 		.handler(async ({ context }) => {
 			const before = context.event;
 			requirePublishable(before);
@@ -143,9 +168,7 @@ export const sendingRouter = {
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
-			if (row.status !== "published") {
-				throw new ORPCError("BAD_REQUEST", { message: "It hasn't gone out." });
-			}
+			requireOpen(row);
 			if (emailsHeld(row)) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "Emails are on hold until you start them.",
@@ -170,18 +193,34 @@ export const sendingRouter = {
 						),
 					),
 				)
-				.returning({ userId: eventGuest.userId })
+				.returning({ id: eventGuest.id, userId: eventGuest.userId })
 				.all();
 			if (claimed.length === 0) {
 				return { sent: 0, waiting: true };
 			}
-			const result = await sendToList(context.db, {
-				kind: "nudge",
-				eventId: row.id,
-				rendered: nudgeEmail(eventFacts(row)),
-				sentBy: context.me.id,
-				onlyPersonIds: claimed.map((c) => c.userId),
-			});
+			const giveBack = () =>
+				releaseNudges(
+					context.db,
+					row.id,
+					now,
+					claimed.map((c) => c.id),
+				);
+			let result: Awaited<ReturnType<typeof sendToList>>;
+			try {
+				result = await sendToList(context.db, {
+					kind: "nudge",
+					eventId: row.id,
+					rendered: nudgeEmail(eventFacts(row)),
+					sentBy: context.me.id,
+					onlyPersonIds: claimed.map((c) => c.userId),
+				});
+			} catch (error) {
+				await giveBack();
+				throw error;
+			}
+			// Nothing went out (nobody reachable, or every batch refused): the
+			// stamp was only a claim on sending, so it goes back.
+			if (!result || result.sent === 0) await giveBack();
 			return { sent: result?.sent ?? 0, waiting: false };
 		}),
 };

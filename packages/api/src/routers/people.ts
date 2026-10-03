@@ -3,17 +3,15 @@ import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import type { Db } from "@rsvp-site/db";
 import {
-	deactivate,
 	findOrCreatePeople,
 	findPerson,
 	findReachablePersonByEmail,
 	listPeople,
-	reactivate,
-	rotateLinkToken,
-	setRole,
 } from "@rsvp-site/db/people";
 import { ROLES, user } from "@rsvp-site/db/schema/auth";
 import { eventGuest, eventHost } from "@rsvp-site/db/schema/event";
+import { deactivate, reactivate, setRole } from "@rsvp-site/db/status";
+import { rotateLinkToken } from "@rsvp-site/db/tokens";
 import { getMailer } from "@rsvp-site/email/worker";
 import { count, eq } from "drizzle-orm";
 import { z } from "zod";

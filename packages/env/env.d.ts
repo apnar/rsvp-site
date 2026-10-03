@@ -4,7 +4,10 @@
 export interface CloudflareEnv {
 	/** D1 database binding. */
 	DB: D1Database;
-	/** R2 bucket holding event cover photos, served at /api/covers/<key>. */
+	/**
+	 * R2 bucket: cover photos under `covers/`, and design images and card
+	 * pictures under `designs/<event id>/`. Served at /api/<key>.
+	 */
 	MEDIA: R2Bucket;
 	/**
 	 * Workers rate limiter for the share-link email form, keyed by IP, so a

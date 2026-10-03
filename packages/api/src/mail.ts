@@ -1,12 +1,14 @@
+import type { Db } from "@rsvp-site/db";
+import { inChunks, mapChunks } from "@rsvp-site/db/batch";
 import {
-	ensureLinkToken,
-	ensureUnsubscribeToken,
+	countRecipients,
 	listRecipients,
 	markLinkSent,
 } from "@rsvp-site/db/people";
-import { NO_EMAIL_DOMAIN } from "@rsvp-site/db/schema/auth";
+import { NO_EMAIL_DOMAIN, user } from "@rsvp-site/db/schema/auth";
 import { type EmailKind, emailSend } from "@rsvp-site/db/schema/email";
 import { eventGuest } from "@rsvp-site/db/schema/event";
+import { ensureLinkToken, ensureUnsubscribeToken } from "@rsvp-site/db/tokens";
 import { emailLook } from "@rsvp-site/design/theme";
 import type {
 	EmailLook,
@@ -17,9 +19,9 @@ import type {
 	SendOutcome,
 } from "@rsvp-site/email";
 import {
-	cardUrl,
 	hostAlertEmail,
 	inviteEmail,
+	mediaUrl,
 	messageEmail,
 	type ReplyLine,
 	welcomeEmail,
@@ -27,11 +29,14 @@ import {
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
-import type { Context } from "./context";
-import { type EventRow, guestsOf, hostIdsOf, labelsOf } from "./events";
+import {
+	type EventRow,
+	guestCountsOf,
+	guestsOf,
+	hostIdsOf,
+	labelsOf,
+} from "./events";
 import { type GuestCounts, headcount, tally } from "./headcount";
-
-type Db = Context["db"];
 
 export type { EmailKind };
 
@@ -83,7 +88,7 @@ export function lookOf(row: EventRow): EmailLook | null {
 		.join(" · ");
 	return emailLook(
 		row.theme,
-		row.cardKey ? cardUrl(siteUrl(), row.cardKey) : null,
+		row.cardKey ? mediaUrl(siteUrl(), row.cardKey) : null,
 		alt,
 	);
 }
@@ -97,7 +102,7 @@ export function renderMessage(input: {
 
 /** How many people a message to everyone would reach right now. */
 export async function countEveryone(db: Db): Promise<number> {
-	return (await listRecipients(db)).length;
+	return countRecipients(db);
 }
 
 /**
@@ -129,22 +134,29 @@ export async function sendToList(
 		tags: [opts.kind],
 	});
 	const sendId = crypto.randomUUID();
-	await db.insert(emailSend).values({
-		id: sendId,
-		kind: opts.kind,
-		eventId: opts.eventId ?? null,
-		subject: opts.rendered.subject,
-		audience: HOST_KINDS.has(opts.kind)
-			? "hosts"
-			: opts.onlyPersonIds
-				? "guests"
-				: "everyone",
-		recipientCount: result.attempted,
-		failedCount: result.attempted - result.sent,
-		messageIds: JSON.stringify(result.messageIds),
-		errors: JSON.stringify(result.failed),
-		sentBy: opts.sentBy ?? null,
-	});
+	// The mail has left. A log row that fails to write must not read as a
+	// failed send to the callers: they would give their claims back and the
+	// next Send or cron pass would email everybody a second time.
+	try {
+		await db.insert(emailSend).values({
+			id: sendId,
+			kind: opts.kind,
+			eventId: opts.eventId ?? null,
+			subject: opts.rendered.subject,
+			audience: HOST_KINDS.has(opts.kind)
+				? "hosts"
+				: opts.onlyPersonIds
+					? "guests"
+					: "everyone",
+			recipientCount: result.attempted,
+			failedCount: result.attempted - result.sent,
+			messageIds: JSON.stringify(result.messageIds),
+			errors: JSON.stringify(result.failed),
+			sentBy: opts.sentBy ?? null,
+		});
+	} catch (error) {
+		console.error("email_send row not written", opts.kind, sendId, error);
+	}
 	return { ...result, sendId };
 }
 
@@ -187,8 +199,8 @@ export async function sendInvites(
 
 	const now = new Date();
 	const claimed: string[] = [];
-	for (let i = 0; i < pending.length; i += 90) {
-		const ids = pending.slice(i, i + 90).map((g) => g.id);
+	for (const slice of inChunks(pending)) {
+		const ids = slice.map((g) => g.id);
 		const rows = await db
 			.update(eventGuest)
 			.set({ invitedAt: now })
@@ -216,6 +228,24 @@ export async function sendInvites(
 		await releaseInvites(db, row.id, now);
 		return { sent: 0, failed: result?.attempted ?? 0, skipped };
 	}
+	// A batch Brevo refused never reached those people: give back exactly
+	// their rows, so the next Send tries them and nobody else.
+	const refused = result.failed.flatMap((f) => f.emails);
+	if (refused.length > 0) {
+		const ids = await mapChunks(refused, (slice) =>
+			db
+				.select({ id: user.id })
+				.from(user)
+				.where(inArray(user.email, slice))
+				.all(),
+		);
+		await releaseInvites(
+			db,
+			row.id,
+			now,
+			ids.map((r) => r.id),
+		);
+	}
 	return {
 		sent: result.sent,
 		failed: result.attempted - result.sent,
@@ -223,15 +253,27 @@ export async function sendInvites(
 	};
 }
 
-async function releaseInvites(db: Db, eventId: string, stamp: Date) {
+async function releaseInvites(
+	db: Db,
+	eventId: string,
+	stamp: Date,
+	/** Only these people's rows; everything the claim took when omitted. */
+	userIds?: readonly string[],
+) {
 	// Keyed on the claim's own timestamp, so a failed send gives back exactly
 	// the rows it took and nothing a concurrent send stamped.
-	await db
-		.update(eventGuest)
-		.set({ invitedAt: null })
-		.where(
-			and(eq(eventGuest.eventId, eventId), eq(eventGuest.invitedAt, stamp)),
-		);
+	for (const slice of userIds ? inChunks(userIds) : [undefined]) {
+		await db
+			.update(eventGuest)
+			.set({ invitedAt: null })
+			.where(
+				and(
+					eq(eventGuest.eventId, eventId),
+					eq(eventGuest.invitedAt, stamp),
+					slice ? inArray(eventGuest.userId, slice) : undefined,
+				),
+			);
+	}
 }
 
 /**
@@ -252,7 +294,7 @@ export async function alertHosts(
 			(id) => id !== replierId,
 		);
 		if (hostIds.length === 0) return;
-		const totals = hostTotals(await guestsOf(db, row.id));
+		const totals = hostTotals(await guestCountsOf(db, row.id));
 		await sendToList(db, {
 			kind: "host_alert",
 			eventId: row.id,

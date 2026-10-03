@@ -122,6 +122,8 @@ export async function postBrevo(
 	return attempt(body, opts.apiKey, fetchImpl);
 }
 
+// db/batch.ts has the same loop. Email is pure and must not depend on the
+// database package, and four lines are not worth a package of their own.
 export function chunk<T>(items: readonly T[], size: number): T[][] {
 	const out: T[][] = [];
 	for (let i = 0; i < items.length; i += size) {

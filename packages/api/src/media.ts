@@ -9,10 +9,11 @@ import { z } from "zod";
 import type { Context } from "./context";
 import type { ImageType } from "./image-type";
 
-type Env = Context["env"];
+/** The Worker's bindings, as a procedure's context carries them. */
+export type Env = Context["env"];
 
 export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export const IMAGE_EXT: Record<ImageType, string> = {
+const IMAGE_EXT: Record<ImageType, string> = {
 	"image/jpeg": "jpg",
 	"image/png": "png",
 	"image/webp": "webp",
@@ -26,8 +27,8 @@ export const imageFile = z
 
 /**
  * An upload's bytes. zod's `File` and the Workers `Blob` are different
- * declarations of the same object; the cast is the File/Blob mismatch
- * CLAUDE.md mentions, not a conversion.
+ * declarations of the same object; the cast bridges that mismatch, it is
+ * not a conversion.
  */
 export function fileBytes(
 	file: z.output<typeof imageFile>,
@@ -35,15 +36,20 @@ export function fileBytes(
 	return (file as unknown as Blob).arrayBuffer();
 }
 
-/** Store an image under `prefix` with its extension, and return the key. */
+/**
+ * Store an image under `prefix` with its extension, and return the key.
+ * `name` leads the random part, so card pictures can be told from uploads
+ * by their key alone.
+ */
 export async function putImage(
 	env: Env,
 	prefix: string,
 	type: ImageType,
 	bytes: ArrayBuffer,
 	meta: { eventId: string; uploadedBy: string },
+	name = "",
 ) {
-	const key = `${prefix}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
+	const key = `${prefix}${name}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
 	await env.MEDIA.put(key, bytes, {
 		httpMetadata: { contentType: type },
 		customMetadata: meta,

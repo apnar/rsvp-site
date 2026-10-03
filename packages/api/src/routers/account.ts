@@ -1,13 +1,10 @@
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import { APIError } from "@rsvp-site/auth/errors";
-import {
-	findPerson,
-	resubscribe,
-	rotateLinkToken,
-	unsubscribe,
-} from "@rsvp-site/db/people";
+import { findPerson } from "@rsvp-site/db/people";
 import { account, user } from "@rsvp-site/db/schema/auth";
+import { resubscribe, unsubscribe } from "@rsvp-site/db/status";
+import { rotateLinkToken } from "@rsvp-site/db/tokens";
 import { getMailer } from "@rsvp-site/email/worker";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";

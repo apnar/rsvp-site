@@ -1,14 +1,14 @@
 import { ORPCError } from "@orpc/server";
+import { normalizeEmail } from "@rsvp-site/db/addresses";
 import {
 	findOrCreatePeople,
 	findReachablePersonByEmail,
 	markLinkSent,
-	newToken,
-	normalizeEmail,
 } from "@rsvp-site/db/people";
 import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
-import { coverUrl, joinLinkEmail } from "@rsvp-site/email";
+import { newToken } from "@rsvp-site/db/tokens";
+import { joinLinkEmail, mediaUrl } from "@rsvp-site/email";
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -45,7 +45,7 @@ export const shareRouter = {
 				// public, and the full card is laid out only for people on the list.
 				design,
 				/** For link previews in chat apps, which need an absolute URL. */
-				imageUrl: image ? coverUrl(siteUrl(), image) : null,
+				imageUrl: image ? mediaUrl(siteUrl(), image) : null,
 			};
 		}),
 
@@ -96,7 +96,7 @@ export const shareRouter = {
 				joinLinkEmail({
 					title: row.title,
 					url: signInUrl(token.linkToken, `/i/${row.shareToken}`),
-					coverUrl: row.coverKey ? coverUrl(siteUrl(), row.coverKey) : null,
+					coverUrl: row.coverKey ? mediaUrl(siteUrl(), row.coverKey) : null,
 					look: lookOf(row),
 				}),
 				{ tags: ["join_link"] },

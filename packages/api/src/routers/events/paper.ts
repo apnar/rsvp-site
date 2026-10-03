@@ -1,9 +1,8 @@
 import { ORPCError } from "@orpc/server";
-import { newToken } from "@rsvp-site/db/people";
 import { user } from "@rsvp-site/db/schema/auth";
 import { eventGuest } from "@rsvp-site/db/schema/event";
 import { siteUrl } from "@rsvp-site/email/worker";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { csvCell } from "../../event-rules";
 import {
@@ -37,20 +36,15 @@ export const paperRouter = {
 					message: "This event is sent by email, not on paper.",
 				});
 			}
-			const missing = await context.db
-				.select({ id: eventGuest.id })
-				.from(eventGuest)
+			// One statement for the whole list, and each row draws its own bytes.
+			// Same shape as `newToken()`: 32 lower-case hex characters. The IS NULL
+			// guard keeps a key already on a card in somebody's mailbox.
+			await context.db
+				.update(eventGuest)
+				.set({ paperToken: sql`lower(hex(randomblob(16)))` })
 				.where(
 					and(eq(eventGuest.eventId, row.id), isNull(eventGuest.paperToken)),
-				)
-				.all();
-			const [first, ...rest] = missing.map((g) =>
-				context.db
-					.update(eventGuest)
-					.set({ paperToken: newToken() })
-					.where(and(eq(eventGuest.id, g.id), isNull(eventGuest.paperToken))),
-			);
-			if (first) await context.db.batch([first, ...rest]);
+				);
 			const wanted = input.guestIds ? new Set(input.guestIds) : null;
 			const rows = await context.db
 				.select({
@@ -82,7 +76,7 @@ export const paperRouter = {
 								{
 									id: r.id,
 									name: r.name,
-									url: `${siteUrl()}/api/auth/paper?k=${r.token}`,
+									url: `${siteUrl()}/p/${r.token}`,
 								},
 							]
 						: [],
@@ -100,12 +94,8 @@ export const paperRouter = {
 				guestsOf(context.db, row.id),
 				potluckOf(context.db, row.id),
 			]);
-			const labels = new Map(potluck.lines.map((l) => [l.id, l.label]));
 			const bringing = (guestId: string) =>
-				potluck.claims
-					.filter((c) => c.guestId === guestId)
-					.map((c) => labels.get(c.itemId) ?? "")
-					.join("; ");
+				(potluck.byGuest.get(guestId) ?? []).map((c) => c.label).join("; ");
 			const header = [
 				"Name",
 				"Email",

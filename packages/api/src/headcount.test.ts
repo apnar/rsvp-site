@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
 	clampParty,
+	deciding,
+	extraPeople,
 	headcount,
+	notInvitedCount,
 	openSlots,
 	potluckLines,
+	slotsLeftFor,
+	stillComingCount,
 	tally,
 } from "./headcount";
 
@@ -76,5 +81,67 @@ describe("clampParty", () => {
 		expect(
 			clampParty({ adults: 3, kids: 4 }, { maxPlusOnes: 0, askKids: false }),
 		).toEqual({ adults: 1, kids: 0 });
+	});
+});
+
+describe("deciding", () => {
+	it("is the households with no reply or a maybe", () => {
+		const t = tally([
+			{ response: "yes", adults: 1, kids: 0 },
+			{ response: "maybe", adults: 1, kids: 0 },
+			{ response: "no", adults: 1, kids: 0 },
+			{ response: null, adults: 1, kids: 0 },
+		]);
+		expect(deciding(t)).toBe(2);
+		expect(deciding(tally([]))).toBe(0);
+	});
+});
+
+describe("who a change or a nudge reaches", () => {
+	const at = new Date("2026-10-01T12:00:00Z");
+
+	it("stillComingCount takes the invited who have not said no", () => {
+		expect(
+			stillComingCount([
+				{ invitedAt: at, response: null },
+				{ invitedAt: at, response: "yes" },
+				{ invitedAt: at, response: "maybe" },
+				{ invitedAt: at, response: "no" },
+				{ invitedAt: null, response: null },
+				{ invitedAt: null, response: "yes" },
+			]),
+		).toBe(3);
+	});
+
+	it("notInvitedCount takes the uninvited that mail can reach", () => {
+		expect(
+			notInvitedCount([
+				{ invitedAt: null, unreachable: false },
+				{ invitedAt: null, unreachable: true },
+				{ invitedAt: at, unreachable: false },
+			]),
+		).toBe(1);
+	});
+});
+
+describe("a guest choosing a potluck item", () => {
+	it("gives back their saved claim and charges a ticked box", () => {
+		const line = { left: 2 };
+		expect(slotsLeftFor(line, { saved: false, ticked: false })).toBe(2);
+		expect(slotsLeftFor(line, { saved: false, ticked: true })).toBe(1);
+		expect(slotsLeftFor(line, { saved: true, ticked: false })).toBe(3);
+		// Saved and still ticked: the server's count already excluded them.
+		expect(slotsLeftFor(line, { saved: true, ticked: true })).toBe(2);
+	});
+});
+
+describe("extraPeople", () => {
+	it("counts the party without the guest", () => {
+		expect(extraPeople({ adults: 2, kids: 3 })).toBe(4);
+		expect(extraPeople({ adults: 1, kids: 0 })).toBe(0);
+	});
+
+	it("is never negative", () => {
+		expect(extraPeople({ adults: 0, kids: 0 })).toBe(0);
 	});
 });

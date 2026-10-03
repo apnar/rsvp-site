@@ -1,4 +1,3 @@
-import type { DesignTheme } from "@rsvp-site/design/schema";
 import { sql } from "drizzle-orm";
 import {
 	index,
@@ -86,9 +85,11 @@ export const event = sqliteTable(
 		 * The design's page theme, copied out of the document: mail, the
 		 * share page and the dashboard need its colours and none of the
 		 * rest, and every read of an event row would otherwise drag the
-		 * whole document along.
+		 * whole document along. Typed `unknown` on purpose: it reaches a raw
+		 * <style> and email HTML, so only `readTheme` (api/designs-store)
+		 * may turn it into a theme.
 		 */
-		theme: text("theme", { mode: "json" }).$type<DesignTheme>(),
+		theme: text("theme", { mode: "json" }).$type<unknown>(),
 		status: text("status", { enum: EVENT_STATUSES }).notNull().default("draft"),
 		rsvpDeadline: text("rsvp_deadline"),
 

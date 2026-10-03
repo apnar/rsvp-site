@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { coverUrl, emailLink, rsvpLink, safeReturnPath } from "./links";
+import { emailLink, mediaUrl, rsvpLink, safeReturnPath } from "./links";
 import { PARAM } from "./render";
 
 describe("emailLink", () => {
@@ -20,9 +20,9 @@ describe("rsvpLink", () => {
 	});
 });
 
-describe("coverUrl", () => {
+describe("mediaUrl", () => {
 	it("carries no sign-in key", () => {
-		const url = coverUrl("https://rsvp.botch.com", "covers/abc.jpg");
+		const url = mediaUrl("https://rsvp.botch.com", "covers/abc.jpg");
 		expect(url).toBe("https://rsvp.botch.com/api/covers/abc.jpg");
 		expect(url).not.toContain("params.key");
 	});
