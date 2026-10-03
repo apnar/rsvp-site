@@ -22,9 +22,13 @@ export function createQueryClient() {
 		// A write can change what any page shows (a guest count, a stamp), and
 		// pages used to refresh only their own namespace while staleTime kept
 		// the rest for a minute. Only queries on screen refetch; the rest are
-		// marked stale. Returned so the mutation waits for fresh data.
+		// marked stale. Not awaited: a write that removes what is on screen (a
+		// deleted draft) would otherwise wait on a refetch of the thing it
+		// just removed before its own onSuccess could move the page on.
 		mutationCache: new MutationCache({
-			onSuccess: () => queryClient.invalidateQueries(),
+			onSuccess: () => {
+				void queryClient.invalidateQueries();
+			},
 			onError: (error, _vars, _ctx, mutation) => {
 				if (mutation.meta?.quiet || mutation.options.onError) return;
 				toast.error(error.message);
@@ -47,7 +51,15 @@ export function createQueryClient() {
 				});
 			},
 		}),
-		defaultOptions: { queries: { staleTime: 60 * 1000 } },
+		defaultOptions: {
+			queries: {
+				staleTime: 60 * 1000,
+				// A 4xx is the API's answer (not found, not yours), not a blip;
+				// asking three more times only delays the error page.
+				retry: (failures, error) =>
+					!(error instanceof ORPCError && error.status < 500) && failures < 3,
+			},
+		},
 	});
 	return queryClient;
 }
