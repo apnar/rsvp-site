@@ -572,15 +572,16 @@ function Editor({
 		},
 	};
 
-	const save = async () => {
+	/** Save; true when it went through. */
+	const save = async (): Promise<boolean> => {
 		const parsed = parseDesign(doc);
 		if (!parsed.ok) {
 			toast.error(parsed.message);
-			return;
+			return false;
 		}
 		if (designOn && blocking[0]) {
 			toast.error(blocking[0].message);
-			return;
+			return false;
 		}
 		setSaving(true);
 		try {
@@ -615,6 +616,7 @@ function Editor({
 					: "Saved. Guests still see the plain invitation.",
 			);
 			await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
+			return true;
 		} catch (error) {
 			const conflict = (error as { code?: string }).code === "CONFLICT";
 			toast.error(
@@ -628,6 +630,7 @@ function Editor({
 						}
 					: undefined,
 			);
+			return false;
 		} finally {
 			setSaving(false);
 		}
@@ -702,7 +705,16 @@ function Editor({
 						Preview PDF
 					</Button>
 				) : null}
-				<Button size="sm" disabled={saving || !dirty} onClick={save}>
+				<Button
+					size="sm"
+					disabled={saving || !dirty}
+					onClick={async () => {
+						// Saved while being asked about leaving: there is nothing left
+						// to warn about, and staying is what the host chose.
+						if ((await save()) && blocker.status === "blocked")
+							blocker.reset?.();
+					}}
+				>
 					{saving ? "Saving…" : dirty ? "Save" : "Saved"}
 				</Button>
 			</TopBar>
@@ -714,6 +726,15 @@ function Editor({
 					</Button>
 					<Button size="sm" variant="light" onClick={blocker.reset}>
 						Stay
+					</Button>
+					<Button
+						size="sm"
+						disabled={saving}
+						onClick={async () => {
+							if (await save()) blocker.proceed?.();
+						}}
+					>
+						Save and leave
 					</Button>
 				</div>
 			) : null}
