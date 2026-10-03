@@ -11,6 +11,11 @@ export interface CloudflareEnv {
 	 * public page cannot be used to mail strangers in bulk.
 	 */
 	JOIN_LIMITER: RateLimit;
+	/**
+	 * Workers rate limiter for the sign-in doors (password, reset, emailed
+	 * link), keyed by path and IP.
+	 */
+	AUTH_LIMITER: RateLimit;
 	/** Secret: `wrangler secret put BETTER_AUTH_SECRET` (or .dev.vars locally). */
 	BETTER_AUTH_SECRET: string;
 	/** Public origin of the deployed Worker (wrangler.jsonc `vars`). */

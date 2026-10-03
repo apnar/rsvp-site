@@ -27,7 +27,32 @@ export const app = new Hono().basePath("/api");
 
 app.use(logger());
 
-app.on(["GET", "POST"], "/auth/*", (c) => createAuth().handler(c.req.raw));
+/**
+ * The doors somebody could knock on all night: guessing passwords, mailing
+ * resets to strangers, trying sign-in keys. Better Auth limits these too,
+ * but in memory, and every Worker isolate has its own.
+ */
+const THROTTLED = new Set([
+	"/api/auth/sign-in/email",
+	"/api/auth/request-password-reset",
+	"/api/auth/reset-password",
+	"/api/auth/change-password",
+	"/api/auth/link",
+	"/api/auth/paper",
+]);
+
+app.on(["GET", "POST"], "/auth/*", async (c) => {
+	if (THROTTLED.has(c.req.path)) {
+		const ip = c.req.header("cf-connecting-ip") ?? "local";
+		const { success } = await env.AUTH_LIMITER.limit({
+			key: `${c.req.path}:${ip}`,
+		});
+		if (!success) {
+			return c.text("Too many tries. Wait a minute and try again.", 429);
+		}
+	}
+	return createAuth().handler(c.req.raw);
+});
 
 app.all("/rpc/*", async (c, next) => {
 	const result = await rpcHandler.handle(c.req.raw, {

@@ -15,7 +15,6 @@ import {
 	resetPasswordEmail,
 	type Totals,
 	updateEmail,
-	verifyEmail,
 	welcomeEmail,
 } from "./templates";
 
@@ -179,24 +178,20 @@ describe("welcome", () => {
 });
 
 describe("auth templates", () => {
-	const url = `${site}/api/auth/verify-email?token=x&callbackURL=%2Faccount`;
-	const verify = verifyEmail({ name: "Kyle <script>", url });
-	const reset = resetPasswordEmail({ name: "Pete", url });
+	const url = `${site}/api/auth/reset-password/x?callbackURL=%2Freset-password`;
+	const reset = resetPasswordEmail({ name: "Kyle <script>", url });
 
 	it("have no unsubscribe footer", () => {
-		for (const r of [verify, reset]) {
-			expect(r.html).not.toContain("{{ params");
-			expect(r.text).not.toContain("{{ params");
-		}
+		expect(reset.html).not.toContain("{{ params");
+		expect(reset.text).not.toContain("{{ params");
 	});
 
 	it("include the link in both parts and escape names", () => {
-		expect(verify.html).toContain(
-			'href="https://rsvp.botch.com/api/auth/verify-email?token=x&amp;callbackURL=%2Faccount"',
+		expect(reset.html).toContain(
+			'href="https://rsvp.botch.com/api/auth/reset-password/x?callbackURL=%2Freset-password"',
 		);
-		expect(verify.text).toContain(url);
-		expect(verify.html).toContain("Kyle &lt;script&gt;");
 		expect(reset.text).toContain(url);
+		expect(reset.html).toContain("Kyle &lt;script&gt;");
 	});
 });
 

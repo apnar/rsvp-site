@@ -14,7 +14,7 @@ type Db = ReturnType<typeof createDb>;
  * Sign-in by link. Every link we email somebody carries their `link_token`;
  * clicking one is how a guest gets in, no password ever. The token is a
  * bearer credential, which is why the emails say not to forward them and why
- * the permit URL never carries one.
+ * a cover photo's URL never carries one.
  *
  * Served at `/api/auth/link?k=<token>&to=<path>`. GET, so Better Auth's
  * origin check does not apply. The param is `k`, not `callbackURL`: that
@@ -52,10 +52,7 @@ export function emailLink({ db }: { db: Db }) {
 
 					// The token proved who they are; the session needs Better
 					// Auth's own shape of them, which only its adapter builds.
-					const found = await ctx.context.internalAdapter.findUserByEmail(
-						person.email,
-					);
-					let user = found?.user;
+					let user = await ctx.context.internalAdapter.findUserById(person.id);
 					if (!user) {
 						// A `user` row is what the token hangs off, so this cannot
 						// happen -- unless somebody deleted the row by hand.

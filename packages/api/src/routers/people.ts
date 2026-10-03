@@ -179,11 +179,22 @@ export const peopleRouter = {
 
 	/**
 	 * "Email me my link" from the login page. Says the same thing whether or
-	 * not the address is one of ours, and refuses to be a mail cannon.
+	 * not the address is one of ours, and refuses to be a mail cannon: each
+	 * address at most every ten minutes, and each caller a few tries a
+	 * minute, or a script could walk the whole list.
 	 */
 	requestLink: publicProcedure
 		.input(z.object({ email: emailSchema }))
 		.handler(async ({ context, input }) => {
+			const ip = context.headers.get("cf-connecting-ip") ?? "local";
+			const { success } = await context.env.AUTH_LIMITER.limit({
+				key: `request-link:${ip}`,
+			});
+			if (!success) {
+				throw new ORPCError("TOO_MANY_REQUESTS", {
+					message: "Too many tries. Wait a minute and try again.",
+				});
+			}
 			const row = await findReachablePersonByEmail(context.db, input.email);
 			const cooledOff =
 				!row?.linkSentAt || Date.now() - row.linkSentAt.getTime() > 10 * 60_000;

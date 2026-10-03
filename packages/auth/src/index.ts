@@ -1,7 +1,7 @@
 import { createDb } from "@rsvp-site/db";
 import { stampTokens } from "@rsvp-site/db/people";
 import * as schema from "@rsvp-site/db/schema/auth";
-import { resetPasswordEmail, verifyEmail } from "@rsvp-site/email";
+import { resetPasswordEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { env } from "@rsvp-site/env/server";
 import { betterAuth } from "better-auth";
@@ -20,11 +20,10 @@ export function createAuth() {
 
 			schema: schema,
 		}),
-		trustedOrigins: [env.BETTER_AUTH_URL],
 		emailAndPassword: {
 			enabled: true,
-			// Nobody signs themselves up any more: an admin adds the address and
-			// the welcome email carries the way in.
+			// Nobody signs themselves up: a host, a group or a share link adds
+			// the address, and an emailed link is the way in.
 			disableSignUp: true,
 			// Verification is encouraged, not enforced: nobody gets locked out of
 			// the headcount over a missed email.
@@ -37,20 +36,6 @@ export function createAuth() {
 				);
 				if (!outcome.ok) {
 					console.error("reset password email failed", outcome);
-				}
-			},
-		},
-		emailVerification: {
-			sendOnSignUp: true,
-			autoSignInAfterVerification: true,
-			sendVerificationEmail: async ({ user, url }) => {
-				const outcome = await getMailer().sendOne(
-					{ email: user.email, name: user.name },
-					verifyEmail({ name: user.name, url }),
-					{ tags: ["auth", "verify-email"] },
-				);
-				if (!outcome.ok) {
-					console.error("verification email failed", outcome);
 				}
 			},
 		},
@@ -87,6 +72,39 @@ export function createAuth() {
 		},
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,
+		// Every write to a person goes through people.ts, which keeps
+		// `banned` and `status` together and the roles to the three this site
+		// has. These endpoints write people their own way, so they answer 404
+		// over HTTP; the server can still call what it needs (revoking
+		// sessions, setting a password) through `auth.api`.
+		disabledPaths: [
+			"/admin/ban-user",
+			"/admin/create-user",
+			"/admin/get-user",
+			"/admin/has-permission",
+			"/admin/impersonate-user",
+			"/admin/list-users",
+			"/admin/list-user-sessions",
+			"/admin/remove-user",
+			"/admin/revoke-user-session",
+			"/admin/revoke-user-sessions",
+			"/admin/set-role",
+			"/admin/set-user-password",
+			"/admin/stop-impersonating",
+			"/admin/unban-user",
+			"/admin/update-user",
+			"/change-email",
+			"/delete-user",
+			"/send-verification-email",
+			"/sign-up/email",
+			"/update-user",
+			"/verify-email",
+		],
+		advanced: {
+			// Behind Cloudflare the caller is cf-connecting-ip; x-forwarded-for
+			// is whatever the caller says it is.
+			ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
+		},
 		plugins: [
 			admin({ adminRoles: ["admin"], defaultRole: "user" }),
 			emailLink({ db }),
