@@ -3,6 +3,7 @@ import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { DRY_RUN_SUFFIX } from "@/content/site";
 import { refreshCard } from "@/lib/design-card";
 import { messageOf } from "@/lib/errors";
 import { plural } from "@/lib/format";
@@ -138,7 +139,7 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 					r.held
 						? "Published. Download the cards from the guest list; no emails go out until you start them."
 						: r.sent > 0
-							? `Sent ${plural(r.sent, "invite")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`
+							? `Sent ${plural(r.sent, "invite")}.${r.dryRun ? DRY_RUN_SUFFIX : ""}`
 							: "Published. Nobody new to invite.",
 				);
 				await refresh();

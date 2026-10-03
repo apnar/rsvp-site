@@ -2,23 +2,27 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import {
 	useMutation,
-	useQuery,
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Field, SettingRow, Switch } from "@/components/controls";
 import { Page, PageHead, Panel } from "@/components/page";
+import { pageTitle } from "@/content/site";
 import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/account")({
 	loader: ({ context }) =>
-		context.queryClient.ensureQueryData(orpc.account.me.queryOptions()),
-	head: () => ({ meta: [{ title: "Your account · Botch RSVP" }] }),
+		Promise.all([
+			context.queryClient.ensureQueryData(orpc.account.me.queryOptions()),
+			context.queryClient.ensureQueryData(
+				orpc.account.hasPassword.queryOptions(),
+			),
+		]),
+	head: () => ({ meta: [{ title: pageTitle("Your account") }] }),
 	component: AccountPage,
 });
 
@@ -146,11 +150,13 @@ function EmailPrefs() {
  */
 function PasswordPanel() {
 	const queryClient = useQueryClient();
-	const has = useQuery(orpc.account.hasPassword.queryOptions());
+	const { data: has } = useSuspenseQuery(
+		orpc.account.hasPassword.queryOptions(),
+	);
 	const [current, setCurrent] = useState("");
 	const [next, setNext] = useState("");
 	const [busy, setBusy] = useState(false);
-	const hasPassword = has.data?.hasPassword ?? false;
+	const { hasPassword } = has;
 
 	const setPassword = useMutation(
 		orpc.account.setPassword.mutationOptions({
@@ -188,11 +194,9 @@ function PasswordPanel() {
 		<Panel as="form" onSubmit={submit}>
 			<h2 className="m-0 text-[20px]">Password</h2>
 			<p className="m-0 text-[14px] text-haze">
-				{has.isLoading
-					? "Checking..."
-					: hasPassword
-						? "Set. The links in your email work either way."
-						: "None. The links in your email sign you in; set one if you'd rather type it."}
+				{hasPassword
+					? "Set. The links in your email work either way."
+					: "None. The links in your email sign you in; set one if you'd rather type it."}
 			</p>
 			{hasPassword ? (
 				<Field label="Current password" htmlFor="current-password">

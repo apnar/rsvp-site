@@ -106,6 +106,23 @@ export function openSlots(lines: readonly PotluckLine[]): number {
 }
 
 /**
+ * What a line shows as left while a guest is choosing: the server's count
+ * already has their saved claim taken out, so give it back and charge the
+ * box as it is now ticked.
+ */
+export function slotsLeftFor(
+	line: Pick<PotluckLine, "left">,
+	claimed: { saved: boolean; ticked: boolean },
+): number {
+	return line.left + (claimed.saved ? 1 : 0) - (claimed.ticked ? 1 : 0);
+}
+
+/** People who come along with a guest who said yes, not counting them. */
+export function extraPeople(party: { adults: number; kids: number }): number {
+	return Math.max(0, party.adults + party.kids - 1);
+}
+
+/**
  * Clamp what a guest sent to what the event allows. The form enforces the
  * same limits; this is what makes them true. `maxPlusOnes` 0 means the
  * guest comes alone; kids are dropped when the event does not ask.

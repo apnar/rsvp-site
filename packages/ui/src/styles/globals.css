@@ -40,6 +40,10 @@
 	--color-on-pink: #14101f;
 	--color-lime-ink: #c6ff3d;
 	--color-pink-ink: #ff4fa3;
+	/* Text on an ink fill (the chosen tab, the white chip). Follows night
+	   rather than repeating it: custom properties resolve where they are
+	   declared, so a design's :root override of night carries through. */
+	--color-on-ink: var(--color-night);
 
 	--font-sans: "Manrope", system-ui, sans-serif;
 	--font-heading: "Unbounded", system-ui, sans-serif;

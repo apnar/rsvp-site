@@ -130,7 +130,14 @@ unsubscribe.post("/:token/back", async (c) => {
 	await resubscribe(db, person.id);
 	// Brevo may have them blocklisted from a bounce or a mail-app unsubscribe;
 	// without this they would read as subscribed and be quietly undeliverable.
-	await getMailer().unblock(person.email);
+	// A failure here must not turn the resubscribe that already happened
+	// into a 500: the person is back on, and the blocklist can be cleared
+	// from Brevo's side.
+	try {
+		await getMailer().unblock(person.email);
+	} catch (error) {
+		console.error("Brevo unblock failed after resubscribe", error);
+	}
 	return html(
 		page({
 			heading: "You're back on.",

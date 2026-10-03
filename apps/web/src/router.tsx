@@ -31,4 +31,13 @@ declare module "@tanstack/react-router" {
 	interface Register {
 		router: ReturnType<typeof getRouter>;
 	}
+	interface StaticDataRouteOption {
+		/**
+		 * The page opens on a full-bleed picture and draws the site header
+		 * inside it, so the root leaves its own out. Read from the matches,
+		 * which a renamed route cannot silently miss the way a route-id
+		 * string could.
+		 */
+		ownHeader?: boolean;
+	}
 }

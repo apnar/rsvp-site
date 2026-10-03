@@ -18,6 +18,13 @@ import { getUser } from "@/functions/get-user";
 import type { orpc } from "@/utils/orpc";
 
 import appCss from "../index.css?url";
+
+/**
+ * The browser chrome colour. Mirrors the `night` token in globals.css: a
+ * <meta> cannot read a CSS variable, so the value is repeated here once.
+ */
+const NIGHT = "#14101f";
+
 export interface RouterAppContext {
 	orpc: typeof orpc;
 	queryClient: QueryClient;
@@ -48,7 +55,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 				name: "description",
 				content: TAGLINE,
 			},
-			{ name: "theme-color", content: "#14101F" },
+			{ name: "theme-color", content: NIGHT },
 		],
 		links: [
 			{
@@ -67,20 +74,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 	component: RootDocument,
 });
 
-/**
- * Pages that open on a full-bleed photo draw the header inside it, over the
- * picture, the way the design has it.
- */
-const OWN_HEADER = new Set([
-	"/_auth/e/$eventId/",
-	"/_auth/e/$eventId/design",
-	"/i/$token",
-]);
-
 function RootDocument() {
 	const { session } = Route.useRouteContext();
 	const matches = useMatches();
-	const ownHeader = matches.some((m) => OWN_HEADER.has(m.routeId));
+	const ownHeader = matches.some((m) => m.staticData.ownHeader);
 
 	return (
 		<html lang="en">

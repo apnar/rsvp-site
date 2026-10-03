@@ -33,7 +33,7 @@ export function PillTabs<T extends string>({
 					type="button"
 					aria-pressed={o.value === value}
 					onClick={() => onChange(o.value)}
-					className="cursor-pointer rounded-full px-3.5 py-2 text-soft transition-colors hover:text-ink aria-pressed:bg-ink aria-pressed:text-night"
+					className="cursor-pointer rounded-full px-3.5 py-2 text-soft transition-colors hover:text-ink aria-pressed:bg-ink aria-pressed:text-on-ink"
 				>
 					{o.label}
 					{o.count === undefined ? null : ` ${o.count}`}

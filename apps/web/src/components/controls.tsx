@@ -4,6 +4,7 @@
  * inputs underneath, so they work with a keyboard and a screen reader.
  */
 
+import type { Answer } from "@rsvp-site/api/headcount";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { Minus, Plus } from "lucide-react";
 import {
@@ -13,8 +14,6 @@ import {
 	type ReactNode,
 	useId,
 } from "react";
-
-export type Answer = "yes" | "maybe" | "no";
 
 const ANSWERS: { value: Answer; label: string }[] = [
 	{ value: "yes", label: "Yes!" },
@@ -57,7 +56,7 @@ export function AnswerPicker({
 								? "bg-lime text-on-lime shadow-lime hover:text-on-lime"
 								: a.value === "maybe"
 									? "bg-pink text-on-pink hover:text-on-pink"
-									: "bg-ink text-night hover:text-night"),
+									: "bg-ink text-on-ink hover:text-on-ink"),
 						value === a.value &&
 							pending &&
 							"text-ink ring-2 ring-lime ring-inset",
@@ -120,7 +119,7 @@ export function Stepper({
 					aria-describedby={id}
 					disabled={value >= max}
 					onClick={() => onChange(Math.min(max, value + 1))}
-					className="grid size-9 cursor-pointer place-items-center rounded-full bg-ink text-night transition-colors hover:bg-soft disabled:cursor-not-allowed disabled:opacity-40"
+					className="grid size-9 cursor-pointer place-items-center rounded-full bg-ink text-on-ink transition-colors hover:bg-soft disabled:cursor-not-allowed disabled:opacity-40"
 				>
 					<Plus className="size-4" strokeWidth={2} />
 				</button>

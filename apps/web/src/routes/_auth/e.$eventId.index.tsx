@@ -1,3 +1,4 @@
+import { type Answer, openSlots, slotsLeftFor } from "@rsvp-site/api/headcount";
 import { Button, buttonVariants } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
@@ -11,24 +12,20 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-
 import { Wordmark } from "@/components/brand";
-import {
-	type Answer,
-	AnswerPicker,
-	Field,
-	Stepper,
-} from "@/components/controls";
+import { AnswerPicker, Field, Stepper } from "@/components/controls";
 import { CountdownTiles } from "@/components/countdown";
 import { CardSvg } from "@/components/design/card-svg";
 import { EventHero } from "@/components/event-hero";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import UserMenu from "@/components/user-menu";
+import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { firstName, plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/")({
+	staticData: { ownHeader: true },
 	// `a` is the answer an email button carried. It is shown picked but not
 	// saved: mail clients fetch links on their own, so nothing is recorded
 	// until a person presses the button.
@@ -42,9 +39,7 @@ export const Route = createFileRoute("/_auth/e/$eventId/")({
 	head: ({ loaderData }) => ({
 		meta: [
 			{
-				title: loaderData
-					? `${loaderData.event.title} · Botch RSVP`
-					: "Botch RSVP",
+				title: pageTitle(loaderData?.event.title),
 			},
 			// The page is behind a sign-in, but say it anyway.
 			{ name: "robots", content: "noindex" },
@@ -158,7 +153,7 @@ function InvitePage() {
 							...(e.potluckEnabled
 								? [
 										{
-											value: data.potluck.reduce((n, l) => n + l.left, 0),
+											value: openSlots(data.potluck),
 											label: "to bring",
 											tone: "pink" as const,
 										},
@@ -379,7 +374,7 @@ function RsvpForm({ data, initial }: { data: Invite; initial: Answer | null }) {
 					</legend>
 					{data.potluck.map((item) => {
 						const mine = claims.includes(item.id);
-						const left = item.left + (item.mine ? 1 : 0) - (mine ? 1 : 0);
+						const left = slotsLeftFor(item, { saved: item.mine, ticked: mine });
 						const full = !mine && left === 0;
 						return (
 							<label
@@ -409,7 +404,7 @@ function RsvpForm({ data, initial }: { data: Invite; initial: Answer | null }) {
 								<span
 									className={cn(
 										"text-[13px]",
-										mine ? "text-pink-soft" : "text-haze",
+										mine ? "text-pink-ink" : "text-haze",
 									)}
 								>
 									{mine

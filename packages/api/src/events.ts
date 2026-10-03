@@ -296,6 +296,8 @@ export type EventCard = {
 	date: string | null;
 	dateLabel: string | null;
 	timeLabel: string | null;
+	/** HH:MM, so a card can show the start alone without parsing a label. */
+	startTime: string | null;
 	coverKey: string | null;
 	/** The designed card's picture, when the design is on, and its page colour. */
 	card: { key: string; bg: string } | null;
@@ -363,6 +365,7 @@ export async function cardsFor(
 			date: row.date,
 			dateLabel,
 			timeLabel,
+			startTime: row.startTime,
 			coverKey: row.coverKey,
 			card: cardOf(row),
 			hostLine: row.hostLine,

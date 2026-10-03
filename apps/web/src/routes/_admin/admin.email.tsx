@@ -1,24 +1,36 @@
+import type { EmailKind } from "@rsvp-site/db/schema/email";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	useMutation,
+	useQueryClient,
+	useSuspenseQuery,
+} from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Field } from "@/components/controls";
 import { PreviewPanel, reportSend } from "@/components/email-preview";
 import { Notice } from "@/components/notice";
 import { Panel } from "@/components/page";
+import { pageTitle } from "@/content/site";
+import { when } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_admin/admin/email")({
-	head: () => ({ meta: [{ title: "Email · Botch RSVP" }] }),
+	loader: ({ context }) =>
+		Promise.all([
+			context.queryClient.ensureQueryData(orpc.mail.status.queryOptions()),
+			context.queryClient.ensureQueryData(orpc.mail.recent.queryOptions()),
+		]),
+	head: () => ({ meta: [{ title: pageTitle("Email") }] }),
 	component: AdminEmailPage,
 });
 
-const KIND: Record<string, string> = {
+// A Record over every kind, so adding one to EMAIL_KINDS fails to compile here.
+const KIND: Record<EmailKind, string> = {
 	invite: "Invite",
 	deadline_reminder: "Deadline reminder",
 	day_before: "Day before",
@@ -32,24 +44,14 @@ const KIND: Record<string, string> = {
 	message: "Message",
 };
 
-function when(value: Date | string): string {
-	return new Date(value).toLocaleString("en-US", {
-		month: "short",
-		day: "numeric",
-		hour: "numeric",
-		minute: "2-digit",
-		timeZone: "America/New_York",
-	});
-}
-
 /**
  * A message to everybody on the site, and the log of every send. Event mail
  * is sent from the events themselves; this is for the rare word to all.
  */
 function AdminEmailPage() {
 	const queryClient = useQueryClient();
-	const status = useQuery(orpc.mail.status.queryOptions());
-	const recent = useQuery(orpc.mail.recent.queryOptions());
+	const { data: status } = useSuspenseQuery(orpc.mail.status.queryOptions());
+	const { data: recent } = useSuspenseQuery(orpc.mail.recent.queryOptions());
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
 	const onError = (error: Error) => toast.error(error.message);
@@ -75,7 +77,7 @@ function AdminEmailPage() {
 
 	return (
 		<div className="flex flex-col gap-7">
-			{status.data?.dryRun ? (
+			{status.dryRun ? (
 				<Notice>
 					No Brevo key: email is printed to the server log, not sent.
 				</Notice>
@@ -84,8 +86,8 @@ function AdminEmailPage() {
 				<Panel as="form" onSubmit={(e) => e.preventDefault()}>
 					<h2 className="m-0 text-[20px]">Message everybody</h2>
 					<p className="m-0 text-[14px] text-haze">
-						Goes to {status.data?.everyone ?? "..."} people: everyone not
-						unsubscribed or deactivated.
+						Goes to {status.everyone} people: everyone not unsubscribed or
+						deactivated.
 					</p>
 					<Field label="Subject" htmlFor="subject">
 						<Input
@@ -138,16 +140,16 @@ function AdminEmailPage() {
 
 			<section className="flex flex-col gap-3">
 				<h2 className="m-0 text-[22px]">Recent sends</h2>
-				{(recent.data ?? []).length === 0 ? (
+				{recent.length === 0 ? (
 					<p className="m-0 text-soft">Nothing sent yet.</p>
 				) : (
-					(recent.data ?? []).map((s) => (
+					recent.map((s) => (
 						<div
 							key={s.id}
 							className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-[18px] bg-panel px-5 py-3.5"
 						>
 							<span className="flex-[0_0_130px] font-bold text-[13px] text-lime-ink uppercase tracking-[0.06em]">
-								{KIND[s.kind] ?? s.kind}
+								{KIND[s.kind]}
 							</span>
 							<span className="min-w-0 flex-[1_1_240px]">
 								<b>{s.subject}</b>
@@ -160,7 +162,7 @@ function AdminEmailPage() {
 							<span
 								className={cn(
 									"text-[14px]",
-									s.failedCount > 0 ? "text-pink-soft" : "text-soft",
+									s.failedCount > 0 ? "text-pink-ink" : "text-soft",
 								)}
 							>
 								{s.recipientCount - s.failedCount} of {s.recipientCount}

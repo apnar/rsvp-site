@@ -1,34 +1,23 @@
-import type { Outputs } from "@/lib/api-types";
+import type { Inputs, Outputs } from "@/lib/api-types";
 import { plural } from "@/lib/format";
 
 export type Loaded = Outputs["events"]["get"];
-type HostAlerts = "off" | "each" | "daily";
 
-export type EventForm = {
-	title: string;
-	hostLine: string;
+/** Every field events.update takes: the form always holds all of them. */
+type ApiFields = Required<NonNullable<Inputs["events"]["update"]["fields"]>>;
+
+/**
+ * The API's fields, except that an empty date or time is "" in an input
+ * and becomes null in `fieldsOf`.
+ */
+export type EventForm = Omit<
+	ApiFields,
+	"date" | "startTime" | "endTime" | "rsvpDeadline"
+> & {
 	date: string;
 	startTime: string;
 	endTime: string;
-	location: string;
-	details: string;
-	extraDetails: string;
 	rsvpDeadline: string;
-	maxPlusOnes: number;
-	askKids: boolean;
-	askDietary: boolean;
-	askNote: boolean;
-	potluckEnabled: boolean;
-	showGuestNames: boolean;
-	shareEnabled: boolean;
-	paper: boolean;
-	guestInvites: boolean;
-	guestInviteLimit: number;
-	remindDeadline: boolean;
-	remindDaysBefore: number;
-	remindDayBefore: boolean;
-	notifyChanges: boolean;
-	hostAlerts: HostAlerts;
 };
 
 export type Item = {

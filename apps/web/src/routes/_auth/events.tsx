@@ -1,3 +1,4 @@
+import { extraPeople } from "@rsvp-site/api/headcount";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { Button, buttonVariants } from "@rsvp-site/ui/components/button";
 import {
@@ -6,20 +7,25 @@ import {
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-
 import { EventCard } from "@/components/event-card";
 import { Page, PageHead, Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag } from "@/components/response-bar";
 import { StatTile } from "@/components/stat-tile";
-import { longDay, since } from "@/lib/format";
+import { pageTitle } from "@/content/site";
+import { firstName, longDay, since } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/events")({
-	validateSearch: z.object({ all: z.boolean().optional().catch(undefined) }),
+	// Both live in the URL so Back and a refresh keep the view. The default
+	// tab is left out of it, which is why `tab` is optional rather than
+	// defaulted here.
+	validateSearch: z.object({
+		all: z.boolean().optional().catch(undefined),
+		tab: z.enum(["drafts", "past"]).optional().catch(undefined),
+	}),
 	loaderDeps: ({ search }) => ({ all: search.all ?? false }),
 	loader: async ({ context, deps }) => {
 		const host = canHost(context.session.user);
@@ -32,7 +38,7 @@ export const Route = createFileRoute("/_auth/events")({
 				: null,
 		]);
 	},
-	head: () => ({ meta: [{ title: "Your events · Botch RSVP" }] }),
+	head: () => ({ meta: [{ title: pageTitle("Your events") }] }),
 	component: EventsPage,
 });
 
@@ -41,19 +47,14 @@ function EventsPage() {
 	return canHost(session.user) ? <HostDashboard /> : <Invites />;
 }
 
-function firstName(name: string) {
-	return name.trim().split(/\s+/)[0] ?? name;
-}
-
 function HostDashboard() {
 	const { session } = Route.useRouteContext();
-	const { all = false } = Route.useSearch();
+	const { all = false, tab = "upcoming" } = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const queryClient = useQueryClient();
 	const { data } = useSuspenseQuery(
 		orpc.events.mine.queryOptions({ input: { all } }),
 	);
-	const [tab, setTab] = useState<"upcoming" | "drafts" | "past">("upcoming");
 
 	const nudge = useMutation(
 		orpc.events.nudge.mutationOptions({
@@ -130,7 +131,14 @@ function HostDashboard() {
 							<Button
 								variant="ghost"
 								size="sm"
-								onClick={() => navigate({ search: { all: !all } })}
+								onClick={() =>
+									navigate({
+										search: (prev) => ({
+											...prev,
+											all: all ? undefined : true,
+										}),
+									})
+								}
 							>
 								{all ? "Only mine" : "Every event"}
 							</Button>
@@ -138,7 +146,14 @@ function HostDashboard() {
 						<PillTabs
 							label="Which events"
 							value={tab}
-							onChange={setTab}
+							onChange={(next) =>
+								navigate({
+									search: (prev) => ({
+										...prev,
+										tab: next === "upcoming" ? undefined : next,
+									}),
+								})
+							}
 							options={[
 								{
 									value: "upcoming",
@@ -247,8 +262,8 @@ function HostDashboard() {
 								<AnswerTag response={f.response} />
 								<span className="min-w-0 flex-1 text-[15px]">
 									<b>{f.name}</b>
-									{f.response === "yes" && f.adults + f.kids > 1
-										? ` +${f.adults + f.kids - 1}`
+									{f.response === "yes" && extraPeople(f) > 0
+										? ` +${extraPeople(f)}`
 										: ""}{" "}
 									· {f.eventTitle}
 								</span>

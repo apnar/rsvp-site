@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_admin")({
 });
 
 const tabClass =
-	"rounded-full px-4 py-2 font-bold text-[14px] text-soft no-underline hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-night";
+	"rounded-full px-4 py-2 font-bold text-[14px] text-soft no-underline hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-on-ink";
 
 function AdminLayout() {
 	return (

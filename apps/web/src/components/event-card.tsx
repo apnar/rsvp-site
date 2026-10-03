@@ -1,5 +1,5 @@
 import type { Totals } from "@rsvp-site/api/headcount";
-import { daysBetween } from "@rsvp-site/api/time";
+import { daysBetween, formatTime } from "@rsvp-site/api/time";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -16,7 +16,7 @@ type CardEvent = {
 	status: "draft" | "published" | "canceled";
 	date: string | null;
 	dateLabel: string | null;
-	timeLabel: string | null;
+	startTime: string | null;
 	coverKey: string | null;
 	/** The designed card's picture and its page colour, when the design is on. */
 	card?: { key: string; bg: string } | null;
@@ -24,8 +24,8 @@ type CardEvent = {
 };
 
 /** "Sat, Oct 24 · 5:00 PM" -- the start only, as the design shows it. */
-function whenShort(e: Pick<CardEvent, "dateLabel" | "timeLabel">) {
-	const start = e.timeLabel?.split(" - ")[0];
+function whenShort(e: Pick<CardEvent, "dateLabel" | "startTime">) {
+	const start = e.startTime ? formatTime(e.startTime) : null;
 	return [e.dateLabel, start].filter(Boolean).join(" · ") || "No date yet";
 }
 
@@ -84,7 +84,7 @@ export function EventCard({
 							"pointer-events-none absolute top-3.5 left-3.5 rounded-full px-3 py-1.5 font-bold text-[12px] uppercase tracking-[0.06em]",
 							chip.tone === "lime" && "bg-lime text-on-lime",
 							chip.tone === "pink" && "bg-pink text-on-pink",
-							chip.tone === "ink" && "bg-ink text-night",
+							chip.tone === "ink" && "bg-ink text-on-ink",
 						)}
 					>
 						{chip.label}

@@ -6,6 +6,17 @@
 /** The site's name. The email sender's display name mirrors it. */
 export const SITE_NAME = "Botch RSVP";
 
+/** A document title: "Guests · Dinner · Botch RSVP". Falsy parts drop out. */
+export function pageTitle(...parts: (string | null | undefined)[]): string {
+	return [...parts.filter(Boolean), SITE_NAME].join(" · ");
+}
+
+/**
+ * Appended to a send toast when there is no Brevo key and the mailer only
+ * printed the email, so nobody thinks a local test reached real inboxes.
+ */
+export const DRY_RUN_SUFFIX = " (Logged, not sent: no mail key.)";
+
 export const TAGLINE =
 	"Invitations and RSVPs. Plus-ones, kids, allergies and who's bringing the ice, all in one list.";
 

@@ -2,17 +2,15 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import type { Outputs } from "@/lib/api-types";
+
 /**
  * The admin email page's preview and send report. The preview renders the
  * same HTML the send would, in a sandboxed frame.
  */
 
-export type Preview = { subject: string; html: string; text: string };
-export type ListOutcome = {
-	attempted: number;
-	sent: number;
-	failed: { emails: string[]; error: string }[];
-};
+export type Preview = Outputs["mail"]["previewMessage"];
+export type ListOutcome = Outputs["mail"]["sendMessage"];
 
 export function reportSend(result: ListOutcome) {
 	const failed = result.attempted - result.sent;
@@ -29,7 +27,7 @@ export function PreviewPanel({
 	preview,
 	onClose,
 }: {
-	preview: Preview & { recipientCount: number };
+	preview: Preview;
 	onClose: () => void;
 }) {
 	const [showText, setShowText] = useState(false);

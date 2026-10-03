@@ -4,13 +4,14 @@ import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Wordmark } from "@/components/brand";
 import { EventHero } from "@/components/event-hero";
+import { pageTitle } from "@/content/site";
 import { designSrc } from "@/lib/design-src";
 import { client, orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/i/$token")({
+	staticData: { ownHeader: true },
 	/**
 	 * Signed in, a share link puts you on the list and takes you to the
 	 * invite. That is a write on a GET, which the email links avoid -- but
@@ -29,9 +30,7 @@ export const Route = createFileRoute("/i/$token")({
 	head: ({ loaderData }) => ({
 		meta: [
 			{
-				title: loaderData
-					? `${loaderData.title} · Botch RSVP`
-					: "You're invited · Botch RSVP",
+				title: pageTitle(loaderData ? loaderData.title : "You're invited"),
 			},
 			{ name: "robots", content: "noindex" },
 			...(loaderData

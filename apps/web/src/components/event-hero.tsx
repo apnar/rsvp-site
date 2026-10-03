@@ -51,7 +51,7 @@ export function EventHero({
 				align,
 				"rounded-full px-3.5 py-1.5 font-bold text-[13px] uppercase tracking-[0.08em]",
 				tone === "ink"
-					? "bg-ink text-night"
+					? "bg-ink text-on-ink"
 					: tone === "lime"
 						? "bg-lime text-on-lime"
 						: "bg-pink text-on-pink",

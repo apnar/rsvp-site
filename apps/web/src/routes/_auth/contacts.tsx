@@ -11,12 +11,12 @@ import {
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
 import { NativeSelect } from "@/components/native-select";
 import { Page, PageHead, Panel } from "@/components/page";
+import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { initials, plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_auth/contacts")({
 	},
 	loader: ({ context }) =>
 		context.queryClient.ensureQueryData(orpc.contacts.book.queryOptions()),
-	head: () => ({ meta: [{ title: "Contacts · Botch RSVP" }] }),
+	head: () => ({ meta: [{ title: pageTitle("Contacts") }] }),
 	component: ContactsPage,
 });
 

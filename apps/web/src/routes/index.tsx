@@ -22,7 +22,7 @@ function Landing() {
 		<>
 			<section className="mx-auto grid max-w-[1180px] grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-center gap-[clamp(36px,5vw,64px)] px-[clamp(16px,4vw,40px)] py-[clamp(28px,6vw,72px)]">
 				<div className="flex flex-col gap-6">
-					<span className="self-start rounded-full border border-pink px-3.5 py-1.5 font-bold text-[13px] text-pink-soft uppercase tracking-[0.08em]">
+					<span className="self-start rounded-full border border-pink px-3.5 py-1.5 font-bold text-[13px] text-pink-ink uppercase tracking-[0.08em]">
 						Invites + RSVPs
 					</span>
 					<h1 className="m-0 font-black text-[clamp(44px,7.4vw,100px)] leading-[0.94] tracking-[-0.045em]">

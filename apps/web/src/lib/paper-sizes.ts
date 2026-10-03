@@ -1,3 +1,5 @@
+import type { Format } from "@rsvp-site/design/schema";
+
 /**
  * The sizes a paper invitation can be printed at. On its own so the guest
  * list can offer the choice without loading the PDF library.
@@ -19,7 +21,8 @@ export const PAPER_SIZES: { value: PaperSize; label: string }[] = [
  */
 export type PrintLayout = "exact" | "two-up" | "on-letter";
 
-export type CardFormat = "5x7" | "5x7l" | "square" | "8x10" | "half" | "letter";
+/** A type-only import: the design package's schema, not its runtime, and no pdf-lib. */
+export type CardFormat = Format;
 
 export function layoutsFor(
 	format: CardFormat,

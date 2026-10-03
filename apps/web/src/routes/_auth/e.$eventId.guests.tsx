@@ -11,7 +11,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
@@ -21,6 +21,7 @@ import { Notice } from "@/components/notice";
 import { Page, PageHead, Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
+import { DRY_RUN_SUFFIX, pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { refreshCard } from "@/lib/design-card";
 import { messageOf } from "@/lib/errors";
@@ -35,7 +36,14 @@ import {
 import { saveFile } from "@/lib/save-file";
 import { client, orpc } from "@/utils/orpc";
 
+const FILTERS = ["yes", "maybe", "no", "waiting"] as const;
+
 export const Route = createFileRoute("/_auth/e/$eventId/guests")({
+	// The filter is in the URL so Back and a refresh keep it; "all" is the
+	// absence of it.
+	validateSearch: z.object({
+		show: z.enum(FILTERS).optional().catch(undefined),
+	}),
 	loader: ({ context, params }) =>
 		context.queryClient.ensureQueryData(
 			orpc.guests.list.queryOptions({ input: { eventId: params.eventId } }),
@@ -43,16 +51,13 @@ export const Route = createFileRoute("/_auth/e/$eventId/guests")({
 	head: ({ loaderData }) => ({
 		meta: [
 			{
-				title: loaderData
-					? `Guests · ${loaderData.event.title} · Botch RSVP`
-					: "Botch RSVP",
+				title: pageTitle(loaderData && "Guests", loaderData?.event.title),
 			},
 		],
 	}),
 	component: GuestListPage,
 });
 
-type Filter = "all" | "yes" | "maybe" | "no" | "waiting";
 type Guest = Outputs["guests"]["list"]["guests"][number];
 
 function GuestListPage() {
@@ -62,7 +67,8 @@ function GuestListPage() {
 	const { data } = useSuspenseQuery(
 		orpc.guests.list.queryOptions({ input: { eventId } }),
 	);
-	const [filter, setFilter] = useState<Filter>("all");
+	const { show: filter = "all" } = Route.useSearch();
+	const navigate = Route.useNavigate();
 	const [query, setQuery] = useState("");
 	const [adding, setAdding] = useState(false);
 	const nowMs = Date.parse(data.now);
@@ -77,9 +83,7 @@ function GuestListPage() {
 		if (e.designFormat) refreshCard(eventId, true).catch(() => {});
 	}, [eventId, e.designFormat]);
 	const published = e.status === "published";
-	const notInvited = data.guests.filter(
-		(g) => g.invitedAt === null && !g.unreachable,
-	).length;
+	const { notInvited } = data;
 
 	const refresh = () =>
 		queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
@@ -101,7 +105,7 @@ function GuestListPage() {
 			onSuccess: (r) => {
 				toast.success(
 					r.sent > 0
-						? `Invited ${plural(r.sent, "more guest")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`
+						? `Invited ${plural(r.sent, "more guest")}.${r.dryRun ? DRY_RUN_SUFFIX : ""}`
 						: "Nobody new to invite.",
 				);
 				refresh();
@@ -136,6 +140,17 @@ function GuestListPage() {
 			return !q || g.name.toLowerCase().includes(q) || g.email.includes(q);
 		});
 	}, [data.guests, filter, query]);
+
+	// What every row shares about the event, so a row takes one object
+	// instead of repeating the event's facts as separate props.
+	const rowEvent: RowEvent = {
+		id: eventId,
+		title: e.title,
+		paper: e.paper,
+		canNudge: published && !e.emailsHeld,
+		nowMs,
+		print,
+	};
 
 	return (
 		<Page className="gap-[clamp(28px,4vw,44px)]">
@@ -254,7 +269,7 @@ function GuestListPage() {
 											<b
 												className={cn(
 													item.left === 0 && "text-lime-ink",
-													item.claimed === 0 && "text-pink-soft",
+													item.claimed === 0 && "text-pink-ink",
 												)}
 											>
 												{item.claimed}/{item.quantity}
@@ -279,7 +294,14 @@ function GuestListPage() {
 					<PillTabs
 						label="Show"
 						value={filter}
-						onChange={setFilter}
+						onChange={(next) =>
+							navigate({
+								search: (prev) => ({
+									...prev,
+									show: next === "all" ? undefined : next,
+								}),
+							})
+						}
 						options={[
 							{ value: "all", label: "All", count: t.invited },
 							{ value: "yes", label: "In", count: t.yes },
@@ -306,12 +328,7 @@ function GuestListPage() {
 							key={g.id}
 							guest={g}
 							isYou={g.userId === session.user.id}
-							nowMs={nowMs}
-							canNudge={published && !e.emailsHeld}
-							paper={e.paper}
-							eventId={eventId}
-							eventTitle={e.title}
-							print={print}
+							event={rowEvent}
 							nudging={nudge.isPending}
 							onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
 							onRemove={() => remove.mutate({ eventId, guestId: g.id })}
@@ -351,15 +368,19 @@ function party(g: Guest) {
 	].join(" · ");
 }
 
+type RowEvent = {
+	id: string;
+	title: string;
+	paper: boolean;
+	canNudge: boolean;
+	nowMs: number;
+	print: Print;
+};
+
 function GuestRow({
 	guest: g,
 	isYou,
-	nowMs,
-	canNudge,
-	paper,
-	eventId,
-	eventTitle,
-	print,
+	event,
 	nudging,
 	onNudge,
 	onRemove,
@@ -367,17 +388,14 @@ function GuestRow({
 }: {
 	guest: Guest;
 	isYou: boolean;
-	nowMs: number;
-	canNudge: boolean;
-	paper: boolean;
-	eventId: string;
-	eventTitle: string;
-	print: Print;
+	event: RowEvent;
 	nudging: boolean;
 	onNudge: () => void;
 	onRemove: () => void;
 	removing: boolean;
 }) {
+	const { nowMs, canNudge, paper, print } = event;
+	const eventId = event.id;
 	const [editing, setEditing] = useState(false);
 	const waiting = g.response === null;
 	const out = g.response === "no";
@@ -422,7 +440,7 @@ function GuestRow({
 				<b className={cn("text-[17px]", out && "text-soft")}>{g.name}</b>
 				<div className="truncate text-[13px] text-haze">{sub}</div>
 				{via ? (
-					<div className="truncate text-[12px] text-pink-soft">{via}</div>
+					<div className="truncate text-[12px] text-pink-ink">{via}</div>
 				) : null}
 				{g.noEmail ? <AddEmail eventId={eventId} guestId={g.id} /> : null}
 			</div>
@@ -432,7 +450,7 @@ function GuestRow({
 			<span className="flex w-[96px] flex-col items-start gap-1">
 				<AnswerTag response={g.response} />
 				{g.unreachable && !g.noEmail ? (
-					<span className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-soft">
+					<span className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-ink">
 						No email
 					</span>
 				) : null}
@@ -462,7 +480,7 @@ function GuestRow({
 			<span
 				className={cn(
 					"min-w-0 flex-[1_1_160px] text-[14px]",
-					g.dietary ? "text-pink-soft" : "text-soft",
+					g.dietary ? "text-pink-ink" : "text-soft",
 					note.length === 0 && "max-md:hidden",
 				)}
 			>
@@ -472,7 +490,7 @@ function GuestRow({
 				{paper ? (
 					<PaperActions
 						eventId={eventId}
-						eventTitle={eventTitle}
+						eventTitle={event.title}
 						print={print}
 						guest={g}
 					/>
@@ -551,7 +569,7 @@ function PaperPanel({
 		orpc.events.releaseEmails.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(
-					`Emails started. Sent ${plural(r.sent, "invitation")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`,
+					`Emails started. Sent ${plural(r.sent, "invitation")}.${r.dryRun ? DRY_RUN_SUFFIX : ""}`,
 				);
 				onChange();
 			},

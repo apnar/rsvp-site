@@ -1,8 +1,8 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-
 import { EventEditor } from "@/components/event-editor";
 import { Page, PageHead } from "@/components/page";
+import { pageTitle } from "@/content/site";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/edit")({
@@ -13,9 +13,7 @@ export const Route = createFileRoute("/_auth/e/$eventId/edit")({
 	head: ({ loaderData }) => ({
 		meta: [
 			{
-				title: loaderData
-					? `Edit · ${loaderData.event.title} · Botch RSVP`
-					: "Botch RSVP",
+				title: pageTitle(loaderData && "Edit", loaderData?.event.title),
 			},
 		],
 	}),

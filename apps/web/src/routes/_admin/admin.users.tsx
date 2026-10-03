@@ -1,3 +1,4 @@
+import type { Role } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
@@ -9,13 +10,13 @@ import {
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
 import { NativeSelect } from "@/components/native-select";
 import { Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
+import { DRY_RUN_SUFFIX, pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { initials, shortDate } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
@@ -23,11 +24,10 @@ import { orpc } from "@/utils/orpc";
 export const Route = createFileRoute("/_admin/admin/users")({
 	loader: ({ context }) =>
 		context.queryClient.ensureQueryData(orpc.people.list.queryOptions()),
-	head: () => ({ meta: [{ title: "People · Botch RSVP" }] }),
+	head: () => ({ meta: [{ title: pageTitle("People") }] }),
 	component: AdminPeoplePage,
 });
 
-type Role = "user" | "host" | "admin";
 type Person = Outputs["people"]["list"][number];
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
@@ -117,7 +117,7 @@ function AddPerson({ onAdded }: { onAdded: () => void }) {
 		orpc.people.add.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(
-					`${r.created ? "Added" : "Updated"} and sent their link.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`,
+					`${r.created ? "Added" : "Updated"} and sent their link.${r.dryRun ? DRY_RUN_SUFFIX : ""}`,
 				);
 				setEmail("");
 				setName("");
@@ -204,7 +204,7 @@ function PersonRow({
 	const sendLink = useMutation(
 		orpc.people.sendLink.mutationOptions({
 			onSuccess: (r) => {
-				toast.success(`Link sent.${r.dryRun ? " (Logged, not sent.)" : ""}`);
+				toast.success(`Link sent.${r.dryRun ? DRY_RUN_SUFFIX : ""}`);
 				onChange();
 			},
 			onError,

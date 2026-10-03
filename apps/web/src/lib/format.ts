@@ -57,6 +57,17 @@ export function shortDate(when: Date | string): string {
 	});
 }
 
+/** "Oct 2, 3:15 PM" for a moment such as when something was sent. */
+export function when(value: Date | string): string {
+	return new Date(value).toLocaleString("en-US", {
+		month: "short",
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+		timeZone: SITE_TIMEZONE,
+	});
+}
+
 /** "In 22 days", "Tomorrow", "Today", "3 days ago" between YYYY-MM-DD dates. */
 export function inDays(days: number): string {
 	if (days === 0) return "Today";
