@@ -25,7 +25,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
 | D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0015 applied |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
-| Rate limit | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form |
+| Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` and `/paper` sign-ins and "email me my link" |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
 | Sender | `"Botch RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
@@ -94,8 +94,17 @@ pnpm --filter @rsvp-site/api exec vitest run -t "dueEmails"
 Only `packages/db`, `packages/email`, `packages/api` and `packages/design`
 have tests — pure functions (templates, Brevo request shaping, link paths,
 address parsing, roles, headcount and potluck arithmetic, the email
-schedule's timezone maths, design validation and text layout).
-Nothing in the test run touches D1 or the network.
+schedule's timezone maths, event rules, design validation, text layout,
+the scene and the designer's editing logic). Nothing in the test run
+touches D1 or the network. CI also renders every template to PDF:
+
+```bash
+pnpm --filter web exec tsx scripts/render-design-samples.ts <out dir>
+```
+
+Neither catches a mistake that only D1 makes (a raw-SQL batch, a statement
+over 100 parameters): exercise anything that writes through the dev server
+before pushing.
 
 Database:
 
@@ -124,10 +133,17 @@ migration in one transaction, where `PRAGMA foreign_keys=OFF` does nothing,
 and the generated drop order ignores foreign keys. 0010's header lists what
 had to change.
 
+CI applies migrations before it deploys the new Worker, so for a moment the
+old code runs against the new schema. A migration that drops or renames
+something the running code reads goes in two steps: ship code that no
+longer needs it, then the migration.
+
 Local setup needs `apps/web/.dev.vars` (copy `.dev.vars.example`, set a random
 `BETTER_AUTH_SECRET`). Leave `BREVO_API_KEY` unset locally: the mailer then prints
 each email to the dev console with the placeholders filled in from the first
-recipient, so the sign-in link in the log is clickable.
+recipient, so the sign-in link in the log is clickable. That dry run only
+happens when `BETTER_AUTH_URL` is localhost (`allowDryRun` in `worker.ts`);
+anywhere else a missing key fails every send instead of logging links.
 Here `.dev.vars` was created without one, and the local D1 holds no real
 people. If a key is ever added, strip it and restart before exercising any
 send, and check first that `mail.status` reports `dryRun: true`. Otherwise a
@@ -150,18 +166,25 @@ libraries; only `apps/web` builds):
   `src/roles.ts` (pure; the web app imports it too).
 - `packages/auth` — Better Auth factory (`createAuth()`) plus the custom
   `email-link` plugin in `src/link.ts`.
-- `packages/api` — oRPC routers (`src/routers/*`), event reads and access
-  (`events.ts`), sending (`mail.ts`), pure arithmetic the web app also
+- `packages/api` — oRPC routers (`src/routers/*`; `events.*` is split by
+  concern under `routers/events/` and composed back into one namespace),
+  event reads and access (`events.ts`, `host-event.ts`), sending
+  (`mail.ts`), R2 and uploads (`media.ts`), stored designs
+  (`designs-store.ts`, `design-rules.ts`), shared inputs (`inputs.ts`), pure
+  rules with tests (`event-rules.ts`), pure arithmetic the web app also
   bundles (`time.ts`, `headcount.ts`, `schedule.ts` -- keep those free of
-  drizzle and `cloudflare:workers`), and the cron pass in `src/jobs/event-mail.ts`.
+  drizzle and `cloudflare:workers`), and the cron pass in
+  `src/jobs/event-mail.ts`. Routers never import each other.
 - `packages/email` — pure template/Brevo code (`src/index.ts`) plus
   `src/worker.ts`, the only file there that touches the Worker env.
 - `packages/design` — invitation designs, pure: the zod schema
   (`schema.ts`), the curated fonts (`fonts.ts`) and their generated
   metrics (`metrics/`), placeholders, text layout (`text.ts`), the scene
   every renderer draws (`scene.ts`), the page theme (`theme.ts`), stickers
-  and templates. No drizzle, no `cloudflare:workers`, no DOM, no pdf-lib:
-  the Worker validates with it and the browser renders with it.
+  and templates, and the designer's pure editing logic (`editor.ts`: the
+  reducer, cloning, restacking, aligning). No drizzle, no
+  `cloudflare:workers`, no DOM, no pdf-lib: the Worker validates with it
+  and the browser renders with it.
   `metrics/` and `stickers.ts` come from
   `pnpm --filter web exec tsx scripts/gen-design-fonts.ts` (then
   `pnpm run check` to format them); rerun it after changing `FONTS`.
@@ -177,7 +200,15 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
 
 - Browser → `/api/rpc` via the oRPC client in `apps/web/src/utils/orpc.ts`.
   That file is isomorphic: during SSR it calls `createRouterClient(appRouter)`
-  directly (no HTTP hop), in the browser it uses an `RPCLink`.
+  directly (no HTTP hop, with an interceptor that masks unexpected errors the
+  way the HTTP handler does), in the browser it uses an `RPCLink`. The link
+  sends oRPC's CSRF header and the handler refuses calls without it: other
+  botch.com sites are same-site and get our Lax cookies. Anything calling
+  `/api/rpc` by hand (curl, a test) must send `x-csrf-token: orpc`.
+- The query client refreshes every query on screen after any successful
+  mutation and toasts a failed one (`MutationCache` in `orpc.ts`); a
+  mutation with its own `onError` or `meta: { quiet: true }` toasts itself.
+  4xx answers are not retried.
 - oRPC procedures come from `packages/api/src/index.ts`: `publicProcedure`,
   `protectedProcedure` (a session), `personProcedure` (the caller re-read
   from D1 as `context.me`), `hostProcedure` and `adminProcedure`. Roles are
@@ -185,10 +216,21 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   user for five minutes, and a demoted host must stop hosting now.
 - Event access is `accessTo` / `hostAccessTo` in `api/src/events.ts`. A
   stranger to an event gets the same NOT_FOUND as a wrong id, guests never
-  see drafts, and admins pass everywhere.
+  see drafts, and admins pass everywhere. A host's procedure takes
+  `idInput` and `.use(withHostEvent)` (or `withLiveHostEvent`, which also
+  refuses a canceled event) from `host-event.ts`, and reads
+  `context.event` / `context.access`.
 - The session is read once in `apps/web/src/routes/__root.tsx` `beforeLoad`
   (through the `getUser` server function) and flows down as router context.
-  `routes/_auth/route.tsx` and `routes/_admin/route.tsx` are the guards.
+  `routes/_auth/route.tsx` and `routes/_admin/route.tsx` are the guards. A
+  route that draws its own header over a full-bleed picture says so with
+  `staticData: { ownHeader: true }`.
+- Better Auth's own HTTP endpoints are limited to the ones this site uses:
+  `disabledPaths` in `packages/auth/src/index.ts` 404s the admin plugin's
+  endpoints, email verification and self-service account writes, because
+  people are written only through `people.ts`. The server still reaches
+  what it needs through `auth.api`. Using a new Better Auth endpoint from
+  the browser means taking it off that list.
 - The half-hourly Cron Trigger calls `runEventMail`.
 
 ### Events, guests and roles
@@ -327,16 +369,40 @@ decide → claim → send.
 `/api/auth/link?k=<token>&to=<path>`, and clicking it opens a session. Never put
 one on a URL meant to be shown around (cover photo URLs deliberately carry
 nothing), and never hand it to Better Auth as an additional user field — those get
-base64'd into a browser-readable cookie. `safeReturnPath` sanitizes `to`.
+base64'd into a browser-readable cookie. `safeReturnPath` sanitizes `to` by
+resolving it as a browser would and keeping it only if it stays on the site;
+don't go back to string checks, which the URL parser's quirks (a tab, a
+backslash) walk straight past.
 
 List sends go through `packages/api/src/mail.ts` → `Mailer.sendList`, which
 batches up to 99 personalised copies per Brevo request using `messageVersions`;
 templates therefore contain the `PARAM` placeholders from
 `packages/email/src/render.ts` (`{{ params.key }}`, `{{ params.unsubscribeUrl }}`)
 rather than concrete URLs, and their output must never be run through
-`escapeHtml`. Every list send writes one `email_send` row. Email bodies stay
+`escapeHtml`. Brevo runs its template language over every part of a send, so
+the mailer lets only those placeholders open a tag (`guardTemplateSyntax`);
+anything a person typed containing "{{" or "{%" is defused there, centrally.
+Every list send writes one `email_send` row. Email bodies stay
 light (dark backgrounds get mangled by mail clients' dark modes); the brand is
-the plum band, the cover and the lime buttons.
+the plum band, the cover and the lime buttons. Colours come from a `Palette`
+passed to the builders (After Dark, or `paletteOf` an event's design); never
+recolour finished HTML.
+
+Brevo POSTs are retried only on 429 and 503, which mean nothing was sent. A
+timeout or another 5xx may come after Brevo accepted a 99-person batch, and a
+retry would send it twice.
+
+### D1 limits
+
+- A statement takes at most 100 bound parameters, and drizzle binds every
+  column of every inserted row, literal defaults included. Bulk inserts go
+  through `insertChunks(table, rows)` and long id lists through
+  `mapChunks` (`@rsvp-site/db/batch`), or are replaced by a join.
+- `db.batch` (atomic on D1) takes query builders, but drizzle 0.45 cannot
+  batch raw `sql` with parameters: it fails at run time, not in the
+  typecheck. Use `rawBatch(db.$client, [built(...), ...])` from the same
+  module for a batch that mixes them (the potluck claim in
+  `guests.respond`).
 
 ## Conventions
 
@@ -345,7 +411,8 @@ the plum band, the cover and the lime buttons.
   that is what CI runs, and it is stricter -- it lints files `check` lets
   through (an SVG in `public/` needs a `<title>`, for one).
 - TypeScript is strict with `noUncheckedIndexedAccess`, `noUnusedLocals` and
-  `verbatimModuleSyntax` (use `import type`).
+  `verbatimModuleSyntax` (use `import type`), the web app included: every
+  tsconfig extends `packages/config/tsconfig.base.json`.
 - Imports: `@/*` inside `apps/web/src`, `@rsvp-site/<pkg>` across packages.
   Subpath imports are the norm (`@rsvp-site/db/people`,
   `@rsvp-site/ui/components/button`).
@@ -360,13 +427,21 @@ the plum band, the cover and the lime buttons.
   `text-soft`, `text-haze`, `bg-lime`, `text-pink`, plus `.kicker` and
   `.numeral`. Lime is yes and the main action, pink is maybe and "send";
   nothing else gets a color. Pills (`rounded-full`) for buttons and chips,
-  ~26px radius for panels. Shared pieces: `components/page.tsx` (`Page`,
-  `PageHead`, `Panel`), `controls.tsx` (answer picker, stepper, switch,
-  field), `response-bar.tsx`, `event-card.tsx`. Button variants: default
-  (lime), `send` (pink), `light`, `outline`, `pink`, `ghost`.
-- `cn()` is tailwind-merge: a `leading-*` placed before a `text-*` size in
-  the same `cn()` is dropped. Put leading after the size.
-- Copy lives in `apps/web/src/content/site.ts`; time and formatting in
+  ~26px radius for panels. Text on an ink fill is `text-on-ink`. Shared
+  pieces: `components/page.tsx` (`Page`, `PageHead`, `Panel`),
+  `controls.tsx` (answer picker, stepper, switch, field), `response-bar.tsx`,
+  `event-card.tsx`, `event-hero.tsx`, `confirm-action.tsx` (every inline
+  "are you sure?"; it moves focus), `guest-picker.tsx`, `notice.tsx`,
+  `native-select.tsx`. The editor is `components/event-editor/` (a draft
+  hook, a save hook, a file per section); the designer's panels and hooks
+  are in `components/design/`. Button variants: default (lime), `send`
+  (pink), `light`, `outline`, `pink`, `ghost`, `destructive`.
+- `cn()` is shadcn's `cn` package, which merges Tailwind classes the way
+  tailwind-merge does: a `leading-*` placed before a `text-*` size in the
+  same `cn()` is dropped. Put leading after the size.
+- Copy shared across pages lives in `apps/web/src/content/site.ts` (the
+  landing page, `SITE_NAME` and `pageTitle()` for every `head()` title, the
+  dry-run notice); a page's own words stay in the page. Time and formatting in
   `packages/api/src/time.ts` (`SITE_TIMEZONE`, `todayOnSite`, `formatDate`).
 - Event `date` is a `YYYY-MM-DD` string and times `HH:MM`, both in
   `America/New_York`. Compare with `todayOnSite()`, not with `Date`.
