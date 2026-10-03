@@ -1,5 +1,4 @@
 import type { FaceKey } from "@rsvp-site/design/fonts";
-import type { Scene } from "@rsvp-site/design/scene";
 import type { DesignTheme as Theme } from "@rsvp-site/design/schema";
 import { themeCss } from "@rsvp-site/design/theme";
 import { facesOfFont, fontFaceCss } from "@/lib/design-font-css";
@@ -12,15 +11,13 @@ import { facesOfFont, fontFaceCss } from "@/lib/design-font-css";
  * Only parsed values reach this CSS (hex colours, registry font names),
  * which is what makes the raw <style> safe.
  */
-export function DesignTheme({ theme, scene }: { theme: Theme; scene?: Scene }) {
+export function DesignTheme({ theme }: { theme: Theme }) {
 	const faces = new Set<FaceKey>([
 		...facesOfFont(theme.headingFont),
 		...facesOfFont(theme.bodyFont),
 	]);
-	for (const n of scene?.nodes ?? []) if (n.k === "text") faces.add(n.face);
 	return (
 		<style
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: built only from validated values (see above)
 			dangerouslySetInnerHTML={{ __html: fontFaceCss(faces) + themeCss(theme) }}
 		/>
 	);

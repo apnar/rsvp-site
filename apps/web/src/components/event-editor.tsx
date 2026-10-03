@@ -1,10 +1,11 @@
 import { formatDate, formatTimeRange } from "@rsvp-site/api/time";
+import { isAdmin } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
 import { ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import {
 	Switch,
 } from "./controls";
 import { Cover } from "./cover";
+import { CardSvg } from "./design/card-svg";
 import { PillTabs } from "./pill-tabs";
 
 type Loaded = Outputs["events"]["get"];
@@ -268,7 +270,20 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 		return id;
 	};
 
-	const run = async (after: "stay" | "send" | "preview") => {
+	const { session } = useRouteContext({ from: "__root__" });
+	// Designs are tried out by admins before every host gets them.
+	const designable = session?.user ? isAdmin(session.user) : false;
+	const toggleDesign = async (on: boolean) => {
+		if (!eventId) return;
+		try {
+			await client.designs.setOn({ eventId, on });
+			await refresh();
+		} catch (error) {
+			toast.error((error as Error).message);
+		}
+	};
+
+	const run = async (after: "stay" | "send" | "preview" | "design") => {
 		setBusy(true);
 		try {
 			const id = await save();
@@ -286,6 +301,10 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 				return;
 			}
 			await refresh();
+			if (after === "design") {
+				navigate({ to: "/e/$eventId/design", params: { eventId: id } });
+				return;
+			}
 			if (after === "preview") {
 				navigate({ to: "/e/$eventId", params: { eventId: id } });
 				return;
@@ -370,6 +389,33 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							}}
 						/>
 					</div>
+					{designable ? (
+						<div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-line-strong px-4 py-3">
+							<div className="min-w-[200px] flex-1">
+								<b className="text-[16px]">Design your own invitation</b>
+								<div className="text-[13px] text-haze">
+									{loaded?.event.designOn
+										? "Guests see your designed card, on screen and on paper."
+										: "Fonts, colours, pictures, placed wherever you like."}
+								</div>
+							</div>
+							{loaded?.hasDesign ? (
+								<Switch
+									checked={loaded.event.designOn}
+									onChange={toggleDesign}
+									label="Guests see the designed card"
+								/>
+							) : null}
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={busy}
+								onClick={() => run("design")}
+							>
+								{loaded?.hasDesign ? "Open the designer" : "Design it"}
+							</Button>
+						</div>
+					) : null}
 					<Field label="Event name" htmlFor="title">
 						<Input
 							id="title"
@@ -874,43 +920,54 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 
 			<aside className="sticky top-5 flex min-w-0 max-w-full flex-[1_1_300px] flex-col gap-2.5">
 				<span className="kicker text-haze">Guest preview</span>
-				<div className="overflow-hidden rounded-[26px] border border-line bg-panel">
-					<div className="relative aspect-[4/5]">
-						{coverShown ? (
-							<img src={coverShown} alt="" className="size-full object-cover" />
-						) : (
-							<Cover coverKey={null} />
-						)}
-						<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_35%,var(--color-night)_100%)]" />
-						<div className="pointer-events-none absolute right-[18px] bottom-[18px] left-[18px] flex flex-col gap-2.5">
-							<span className="self-start rounded-full bg-lime px-3 py-1 font-bold text-[11px] text-on-lime uppercase tracking-[0.08em]">
-								You're on the list
-							</span>
-							<span className="font-black font-heading text-[26px] leading-none tracking-[-0.04em]">
-								{form.title || "Your party"}
-							</span>
-							<span className="text-[14px] text-soft">
-								{form.date ? formatDate(form.date) : "Date to come"}
-								{form.startTime ? (
-									<>
-										{" · "}
-										<span className="text-lime-ink">
-											{formatTimeRange(form.startTime, form.endTime || null)}
-										</span>
-									</>
-								) : null}
-							</span>
+				{loaded?.card ? (
+					<CardSvg
+						scene={loaded.card}
+						className="h-auto w-full rounded-[6px] shadow-float"
+					/>
+				) : (
+					<div className="overflow-hidden rounded-[26px] border border-line bg-panel">
+						<div className="relative aspect-[4/5]">
+							{coverShown ? (
+								<img
+									src={coverShown}
+									alt=""
+									className="size-full object-cover"
+								/>
+							) : (
+								<Cover coverKey={null} />
+							)}
+							<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_35%,var(--color-night)_100%)]" />
+							<div className="pointer-events-none absolute right-[18px] bottom-[18px] left-[18px] flex flex-col gap-2.5">
+								<span className="self-start rounded-full bg-lime px-3 py-1 font-bold text-[11px] text-on-lime uppercase tracking-[0.08em]">
+									You're on the list
+								</span>
+								<span className="font-black font-heading text-[26px] leading-none tracking-[-0.04em]">
+									{form.title || "Your party"}
+								</span>
+								<span className="text-[14px] text-soft">
+									{form.date ? formatDate(form.date) : "Date to come"}
+									{form.startTime ? (
+										<>
+											{" · "}
+											<span className="text-lime-ink">
+												{formatTimeRange(form.startTime, form.endTime || null)}
+											</span>
+										</>
+									) : null}
+								</span>
+							</div>
+						</div>
+						<div className="pointer-events-none p-3.5" aria-hidden>
+							<AnswerPicker
+								value="yes"
+								onChange={() => {}}
+								size="sm"
+								name="preview"
+							/>
 						</div>
 					</div>
-					<div className="pointer-events-none p-3.5" aria-hidden>
-						<AnswerPicker
-							value="yes"
-							onChange={() => {}}
-							size="sm"
-							name="preview"
-						/>
-					</div>
-				</div>
+				)}
 			</aside>
 		</div>
 	);

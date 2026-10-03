@@ -406,13 +406,21 @@ export const eventsRouter = {
 			context.me,
 			input.eventId,
 		);
-		const [guests, potluck, hosts] = await Promise.all([
+		const [guests, potluck, hosts, designed, card] = await Promise.all([
 			guestsOf(context.db, row.id),
 			potluckOf(context.db, row.id),
 			hostsOf(context.db, row.id),
+			context.db
+				.select({ version: eventDesign.version })
+				.from(eventDesign)
+				.where(eq(eventDesign.eventId, row.id))
+				.get(),
+			designedCard(context.db, row, "web", "Your guest"),
 		]);
 		return {
 			event: row,
+			hasDesign: designed !== undefined,
+			card: card?.scene ?? null,
 			labels: labelsOf(row),
 			hosts,
 			guests: guests.map((g) => ({

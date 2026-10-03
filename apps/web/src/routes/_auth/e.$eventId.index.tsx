@@ -143,7 +143,7 @@ function InvitePage() {
 		<div>
 			{data.design ? (
 				<section className="relative flex flex-col">
-					<DesignTheme theme={data.design.theme} scene={data.design.scene} />
+					<DesignTheme theme={data.design.theme} />
 					{header}
 					<div className="mx-auto flex w-full max-w-[1180px] flex-col items-center gap-5 px-[clamp(16px,4vw,40px)] pt-2 pb-9 text-center">
 						<CardSvg

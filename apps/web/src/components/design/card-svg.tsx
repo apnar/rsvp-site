@@ -1,3 +1,4 @@
+import type { FaceKey } from "@rsvp-site/design/fonts";
 import type { tiled } from "@rsvp-site/design/patterns";
 import type {
 	Scene,
@@ -6,6 +7,7 @@ import type {
 	TextNode,
 } from "@rsvp-site/design/scene";
 import { type ReactNode, useId } from "react";
+import { fontFaceCss } from "@/lib/design-font-css";
 import { designSrc } from "@/lib/format";
 
 /**
@@ -38,6 +40,9 @@ export function CardSvg({
 			xmlns="http://www.w3.org/2000/svg"
 		>
 			<defs>
+				{/* The card brings its own fonts, wherever it is shown. Only
+				    registry faces go in (see design-font-css.ts). */}
+				<style>{fontFaceCss(facesIn(scene))}</style>
 				<clipPath id={`${uid}-card`}>
 					<rect x={area.x} y={area.y} width={area.w} height={area.h} />
 				</clipPath>
@@ -53,6 +58,12 @@ export function CardSvg({
 	);
 }
 
+function facesIn(scene: Scene): FaceKey[] {
+	return [
+		...new Set(scene.nodes.flatMap((n) => (n.k === "text" ? [n.face] : []))),
+	];
+}
+
 export function textOf(scene: Scene): string {
 	return scene.nodes
 		.flatMap((n) => (n.k === "text" && n.content.trim() ? [n.content] : []))
@@ -61,7 +72,6 @@ export function textOf(scene: Scene): string {
 
 function Stops({ stops }: { stops: { at: number; color: string }[] }) {
 	return stops.map((s, i) => (
-		// biome-ignore lint/suspicious/noArrayIndexKey: stops have no identity of their own
 		<stop key={i} offset={s.at} stopColor={s.color} />
 	));
 }
@@ -146,7 +156,6 @@ function Background({
 					<>
 						{fillRect(bg.color)}
 						{bg.pieces.map((p, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: pieces are positional
 							<Piece key={i} shape={p} />
 						))}
 					</>
@@ -164,7 +173,6 @@ function Background({
 							patternTransform={`rotate(${t.angle} ${scene.w / 2} ${scene.h / 2})`}
 						>
 							{t.shapes.map((p, i) => (
-								// biome-ignore lint/suspicious/noArrayIndexKey: shapes are positional
 								<Piece key={i} shape={p} />
 							))}
 						</pattern>
@@ -321,21 +329,47 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 				</>
 			);
 			break;
-		case "qr":
-			// The code is per guest and only printed; the page has no use for it.
+		case "qr": {
+			// The code differs per guest and is only ever printed; the designer
+			// shows where it goes, with the three corner squares of a real one.
+			const m = w / 7;
+			const finder = (fx: number, fy: number) => (
+				<g key={`${fx}${fy}`}>
+					<rect x={fx} y={fy} width={m * 1.6} height={m * 1.6} fill={n.fg} />
+					<rect
+						x={fx + m * 0.25}
+						y={fy + m * 0.25}
+						width={m * 1.1}
+						height={m * 1.1}
+						fill={n.bg ?? "#ffffff"}
+					/>
+					<rect
+						x={fx + m * 0.5}
+						y={fy + m * 0.5}
+						width={m * 0.6}
+						height={m * 0.6}
+						fill={n.fg}
+					/>
+				</g>
+			);
 			body = (
-				<rect
-					x={x}
-					y={y}
-					width={w}
-					height={h}
-					fill={n.bg ?? "none"}
-					stroke={n.fg}
-					strokeDasharray="12 8"
-					strokeWidth={4}
-				/>
+				<>
+					<rect x={x} y={y} width={w} height={h} fill={n.bg ?? "none"} />
+					{finder(x + m * 0.5, y + m * 0.5)}
+					{finder(x + w - m * 2.1, y + m * 0.5)}
+					{finder(x + m * 0.5, y + h - m * 2.1)}
+					<rect
+						x={x + m * 2.6}
+						y={y + m * 2.6}
+						width={m * 1.8}
+						height={m * 1.8}
+						fill={n.fg}
+						opacity={0.35}
+					/>
+				</>
 			);
 			break;
+		}
 	}
 	return (
 		<g transform={transform} opacity={n.opacity === 1 ? undefined : n.opacity}>
@@ -384,7 +418,6 @@ function Glyphs({
 				});
 				if (!chars) return null;
 				return (
-					// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
 					<tspan key={i} x={xs.join(" ")} y={n.box.y + line.y + dy}>
 						{chars}
 					</tspan>

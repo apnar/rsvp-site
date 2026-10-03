@@ -71,7 +71,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
  * Pages that open on a full-bleed photo draw the header inside it, over the
  * picture, the way the design has it.
  */
-const OWN_HEADER = new Set(["/_auth/e/$eventId/", "/i/$token"]);
+const OWN_HEADER = new Set([
+	"/_auth/e/$eventId/",
+	"/_auth/e/$eventId/design",
+	"/i/$token",
+]);
 
 function RootDocument() {
 	const { session } = Route.useRouteContext();
