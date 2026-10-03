@@ -3,7 +3,10 @@ import { Link } from "@tanstack/react-router";
 
 import type { Invite } from "./types";
 
-/** What a host sees in place of the form: how to get to the controls. */
+/**
+ * How a host gets to the controls: in place of the form, or above it when
+ * the host is on the guest list too.
+ */
 export function HostPanel({ data }: { data: Invite }) {
 	const e = data.event;
 	return (

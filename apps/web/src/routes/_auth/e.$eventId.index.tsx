@@ -51,6 +51,9 @@ function InvitePage() {
 			aside={
 				data.me && data.event.status !== "canceled" ? (
 					<div className="flex flex-col gap-5">
+						{/* A co-host the owner also invited still needs the way to
+						    the controls; the form alone would hide them. */}
+						{data.isHost ? <HostPanel data={data} /> : null}
 						<RsvpForm
 							data={data}
 							initial={initialRsvp(data.me, a ?? null)}
