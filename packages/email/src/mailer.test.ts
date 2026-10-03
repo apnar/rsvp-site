@@ -65,7 +65,10 @@ describe("createMailer", () => {
 			html: '<p>{% if x %}</p><a href="/?k={{ params.key }}">go</a>',
 			text: "{# hi #} {{ params.unsubscribeUrl }}",
 		});
-		const init = fetchImpl.mock.calls[0]?.[1] as unknown as RequestInit;
+		const [, init] = fetchImpl.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
 		const sent = JSON.parse(init.body as string);
 		expect(sent.subject).toBe("Party { { dance }}");
 		expect(sent.htmlContent).toBe(

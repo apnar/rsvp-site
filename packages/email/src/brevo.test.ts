@@ -60,6 +60,21 @@ describe("postBrevo", () => {
 		expect(outcome).toEqual({ ok: true, messageId: "second" });
 		expect(fetchImpl).toHaveBeenCalledTimes(2);
 	});
+
+	it("does not retry what Brevo may already have sent", async () => {
+		for (const status of [500, 502, 504]) {
+			const fetchImpl = vi.fn(async () => response(status, {}));
+			const outcome = await postBrevo(body, { apiKey: "k", fetch: fetchImpl });
+			expect(outcome.ok).toBe(false);
+			expect(fetchImpl).toHaveBeenCalledTimes(1);
+		}
+		const dropped = vi.fn(async () => {
+			throw new Error("connection reset");
+		});
+		const outcome = await postBrevo(body, { apiKey: "k", fetch: dropped });
+		expect(outcome).toMatchObject({ ok: false, status: 0 });
+		expect(dropped).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("serializeRequest", () => {

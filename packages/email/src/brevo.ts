@@ -40,6 +40,8 @@ export type SendOutcome =
 	| { ok: false; status: number; error: string };
 
 const RETRY_DELAY_MS = 500;
+/** Long enough for a 99-copy batch; short enough not to stall a cron pass. */
+const TIMEOUT_MS = 20_000;
 
 function toBrevoAddress(a: Address) {
 	return a.name ? { email: a.email, name: a.name } : { email: a.email };
@@ -74,6 +76,7 @@ async function attempt(
 				"content-type": "application/json",
 			},
 			body: JSON.stringify(serializeRequest(body)),
+			signal: AbortSignal.timeout(TIMEOUT_MS),
 		});
 	} catch (error) {
 		return {
@@ -100,7 +103,13 @@ async function attempt(
 	};
 }
 
-/** POST one request to Brevo, retrying once on rate limits and server errors. */
+/**
+ * POST one request to Brevo, retrying once when Brevo said it did nothing:
+ * 429 and 503 turn a request away before it is processed. A timeout, a
+ * dropped connection or another 5xx may come after Brevo accepted the batch,
+ * and a retry then sends up to 99 people the same email twice; those are
+ * reported as failures for a person to look at.
+ */
 export async function postBrevo(
 	body: BrevoRequest,
 	opts: { apiKey: string; fetch?: typeof fetch },
@@ -108,9 +117,7 @@ export async function postBrevo(
 	const fetchImpl = opts.fetch ?? fetch;
 	const first = await attempt(body, opts.apiKey, fetchImpl);
 	if (first.ok) return first;
-	const retryable =
-		first.status === 0 || first.status === 429 || first.status >= 500;
-	if (!retryable) return first;
+	if (first.status !== 429 && first.status !== 503) return first;
 	await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
 	return attempt(body, opts.apiKey, fetchImpl);
 }
