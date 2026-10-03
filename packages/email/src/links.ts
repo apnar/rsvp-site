@@ -47,6 +47,20 @@ export function mediaUrl(siteUrl: string, key: string): string {
 }
 
 /**
+ * The address a printed card's QR code holds. Upper case on purpose: a QR
+ * code stores 0-9, A-Z and a few marks like "/" and ":" in 5.5 bits a
+ * character instead of 8, which takes our card URL down a size and makes
+ * every square bigger on paper. Host names ignore case, the router matches
+ * paths without it and the key is looked up lower-cased, so the page is the
+ * same. The scheme stays lower case, because a few scanner apps only see a
+ * link in "https://", and it costs nothing: the QR code is the same size.
+ */
+export function paperCardUrl(siteUrl: string, key: string): string {
+	const { protocol, host } = new URL(siteUrl);
+	return `${protocol}//${`${host}/p/${key}`.toUpperCase()}`;
+}
+
+/**
  * Where a sign-in link may drop someone: somewhere on this site, never off
  * it. The path is resolved the way a browser would resolve it and only kept
  * if it stays on the site, because string checks lose to the URL parser's

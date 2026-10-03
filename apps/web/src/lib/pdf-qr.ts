@@ -10,6 +10,11 @@ export function hexColor(hex: string): RGB {
 /**
  * A QR code as vector squares, sharp at any print size, with a two-module
  * quiet zone inside the box. (x, y) is the box's bottom-left corner.
+ *
+ * Level Q survives about a quarter of the code smudged, folded or lost to a
+ * low-contrast colour. A card's URL (`paperCardUrl`, a 16-character key)
+ * fits it at 29 modules square, smaller than the 32-character keys made at
+ * level M, so the squares print bigger as well.
  */
 export function drawQr(
 	page: PDFPage,
@@ -18,7 +23,7 @@ export function drawQr(
 	colors: { fg: RGB; bg: RGB | null; opacity?: number },
 ) {
 	const { x, y, size } = box;
-	const qr = QRCode.create(url, { errorCorrectionLevel: "M" });
+	const qr = QRCode.create(url, { errorCorrectionLevel: "Q" });
 	const n = qr.modules.size;
 	const quiet = 2;
 	const cell = size / (n + quiet * 2);

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { emailLink, mediaUrl, rsvpLink, safeReturnPath } from "./links";
+import {
+	emailLink,
+	mediaUrl,
+	paperCardUrl,
+	rsvpLink,
+	safeReturnPath,
+} from "./links";
 import { PARAM } from "./render";
 
 describe("emailLink", () => {
@@ -16,6 +22,17 @@ describe("rsvpLink", () => {
 	it("lands on the event page with the answer picked, signed in", () => {
 		expect(rsvpLink("https://rsvp.botch.com", "ev1", "yes")).toBe(
 			`https://rsvp.botch.com/api/auth/link?k=${PARAM.key}&to=%2Fe%2Fev1%3Fa%3Dyes`,
+		);
+	});
+});
+
+describe("paperCardUrl", () => {
+	it("is upper case after the scheme, so a QR code packs it tightly", () => {
+		expect(paperCardUrl("https://rsvp.botch.com", "0a1b2c3d4e5f6a7b")).toBe(
+			"https://RSVP.BOTCH.COM/P/0A1B2C3D4E5F6A7B",
+		);
+		expect(paperCardUrl("http://localhost:3001", "ab")).toBe(
+			"http://LOCALHOST:3001/P/AB",
 		);
 	});
 });

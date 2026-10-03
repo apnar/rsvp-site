@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { user } from "@rsvp-site/db/schema/auth";
 import { eventGuest } from "@rsvp-site/db/schema/event";
+import { paperCardUrl } from "@rsvp-site/email/links";
 import { siteUrl } from "@rsvp-site/email/worker";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -37,11 +38,11 @@ export const paperRouter = {
 				});
 			}
 			// One statement for the whole list, and each row draws its own bytes.
-			// Same shape as `newToken()`: 32 lower-case hex characters. The IS NULL
-			// guard keeps a key already on a card in somebody's mailbox.
+			// Same shape as `newPaperToken()`: 16 lower-case hex characters. The
+			// IS NULL guard keeps a key already on a card in somebody's mailbox.
 			await context.db
 				.update(eventGuest)
-				.set({ paperToken: sql`lower(hex(randomblob(16)))` })
+				.set({ paperToken: sql`lower(hex(randomblob(8)))` })
 				.where(
 					and(eq(eventGuest.eventId, row.id), isNull(eventGuest.paperToken)),
 				);
@@ -76,7 +77,7 @@ export const paperRouter = {
 								{
 									id: r.id,
 									name: r.name,
-									url: `${siteUrl()}/p/${r.token}`,
+									url: paperCardUrl(siteUrl(), r.token),
 								},
 							]
 						: [],

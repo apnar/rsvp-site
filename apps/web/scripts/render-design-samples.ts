@@ -18,6 +18,7 @@ import {
 	previewAssets,
 	TEMPLATES,
 } from "../../../packages/design/src/templates/index";
+import { paperCardUrl } from "../../../packages/email/src/links";
 import { layoutDesignInvites } from "../src/lib/design-pdf-core";
 import { layoutPaperInvites } from "../src/lib/paper-pdf-core";
 import { layoutsFor } from "../src/lib/paper-sizes";
@@ -69,21 +70,24 @@ function woff(key: FaceKey): ArrayBuffer {
 	) as ArrayBuffer;
 }
 
+// The URLs printed cards carry, so each sample's code is its real size.
+const card = (key: string) => paperCardUrl("https://rsvp.botch.com", key);
+
 const guests = [
 	{
 		id: "1",
 		name: "The Nguyens",
-		url: "https://rsvp.botch.com/api/auth/paper?k=0123456789abcdef0123456789abcdef",
+		url: card("0123456789abcdef"),
 	},
 	{
 		id: "2",
 		name: "Priya",
-		url: "https://rsvp.botch.com/api/auth/paper?k=fedcba9876543210fedcba9876543210",
+		url: card("fedcba9876543210"),
 	},
 	{
 		id: "3",
 		name: "Grandma and Grandpa Featherstonehaugh-Whittingham",
-		url: "https://rsvp.botch.com/api/auth/paper?k=00000000000000000000000000000000",
+		url: card("0000000000000000"),
 	},
 ];
 

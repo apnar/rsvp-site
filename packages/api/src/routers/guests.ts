@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
 import { parseAddresses, parseGuestLines } from "@rsvp-site/db/addresses";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
+import { newPaperToken } from "@rsvp-site/db/paper";
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
@@ -14,7 +15,6 @@ import {
 	GUEST_RESPONSES,
 	potluckClaim,
 } from "@rsvp-site/db/schema/event";
-import { newToken } from "@rsvp-site/db/tokens";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { answer, answerInput } from "../answers";
@@ -287,7 +287,7 @@ export const guestsRouter = {
 			}
 			await context.db
 				.update(eventGuest)
-				.set({ paperToken: newToken() })
+				.set({ paperToken: newPaperToken() })
 				.where(
 					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
 				);

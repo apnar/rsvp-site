@@ -4,6 +4,7 @@ import { layoutCard, type TextCache } from "@rsvp-site/design/scene";
 import { type Design, parseDesign } from "@rsvp-site/design/schema";
 import type { Placed } from "@rsvp-site/design/templates/index";
 import { warningsOf } from "@rsvp-site/design/warnings";
+import { paperCardUrl } from "@rsvp-site/email/links";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
@@ -297,7 +298,8 @@ function Editor({
 					{
 						id: "sample",
 						name: values.guest,
-						url: `${window.location.origin}/p/sample`,
+						// A real key's length, so the code prints at its real size.
+						url: paperCardUrl(window.location.origin, "0000000000000000"),
 					},
 				],
 				print: layoutsFor(doc.format)[0]?.value ?? "exact",
