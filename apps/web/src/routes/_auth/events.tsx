@@ -5,6 +5,7 @@ import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ConfirmAction } from "@/components/confirm-action";
 import { EventCard } from "@/components/event-card";
 import { Page, PageHead, Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
@@ -228,6 +229,9 @@ function HostDashboard() {
 												{event.status === "draft" ? "Finish it" : "Edit"}
 											</Link>
 										)}
+										{event.status === "draft" ? (
+											<DeleteDraft eventId={event.id} />
+										) : null}
 									</>
 								}
 							/>
@@ -378,5 +382,26 @@ function Invites() {
 				</section>
 			) : null}
 		</Page>
+	);
+}
+
+/**
+ * A draft's delete, on its card: every host of a draft may delete it, and
+ * nothing has gone to anybody, so a plain "are you sure?" is enough.
+ */
+function DeleteDraft({ eventId }: { eventId: string }) {
+	const remove = useMutation(
+		orpc.events.remove.mutationOptions({
+			onSuccess: () => toast.success("Draft deleted."),
+		}),
+	);
+	return (
+		<ConfirmAction
+			confirm="Delete it"
+			pending={remove.isPending}
+			onConfirm={() => remove.mutate({ eventId })}
+			trigger={{ variant: "ghost", size: "sm", children: "Delete" }}
+			className="flex basis-full gap-1.5"
+		/>
 	);
 }

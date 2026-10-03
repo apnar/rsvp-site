@@ -59,7 +59,7 @@ export function DeleteEvent({
 			pending={remove.isPending}
 			onConfirm={() => remove.mutate({ eventId })}
 			trigger={{
-				variant: draft ? "ghost" : "destructive",
+				variant: "destructive",
 				className: "mr-auto",
 				children: draft ? "Delete draft" : "Delete event",
 			}}
