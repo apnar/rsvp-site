@@ -1,5 +1,7 @@
 import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 
+import { chunk, IN_LIST, insertChunks } from "./batch";
+import { isUniqueViolation } from "./errors";
 import type { createDb } from "./index";
 import { roleOf } from "./roles";
 import {
@@ -129,7 +131,7 @@ export async function createNameOnlyPeople(
 		linkToken: newToken(),
 		unsubscribeToken: newToken(),
 	}));
-	for (const slice of chunk(rows, 8)) {
+	for (const slice of insertChunks(user, rows)) {
 		await db.insert(user).values(slice);
 	}
 	return rows.map((r) => ({ id: r.id, name: r.name }));
@@ -152,12 +154,18 @@ export async function setRealEmail(
 		.where(eq(user.email, email))
 		.get();
 	if (taken) return "taken";
-	const result = await db
-		.update(user)
-		.set({ email, noEmail: false })
-		.where(and(eq(user.id, userId), eq(user.noEmail, true)))
-		.run();
-	return result.meta.changes === 1 ? "ok" : "not-placeholder";
+	try {
+		const result = await db
+			.update(user)
+			.set({ email, noEmail: false })
+			.where(and(eq(user.id, userId), eq(user.noEmail, true)))
+			.run();
+		return result.meta.changes === 1 ? "ok" : "not-placeholder";
+	} catch (error) {
+		// Somebody took the address between the check and the write.
+		if (isUniqueViolation(error)) return "taken";
+		throw error;
+	}
 }
 
 export type Person = {
@@ -246,7 +254,7 @@ export async function listRecipients(
 	if (onlyIds && onlyIds.length === 0) return [];
 	const rows: Recipient[] = [];
 	// D1 caps bound parameters per statement, so long id lists go in slices.
-	const slices = onlyIds ? chunk(onlyIds, 90) : [undefined];
+	const slices = onlyIds ? chunk(onlyIds, IN_LIST) : [undefined];
 	for (const ids of slices) {
 		const where = ids
 			? and(mailableWhere(), inArray(user.id, ids))
@@ -261,14 +269,6 @@ export async function listRecipients(
 		);
 	}
 	return rows;
-}
-
-function chunk<T>(items: readonly T[], size: number): T[][] {
-	const out: T[][] = [];
-	for (let i = 0; i < items.length; i += size) {
-		out.push(items.slice(i, i + size));
-	}
-	return out;
 }
 
 export type LinkPerson = {
@@ -357,21 +357,20 @@ export async function findOrCreatePeople(
 	const before = await selectByEmail(db, wanted);
 	const known = new Set(before.map((p) => p.email));
 	const missing = wanted.filter((email) => !known.has(email));
-	for (const slice of chunk(missing, 8)) {
+	const newRows = missing.map((email) => ({
+		id: crypto.randomUUID(),
+		email,
+		name: names.get(email) ?? email.split("@")[0] ?? email,
+		emailVerified: false,
+		role: "user",
+		source,
+		linkToken: newToken(),
+		unsubscribeToken: newToken(),
+	}));
+	for (const slice of insertChunks(user, newRows)) {
 		await db
 			.insert(user)
-			.values(
-				slice.map((email) => ({
-					id: crypto.randomUUID(),
-					email,
-					name: names.get(email) ?? email.split("@")[0] ?? email,
-					emailVerified: false,
-					role: "user",
-					source,
-					linkToken: newToken(),
-					unsubscribeToken: newToken(),
-				})),
-			)
+			.values(slice)
 			// Two hosts adding the same stranger at once: the loser's row is
 			// dropped and the re-read below finds the winner's.
 			.onConflictDoNothing({ target: user.email });
@@ -385,7 +384,7 @@ export async function findOrCreatePeople(
 
 async function selectByEmail(db: Db, emails: string[]) {
 	const rows: Omit<FoundPerson, "created">[] = [];
-	for (const slice of chunk(emails, 90)) {
+	for (const slice of chunk(emails, IN_LIST)) {
 		rows.push(
 			...(await db
 				.select({
@@ -410,9 +409,19 @@ export async function ensureLinkToken(db: Db, id: string): Promise<string> {
 		.where(eq(user.id, id))
 		.get();
 	if (row?.linkToken) return row.linkToken;
-	const token = newToken();
-	await db.update(user).set({ linkToken: token }).where(eq(user.id, id));
-	return token;
+	// Guarded and re-read: two callers racing must converge on one token, or
+	// one of them mails a link that has already been replaced.
+	await db
+		.update(user)
+		.set({ linkToken: newToken() })
+		.where(and(eq(user.id, id), isNull(user.linkToken)));
+	const after = await db
+		.select({ linkToken: user.linkToken })
+		.from(user)
+		.where(eq(user.id, id))
+		.get();
+	if (!after?.linkToken) throw new Error("No such person");
+	return after.linkToken;
 }
 
 /** The token in this person's list-email footer, generating one if missing. */
@@ -426,9 +435,18 @@ export async function ensureUnsubscribeToken(
 		.where(eq(user.id, id))
 		.get();
 	if (row?.unsubscribeToken) return row.unsubscribeToken;
-	const token = newToken();
-	await db.update(user).set({ unsubscribeToken: token }).where(eq(user.id, id));
-	return token;
+	// Same convergence as ensureLinkToken: the footer links must agree.
+	await db
+		.update(user)
+		.set({ unsubscribeToken: newToken() })
+		.where(and(eq(user.id, id), isNull(user.unsubscribeToken)));
+	const after = await db
+		.select({ unsubscribeToken: user.unsubscribeToken })
+		.from(user)
+		.where(eq(user.id, id))
+		.get();
+	if (!after?.unsubscribeToken) throw new Error("No such person");
+	return after.unsubscribeToken;
 }
 
 /** Record that a sign-in link just went out, for the request cooldown. */

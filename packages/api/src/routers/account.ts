@@ -48,7 +48,8 @@ export const accountRouter = {
 		.handler(async ({ context, input }) => {
 			if (input.on) {
 				await resubscribe(context.db, context.me.id);
-				await getMailer().unblock(context.me.email);
+				// A name-only guest's address reads blank; there is nothing to unblock.
+				if (context.me.email) await getMailer().unblock(context.me.email);
 			} else {
 				await unsubscribe(context.db, { id: context.me.id }, "self");
 			}

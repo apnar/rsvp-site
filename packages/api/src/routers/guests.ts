@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
+import { insertChunks } from "@rsvp-site/db/batch";
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
@@ -14,7 +15,7 @@ import {
 	GUEST_RESPONSES,
 	potluckClaim,
 } from "@rsvp-site/db/schema/event";
-import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -25,6 +26,7 @@ import {
 	guestsOf,
 	hostAccessTo,
 	potluckOf,
+	refuseCanceled,
 } from "../events";
 import { canInviteOthers } from "../guest-invites";
 import { clampParty, headcount, tally } from "../headcount";
@@ -95,9 +97,7 @@ export const guestsRouter = {
 				context.me,
 				input.eventId,
 			);
-			if (row.status === "canceled") {
-				throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
-			}
+			refuseCanceled(row);
 			// A paper event may also take bare names, one per line: people
 			// with no address who will only ever have the card.
 			const lines = row.paper
@@ -150,18 +150,17 @@ export const guestsRouter = {
 			];
 			const unique = [...new Map(rows.map((r) => [r.userId, r])).values()];
 			let added = 0;
-			for (let i = 0; i < unique.length; i += 10) {
+			const guestRows = unique.map((r) => ({
+				id: crypto.randomUUID(),
+				eventId: row.id,
+				userId: r.userId,
+				source: r.source,
+				addedBy: context.me.id,
+			}));
+			for (const slice of insertChunks(eventGuest, guestRows)) {
 				const inserted = await context.db
 					.insert(eventGuest)
-					.values(
-						unique.slice(i, i + 10).map((r) => ({
-							id: crypto.randomUUID(),
-							eventId: row.id,
-							userId: r.userId,
-							source: r.source,
-							addedBy: context.me.id,
-						})),
-					)
+					.values(slice)
 					.onConflictDoNothing()
 					.returning({ id: eventGuest.id })
 					.all();
@@ -207,10 +206,8 @@ export const guestsRouter = {
 				context.me,
 				input.eventId,
 			);
-			if (row.status === "canceled") {
-				throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
-			}
-			const result = await context.db
+			refuseCanceled(row);
+			const update = context.db
 				.update(eventGuest)
 				.set({
 					response: input.response,
@@ -220,15 +217,31 @@ export const guestsRouter = {
 				})
 				.where(
 					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
-				)
-				.run();
+				);
+			// One atomic batch, so a "no" can't land without its claims going.
+			// The delete is scoped to this event's guest, as the update is.
+			const [result] =
+				input.response === "no"
+					? await context.db.batch([
+							update,
+							context.db.delete(potluckClaim).where(
+								inArray(
+									potluckClaim.guestId,
+									context.db
+										.select({ id: eventGuest.id })
+										.from(eventGuest)
+										.where(
+											and(
+												eq(eventGuest.id, input.guestId),
+												eq(eventGuest.eventId, row.id),
+											),
+										),
+								),
+							),
+						])
+					: await context.db.batch([update]);
 			if (result.meta.changes !== 1) {
 				throw new ORPCError("NOT_FOUND", { message: "No such guest." });
-			}
-			if (input.response === "no") {
-				await context.db
-					.delete(potluckClaim)
-					.where(eq(potluckClaim.guestId, input.guestId));
 			}
 			return { ok: true };
 		}),
@@ -299,36 +312,52 @@ export const guestsRouter = {
 				input.response === "no"
 					? { adults: 1, kids: 0 }
 					: clampParty(input, row);
-			await context.db
-				.update(eventGuest)
-				.set({
-					response: input.response,
-					...party,
-					dietary: row.askDietary ? input.dietary : "",
-					note: row.askNote ? input.note : "",
-					respondedAt: new Date(),
-				})
-				.where(eq(eventGuest.id, guest.id));
-
 			// A "no" brings nothing; otherwise keep exactly what was ticked.
-			const wanted =
-				input.response === "no" || !row.potluckEnabled ? [] : input.claims;
-			await context.db
-				.delete(potluckClaim)
-				.where(
-					wanted.length
-						? and(
-								eq(potluckClaim.guestId, guest.id),
-								notInArray(potluckClaim.itemId, wanted),
-							)
-						: eq(potluckClaim.guestId, guest.id),
-				);
-			const full: string[] = [];
-			for (const itemId of wanted) {
+			const wanted = [
+				...new Set(
+					input.response === "no" || !row.potluckEnabled ? [] : input.claims,
+				),
+			];
+			// What this guest already holds: a claim insert that changes nothing
+			// is either "you have it" or "it's full", and only this tells them
+			// apart without a read per item.
+			const held = new Set(
+				(
+					await context.db
+						.select({ itemId: potluckClaim.itemId })
+						.from(potluckClaim)
+						.where(eq(potluckClaim.guestId, guest.id))
+						.all()
+				).map((c) => c.itemId),
+			);
+			// One batch (atomic on D1): the answer, the dropped claims and each
+			// guarded claim land together or not at all.
+			const statements = [
+				context.db
+					.update(eventGuest)
+					.set({
+						response: input.response,
+						...party,
+						dietary: row.askDietary ? input.dietary : "",
+						note: row.askNote ? input.note : "",
+						respondedAt: new Date(),
+					})
+					.where(eq(eventGuest.id, guest.id)),
+				context.db
+					.delete(potluckClaim)
+					.where(
+						wanted.length
+							? and(
+									eq(potluckClaim.guestId, guest.id),
+									notInArray(potluckClaim.itemId, wanted),
+								)
+							: eq(potluckClaim.guestId, guest.id),
+					),
 				// Plain names, not drizzle columns: in a raw template drizzle may
 				// write `"id"` unqualified, which would resolve against the wrong
 				// table here (see CLAUDE.md).
-				const result = await context.db.run(sql`
+				...wanted.map((itemId) =>
+					context.db.run(sql`
 					insert into potluck_claim (item_id, guest_id)
 					select ${itemId}, ${guest.id}
 					where exists (
@@ -340,21 +369,15 @@ export const guestsRouter = {
 							)
 					)
 					on conflict do nothing
-				`);
-				if (result.meta.changes !== 1) {
-					const already = await context.db
-						.select({ itemId: potluckClaim.itemId })
-						.from(potluckClaim)
-						.where(
-							and(
-								eq(potluckClaim.guestId, guest.id),
-								eq(potluckClaim.itemId, itemId),
-							),
-						)
-						.get();
-					if (!already) full.push(itemId);
-				}
-			}
+				`),
+				),
+			];
+			const results = await context.db.batch(
+				statements as [(typeof statements)[0], ...typeof statements],
+			);
+			const full = wanted.filter(
+				(itemId, i) => results[i + 2]?.meta.changes !== 1 && !held.has(itemId),
+			);
 
 			const changed =
 				guest.response !== input.response ||
@@ -463,6 +486,24 @@ export const guestsRouter = {
 			const access = await accessTo(context.db, context.me, input.eventId);
 			const row = access.event;
 			const guest = requireInviter(access);
+			// Checked before anybody is created, so a guest at their cap can't
+			// keep minting accounts. The guarded INSERT below is the real lock.
+			const used = await context.db
+				.select({ n: count() })
+				.from(eventGuest)
+				.where(
+					and(
+						eq(eventGuest.eventId, row.id),
+						eq(eventGuest.addedBy, guest.userId),
+						eq(eventGuest.source, "guest"),
+					),
+				)
+				.get();
+			if ((used?.n ?? 0) >= row.guestInviteLimit) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: `You've invited ${row.guestInviteLimit}, the most this party allows.`,
+				});
+			}
 			const [friend] = await findOrCreatePeople(
 				context.db,
 				[input.email],

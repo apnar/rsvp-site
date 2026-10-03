@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import type { Person } from "@rsvp-site/db/people";
 import { event, eventDesign } from "@rsvp-site/db/schema/event";
 import { basisOf } from "@rsvp-site/design/basis";
+import { hasPrintableQr } from "@rsvp-site/design/qr";
 import {
 	type Design,
 	designPrefix,
@@ -13,7 +14,14 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Context } from "../context";
-import { designValues, type EventRow, hostAccessTo } from "../events";
+import { savedDesign } from "../designs-store";
+import {
+	designValues,
+	type EventRow,
+	hostAccessTo,
+	refuseCanceled,
+} from "../events";
+import { sniffImage } from "../image-type";
 import { hostProcedure } from "../index";
 
 type Env = Context["env"];
@@ -54,9 +62,7 @@ async function editable(
 	eventId: string,
 ) {
 	const { event: row } = await hostAccessTo(context.db, context.me, eventId);
-	if (row.status === "canceled") {
-		throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
-	}
+	refuseCanceled(row);
 	return row;
 }
 
@@ -64,9 +70,10 @@ async function editable(
 export function needsQr(
 	row: Pick<EventRow, "paper">,
 	designOn: boolean,
-	doc: { elements: readonly { type: string }[] },
+	doc: Pick<Design, "format" | "elements"> | null,
 ) {
-	if (row.paper && designOn && !doc.elements.some((el) => el.type === "qr")) {
+	// A hidden, invisible or off-card code prints nothing to scan.
+	if (row.paper && designOn && !(doc && hasPrintableQr(doc))) {
 		throw new ORPCError("BAD_REQUEST", {
 			message:
 				"This is a paper invitation: add a QR code to the design so guests can scan it to answer.",
@@ -89,11 +96,13 @@ function isCard(key: string, prefix: string): boolean {
 	return key.slice(prefix.length).startsWith("card-");
 }
 
-async function putCard(env: Env, eventId: string, file: unknown, by: string) {
+async function putCard(
+	env: Env,
+	eventId: string,
+	bytes: ArrayBuffer,
+	by: string,
+) {
 	const key = `${designPrefix(eventId)}card-${crypto.randomUUID()}.jpg`;
-	// zod's `File` and the Workers `Blob` are different declarations of the
-	// same object; see uploadCover.
-	const bytes = await (file as Blob).arrayBuffer();
 	await env.MEDIA.put(key, bytes, {
 		httpMetadata: { contentType: "image/jpeg" },
 		customMetadata: { eventId, uploadedBy: by },
@@ -154,11 +163,7 @@ export const designsRouter = {
 		);
 		const prefix = designPrefix(row.id);
 		const [saved, objects] = await Promise.all([
-			context.db
-				.select()
-				.from(eventDesign)
-				.where(eq(eventDesign.eventId, row.id))
-				.get(),
+			savedDesign(context.db, row.id),
 			listPrefix(context.env, prefix),
 		]);
 		return {
@@ -187,6 +192,13 @@ export const designsRouter = {
 				(o) => !isCard(o.key, prefix),
 			);
 			const bytes = await (input.file as unknown as Blob).arrayBuffer();
+			// The declared type is the client's word; the bytes decide.
+			const type = sniffImage(bytes);
+			if (!type) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "A JPEG, PNG or WebP, please.",
+				});
+			}
 			// The same picture again (a template picked twice, a photo added
 			// twice) is the one already here, not another copy toward the limit.
 			const same = await alreadyHeld(held, bytes);
@@ -196,7 +208,6 @@ export const designsRouter = {
 					message: `An event holds up to ${MAX_IMAGES} images. Remove one you aren't using first.`,
 				});
 			}
-			const type = input.file.type as (typeof IMAGE_TYPES)[number];
 			const key = `${prefix}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
 			await context.env.MEDIA.put(key, bytes, {
 				httpMetadata: { contentType: type },
@@ -216,13 +227,8 @@ export const designsRouter = {
 					message: "Not one of this event's images.",
 				});
 			}
-			const saved = await context.db
-				.select({ doc: eventDesign.doc })
-				.from(eventDesign)
-				.where(eq(eventDesign.eventId, row.id))
-				.get();
-			const parsed = saved ? parseDesign(saved.doc) : null;
-			if (parsed?.ok && refsOf(parsed.design).includes(input.ref)) {
+			const saved = await savedDesign(context.db, row.id);
+			if (saved?.doc && refsOf(saved.doc).includes(input.ref)) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "The saved design still uses that image.",
 				});
@@ -247,12 +253,13 @@ export const designsRouter = {
 			const held = (await listPrefix(context.env, prefix)).filter(
 				(o) => !isCard(o.key, prefix),
 			);
+			const type = sniffImage(bytes);
+			if (!type) return { ref: null };
 			const same = await alreadyHeld(held, bytes);
 			if (same) return { ref: same };
-			const ext = row.coverKey.split(".").pop() ?? "jpg";
-			const key = `${prefix}${crypto.randomUUID()}.${ext}`;
+			const key = `${prefix}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
 			await context.env.MEDIA.put(key, bytes, {
-				httpMetadata: cover.httpMetadata,
+				httpMetadata: { contentType: type },
 				customMetadata: { eventId: row.id, uploadedBy: context.me.id },
 			});
 			return { ref: key };
@@ -360,17 +367,12 @@ export const designsRouter = {
 				context.me,
 				input.eventId,
 			);
-			const saved = await context.db
-				.select({ doc: eventDesign.doc, version: eventDesign.version })
-				.from(eventDesign)
-				.where(eq(eventDesign.eventId, row.id))
-				.get();
-			if (!saved) return null;
+			const saved = await savedDesign(context.db, row.id);
+			if (!saved?.doc) return null;
 			const values = designValues(row, "");
 			const basis = basisOf(saved.version, values);
 			return {
-				// Parsed on the way in (save).
-				doc: saved.doc as Design,
+				doc: saved.doc,
 				values,
 				basis,
 				stale: row.cardBasis !== basis,
@@ -386,7 +388,13 @@ export const designsRouter = {
 		.input(idInput.extend({ card: cardFile, basis }))
 		.handler(async ({ context, input }) => {
 			const row = await editable(context, input.eventId);
-			const key = await putCard(context.env, row.id, input.card, context.me.id);
+			const bytes = await (input.card as unknown as Blob).arrayBuffer();
+			if (sniffImage(bytes) !== "image/jpeg") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "The card image must be a JPEG.",
+				});
+			}
+			const key = await putCard(context.env, row.id, bytes, context.me.id);
 			await context.db
 				.update(event)
 				.set({ cardKey: key, cardBasis: input.basis })
@@ -400,18 +408,13 @@ export const designsRouter = {
 		.handler(async ({ context, input }) => {
 			const row = await editable(context, input.eventId);
 			if (input.on) {
-				const saved = await context.db
-					.select({ doc: eventDesign.doc })
-					.from(eventDesign)
-					.where(eq(eventDesign.eventId, row.id))
-					.get();
-				const parsed = saved ? parseDesign(saved.doc) : null;
-				if (!parsed?.ok) {
+				const saved = await savedDesign(context.db, row.id);
+				if (!saved?.doc) {
 					throw new ORPCError("BAD_REQUEST", {
 						message: "Design the card first.",
 					});
 				}
-				needsQr(row, true, parsed.design);
+				needsQr(row, true, saved.doc);
 			}
 			await context.db
 				.update(event)

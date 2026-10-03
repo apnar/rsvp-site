@@ -31,7 +31,7 @@ import {
 } from "drizzle-orm";
 
 import type { Context } from "../context";
-import { type EventRow, guestsOf, hostIdsOf } from "../events";
+import { cleanTheme, type EventRow, guestsOf, hostIdsOf } from "../events";
 import { tally } from "../headcount";
 import { eventFacts, sendToList } from "../mail";
 import { type Due, digestSince, dueEmails } from "../schedule";
@@ -262,7 +262,8 @@ export async function runEventMail(
 				or(isNull(event.date), gte(event.date, from)),
 			),
 		)
-		.all();
+		.all()
+		.then((found) => found.map(cleanTheme));
 	const outcomes: MailOutcome[] = [];
 	for (const row of rows) {
 		for (const due of dueEmails(row, now)) {

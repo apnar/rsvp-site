@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 
+import { insertChunks, mapChunks } from "./batch";
 import type { createDb } from "./index";
 import { contact } from "./schema/contact";
 
@@ -17,11 +18,9 @@ export async function remember(
 	userIds: readonly string[],
 ): Promise<void> {
 	const ids = [...new Set(userIds)].filter((id) => id !== ownerId);
-	for (let i = 0; i < ids.length; i += 30) {
-		await db
-			.insert(contact)
-			.values(ids.slice(i, i + 30).map((userId) => ({ ownerId, userId })))
-			.onConflictDoNothing();
+	const rows = ids.map((userId) => ({ ownerId, userId }));
+	for (const slice of insertChunks(contact, rows)) {
+		await db.insert(contact).values(slice).onConflictDoNothing();
 	}
 }
 
@@ -31,20 +30,12 @@ export async function inBook(
 	ownerId: string,
 	userIds: readonly string[],
 ): Promise<Set<string>> {
-	const found = new Set<string>();
-	const ids = [...new Set(userIds)];
-	for (let i = 0; i < ids.length; i += 90) {
-		const rows = await db
+	const rows = await mapChunks([...new Set(userIds)], (slice) =>
+		db
 			.select({ userId: contact.userId })
 			.from(contact)
-			.where(
-				and(
-					eq(contact.ownerId, ownerId),
-					inArray(contact.userId, ids.slice(i, i + 90)),
-				),
-			)
-			.all();
-		for (const r of rows) found.add(r.userId);
-	}
-	return found;
+			.where(and(eq(contact.ownerId, ownerId), inArray(contact.userId, slice)))
+			.all(),
+	);
+	return new Set(rows.map((r) => r.userId));
 }

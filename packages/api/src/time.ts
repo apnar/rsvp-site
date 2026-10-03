@@ -95,17 +95,22 @@ export function addDays(date: string, n: number): string {
 
 /** "Mon, Sep 14" for a YYYY-MM-DD date. */
 export function formatDate(date: string): string {
+	const at = new Date(`${date}T12:00:00Z`);
+	// Intl throws on an invalid date, and one bad stored value would take
+	// down every page that lists the event; show it raw instead.
+	if (Number.isNaN(at.getTime())) return date;
 	return new Intl.DateTimeFormat("en-US", {
 		timeZone: "UTC",
 		weekday: "short",
 		month: "short",
 		day: "numeric",
-	}).format(new Date(`${date}T12:00:00Z`));
+	}).format(at);
 }
 
 /** "9:00 PM" for an HH:MM 24-hour time. */
 export function formatTime(time: string): string {
 	const [h = 0, m = 0] = time.split(":").map(Number);
+	if (!Number.isFinite(h) || !Number.isFinite(m)) return time;
 	const suffix = h >= 12 ? "PM" : "AM";
 	const hour12 = h % 12 === 0 ? 12 : h % 12;
 	return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;

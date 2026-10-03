@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
+import { insertChunks } from "@rsvp-site/db/batch";
 import { findOrCreatePeople, parseAddresses } from "@rsvp-site/db/people";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
@@ -62,10 +63,11 @@ async function join(
 	userIds: readonly string[],
 ): Promise<number> {
 	let added = 0;
-	for (let i = 0; i < userIds.length; i += 30) {
+	const members = userIds.map((userId) => ({ groupId, userId }));
+	for (const slice of insertChunks(contactGroupMember, members)) {
 		const rows = await context.db
 			.insert(contactGroupMember)
-			.values(userIds.slice(i, i + 30).map((userId) => ({ groupId, userId })))
+			.values(slice)
 			.onConflictDoNothing()
 			.returning({ userId: contactGroupMember.userId })
 			.all();
@@ -107,21 +109,17 @@ export const contactsRouter = {
 				.orderBy(asc(contactGroup.name))
 				.all(),
 		]);
-		const members = groups.length
-			? await context.db
-					.select({
-						groupId: contactGroupMember.groupId,
-						userId: contactGroupMember.userId,
-					})
-					.from(contactGroupMember)
-					.where(
-						inArray(
-							contactGroupMember.groupId,
-							groups.map((g) => g.id),
-						),
-					)
-					.all()
-			: [];
+		// Joined to the caller's groups rather than filtered by an id list,
+		// which D1's bound-parameter cap would break for a long list of groups.
+		const members = await context.db
+			.select({
+				groupId: contactGroupMember.groupId,
+				userId: contactGroupMember.userId,
+			})
+			.from(contactGroupMember)
+			.innerJoin(contactGroup, eq(contactGroup.id, contactGroupMember.groupId))
+			.where(eq(contactGroup.ownerId, context.me.id))
+			.all();
 		return {
 			people: people.map(({ unsubscribedAt, role, status, ...p }) => ({
 				...p,
@@ -191,14 +189,16 @@ export const contactsRouter = {
 			}),
 		)
 		.handler(async ({ context, input }) => {
-			const id = crypto.randomUUID();
-			await context.db
-				.insert(contactGroup)
-				.values({ id, ownerId: context.me.id, name: input.name });
+			// People first, the group after: addToBook refuses a request that is
+			// too big, and that must not leave an empty group behind.
 			const known = await inBook(context.db, context.me.id, input.userIds);
 			const typed = input.emails.trim()
 				? await addToBook(context, context.me.id, input.emails)
 				: [];
+			const id = crypto.randomUUID();
+			await context.db
+				.insert(contactGroup)
+				.values({ id, ownerId: context.me.id, name: input.name });
 			const added = await join(context, id, [...new Set([...known, ...typed])]);
 			return { id, added };
 		}),

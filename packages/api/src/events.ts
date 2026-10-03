@@ -4,6 +4,7 @@
  */
 
 import { ORPCError } from "@orpc/server";
+import { mapChunks } from "@rsvp-site/db/batch";
 import type { Person } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
@@ -18,11 +19,12 @@ import {
 import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
 import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
-import type { Design, Format } from "@rsvp-site/design/schema";
+import type { Design, DesignTheme, Format } from "@rsvp-site/design/schema";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import type { Context } from "./context";
+import { readTheme, savedDesign } from "./designs-store";
 import {
 	type PotluckLine,
 	potluckLines,
@@ -36,18 +38,38 @@ type Db = Context["db"];
 export type EventRow = typeof event.$inferSelect;
 export type GuestRow = typeof eventGuest.$inferSelect;
 
+/**
+ * The theme column is JSON that ends up in a raw <style> and in email
+ * HTML, so a row is only handed on with a theme that parses.
+ */
+export function cleanTheme<T extends { theme: unknown }>(
+	row: T,
+): T & { theme: DesignTheme | null } {
+	return { ...row, theme: readTheme(row.theme) };
+}
+
+/** A canceled event is read-only: nothing a host does to it can matter. */
+export function refuseCanceled(row: Pick<EventRow, "status">) {
+	if (row.status === "canceled") {
+		throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
+	}
+}
+
 export async function findEvent(db: Db, id: string): Promise<EventRow | null> {
-	return (await db.select().from(event).where(eq(event.id, id)).get()) ?? null;
+	const row = await db.select().from(event).where(eq(event.id, id)).get();
+	return row ? cleanTheme(row) : null;
 }
 
 export async function findEventByShareToken(
 	db: Db,
 	token: string,
 ): Promise<EventRow | null> {
-	return (
-		(await db.select().from(event).where(eq(event.shareToken, token)).get()) ??
-		null
-	);
+	const row = await db
+		.select()
+		.from(event)
+		.where(eq(event.shareToken, token))
+		.get();
+	return row ? cleanTheme(row) : null;
 }
 
 /** The ids of an event's hosts, owner first. */
@@ -248,41 +270,55 @@ export type EventCard = {
 	potluck: PotluckLine[];
 };
 
-/** Totals for a set of events in two queries, for the dashboard. */
+function cardOf(row: EventRow): EventCard["card"] {
+	const theme = readTheme(row.theme);
+	return row.designOn && row.cardKey && theme
+		? { key: row.cardKey, bg: theme.bg }
+		: null;
+}
+
+/** Totals for a set of events in a few queries, for the dashboard. */
 export async function cardsFor(
 	db: Db,
 	rows: readonly EventRow[],
 ): Promise<EventCard[]> {
 	if (rows.length === 0) return [];
 	const ids = rows.map((r) => r.id);
+	// D1 caps a statement at 100 bound parameters, so the ids go in slices.
 	const [guests, items, claims] = await Promise.all([
-		db
-			.select({
-				eventId: eventGuest.eventId,
-				response: eventGuest.response,
-				adults: eventGuest.adults,
-				kids: eventGuest.kids,
-			})
-			.from(eventGuest)
-			.where(inArray(eventGuest.eventId, ids))
-			.all(),
-		db
-			.select({
-				id: potluckItem.id,
-				eventId: potluckItem.eventId,
-				label: potluckItem.label,
-				quantity: potluckItem.quantity,
-			})
-			.from(potluckItem)
-			.where(inArray(potluckItem.eventId, ids))
-			.orderBy(asc(potluckItem.sort))
-			.all(),
-		db
-			.select({ itemId: potluckClaim.itemId })
-			.from(potluckClaim)
-			.innerJoin(potluckItem, eq(potluckItem.id, potluckClaim.itemId))
-			.where(inArray(potluckItem.eventId, ids))
-			.all(),
+		mapChunks(ids, (slice) =>
+			db
+				.select({
+					eventId: eventGuest.eventId,
+					response: eventGuest.response,
+					adults: eventGuest.adults,
+					kids: eventGuest.kids,
+				})
+				.from(eventGuest)
+				.where(inArray(eventGuest.eventId, slice))
+				.all(),
+		),
+		mapChunks(ids, (slice) =>
+			db
+				.select({
+					id: potluckItem.id,
+					eventId: potluckItem.eventId,
+					label: potluckItem.label,
+					quantity: potluckItem.quantity,
+				})
+				.from(potluckItem)
+				.where(inArray(potluckItem.eventId, slice))
+				.orderBy(asc(potluckItem.sort))
+				.all(),
+		),
+		mapChunks(ids, (slice) =>
+			db
+				.select({ itemId: potluckClaim.itemId })
+				.from(potluckClaim)
+				.innerJoin(potluckItem, eq(potluckItem.id, potluckClaim.itemId))
+				.where(inArray(potluckItem.eventId, slice))
+				.all(),
+		),
 	]);
 	return rows.map((row) => ({
 		id: row.id,
@@ -292,10 +328,7 @@ export async function cardsFor(
 		dateLabel: row.date ? formatDate(row.date) : null,
 		timeLabel: formatTimeRange(row.startTime, row.endTime),
 		coverKey: row.coverKey,
-		card:
-			row.designOn && row.cardKey && row.theme
-				? { key: row.cardKey, bg: row.theme.bg }
-				: null,
+		card: cardOf(row),
 		hostLine: row.hostLine,
 		totals: tally(guests.filter((g) => g.eventId === row.id)),
 		potluck: row.potluckEnabled
@@ -337,12 +370,8 @@ export async function designedDoc(
 	row: EventRow,
 ): Promise<{ doc: Design; version: number } | null> {
 	if (!row.designOn) return null;
-	const saved = await db
-		.select({ doc: eventDesign.doc, version: eventDesign.version })
-		.from(eventDesign)
-		.where(eq(eventDesign.eventId, row.id))
-		.get();
-	return saved ? { doc: saved.doc as Design, version: saved.version } : null;
+	const saved = await savedDesign(db, row.id);
+	return saved?.doc ? { doc: saved.doc, version: saved.version } : null;
 }
 
 /**

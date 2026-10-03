@@ -6,6 +6,7 @@ import { bounds } from "./edit";
 import type { Faces } from "./faces";
 import { FONTS, faceKey, hasItalic, nearestWeight } from "./fonts";
 import { fill, usesPlaceholder, type Values } from "./placeholders";
+import { printableQrs } from "./qr";
 import {
 	bleedUnits,
 	CARD_W,
@@ -32,7 +33,7 @@ export function warningsOf(
 	const w = CARD_W;
 	const h = cardHeight(d.format);
 	const inch = unitsPerInch(d.format);
-	const qrs = d.elements.filter((el) => el.type === "qr" && !el.hidden);
+	const qrs = printableQrs(d);
 	if (opts.paper && qrs.length === 0) {
 		out.push({
 			level: "block",

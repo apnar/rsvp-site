@@ -16,7 +16,6 @@ import {
 	HOST_ALERTS,
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
-import { parseDesign } from "@rsvp-site/design/schema";
 import {
 	cancelEmail,
 	coverUrl,
@@ -28,9 +27,11 @@ import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import {
 	and,
 	asc,
+	count,
 	desc,
 	eq,
 	getTableColumns,
+	gt,
 	inArray,
 	isNotNull,
 	isNull,
@@ -42,6 +43,7 @@ import {
 import { z } from "zod";
 
 import type { Context } from "../context";
+import { savedDesign } from "../designs-store";
 import {
 	accessTo,
 	cardsFor,
@@ -58,9 +60,11 @@ import {
 	labelsOf,
 	notFound,
 	potluckOf,
+	refuseCanceled,
 } from "../events";
 import { canInviteOthers, invitesLeft } from "../guest-invites";
 import { headcount, openSlots, tally } from "../headcount";
+import { sniffImage } from "../image-type";
 import { hostProcedure, personProcedure, publicProcedure } from "../index";
 import {
 	eventFacts,
@@ -76,13 +80,11 @@ import { deleteDesignMedia, needsQr } from "./designs";
 type Db = Context["db"];
 
 const idInput = z.object({ eventId: z.string().min(1) });
-const dateSchema = z
-	.string()
-	.regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date.")
-	.nullable();
-const timeSchema = z
-	.string()
-	.regex(/^\d{2}:\d{2}$/, "Pick a time.")
+// A real calendar date and clock time, not just the right shape: 2026-13-01
+// would otherwise be stored and then throw in formatDate on every page.
+const dateSchema = z.iso.date("Pick a date.").nullable();
+const timeSchema = z.iso
+	.time({ precision: -1, error: "Pick a time." })
 	.nullable();
 
 /** Everything a host can set on the editor. All optional on update. */
@@ -322,31 +324,42 @@ export const eventsRouter = {
 				.reverse();
 
 			const live = upcoming.filter((c) => c.status === "published");
-			const ids = rows.map((r) => r.id);
 			const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-			const fresh = ids.length
-				? await context.db
-						.select({
-							guestId: eventGuest.id,
-							eventId: eventGuest.eventId,
-							name: user.name,
-							response: eventGuest.response,
-							adults: eventGuest.adults,
-							kids: eventGuest.kids,
-							respondedAt: eventGuest.respondedAt,
-						})
-						.from(eventGuest)
-						.innerJoin(user, eq(user.id, eventGuest.userId))
-						.where(
-							and(
-								inArray(eventGuest.eventId, ids.slice(0, 90)),
-								isNotNull(eventGuest.respondedAt),
-							),
-						)
-						.orderBy(desc(eventGuest.respondedAt))
-						.limit(8)
-						.all()
-				: [];
+			// Scoped by a subquery on the caller's hosted events, not an id list:
+			// D1 caps bound parameters, and a long list would silently drop events.
+			const scope = all
+				? undefined
+				: inArray(
+						eventGuest.eventId,
+						context.db
+							.select({ id: eventHost.eventId })
+							.from(eventHost)
+							.where(eq(eventHost.userId, context.me.id)),
+					);
+			const [fresh, recent] = await Promise.all([
+				context.db
+					.select({
+						guestId: eventGuest.id,
+						eventId: eventGuest.eventId,
+						name: user.name,
+						response: eventGuest.response,
+						adults: eventGuest.adults,
+						kids: eventGuest.kids,
+						respondedAt: eventGuest.respondedAt,
+					})
+					.from(eventGuest)
+					.innerJoin(user, eq(user.id, eventGuest.userId))
+					.where(and(scope, isNotNull(eventGuest.respondedAt)))
+					.orderBy(desc(eventGuest.respondedAt))
+					.limit(8)
+					.all(),
+				// Counted apart from the eight shown, which cap what it could say.
+				context.db
+					.select({ n: count() })
+					.from(eventGuest)
+					.where(and(scope, gt(eventGuest.respondedAt, since)))
+					.get(),
+			]);
 			const titles = new Map(rows.map((r) => [r.id, r.title]));
 			return {
 				now: new Date().toISOString(),
@@ -355,9 +368,7 @@ export const eventsRouter = {
 				drafts,
 				past,
 				tiles: {
-					newReplies: fresh.filter(
-						(f) => f.respondedAt && f.respondedAt > since,
-					).length,
+					newReplies: recent?.n ?? 0,
 					// A canceled party has nobody left to decide and nothing to bring.
 					deciding: live.reduce(
 						(n, c) => n + c.totals.waiting + c.totals.maybe,
@@ -486,6 +497,13 @@ export const eventsRouter = {
 				});
 			}
 			const fields = { ...input.fields };
+			// Answers close and reminders fire off the date, so only a draft
+			// may be without one.
+			if (fields.date === null && before.status !== "draft") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "A sent invitation needs a date.",
+				});
+			}
 			if (
 				fields.paper !== undefined &&
 				fields.paper !== before.paper &&
@@ -560,6 +578,7 @@ export const eventsRouter = {
 				context.me,
 				input.eventId,
 			);
+			refuseCanceled(row);
 			const keep = input.items.flatMap((i) => (i.id ? [i.id] : []));
 			const statements = [
 				context.db
@@ -618,12 +637,19 @@ export const eventsRouter = {
 				context.me,
 				input.eventId,
 			);
-			const type = input.file.type as (typeof COVER_TYPES)[number];
-			const key = `covers/${crypto.randomUUID()}.${COVER_EXT[type]}`;
+			refuseCanceled(row);
 			// zod's `File` and the Workers `Blob` are different declarations of
 			// the same object; the cast is the File/Blob mismatch CLAUDE.md
 			// mentions, not a conversion.
 			const bytes = await (input.file as unknown as Blob).arrayBuffer();
+			// The declared type is the client's word; the bytes decide.
+			const type = sniffImage(bytes);
+			if (!type) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "A JPEG, PNG or WebP, please.",
+				});
+			}
+			const key = `covers/${crypto.randomUUID()}.${COVER_EXT[type]}`;
 			await context.env.MEDIA.put(key, bytes, {
 				httpMetadata: { contentType: type },
 				customMetadata: { eventId: row.id, uploadedBy: context.me.id },
@@ -644,6 +670,7 @@ export const eventsRouter = {
 				context.me,
 				input.eventId,
 			);
+			refuseCanceled(row);
 			await context.db
 				.update(event)
 				.set({ coverKey: null })
@@ -664,6 +691,7 @@ export const eventsRouter = {
 				context.me,
 				input.eventId,
 			);
+			refuseCanceled(row);
 			const person = await context.db
 				.select({ id: user.id, role: user.role, status: user.status })
 				.from(user)
@@ -724,13 +752,8 @@ export const eventsRouter = {
 		requirePublishable(before);
 		if (before.paper && before.designOn) {
 			// The paper switch can be turned on after the card was designed.
-			const saved = await context.db
-				.select({ doc: eventDesign.doc })
-				.from(eventDesign)
-				.where(eq(eventDesign.eventId, before.id))
-				.get();
-			const parsed = saved ? parseDesign(saved.doc) : null;
-			needsQr(before, true, parsed?.ok ? parsed.design : { elements: [] });
+			const saved = await savedDesign(context.db, before.id);
+			needsQr(before, true, saved?.doc ?? null);
 		}
 		if (before.status === "draft") {
 			await context.db
@@ -811,12 +834,13 @@ export const eventsRouter = {
 					and(eq(eventGuest.eventId, row.id), isNull(eventGuest.paperToken)),
 				)
 				.all();
-			for (const g of missing) {
-				await context.db
+			const [first, ...rest] = missing.map((g) =>
+				context.db
 					.update(eventGuest)
 					.set({ paperToken: newToken() })
-					.where(and(eq(eventGuest.id, g.id), isNull(eventGuest.paperToken)));
-			}
+					.where(and(eq(eventGuest.id, g.id), isNull(eventGuest.paperToken))),
+			);
+			if (first) await context.db.batch([first, ...rest]);
 			const wanted = input.guestIds ? new Set(input.guestIds) : null;
 			const rows = await context.db
 				.select({
@@ -1131,7 +1155,7 @@ export const eventsRouter = {
 		.input(z.object({ token: z.string().min(1).max(64) }))
 		.handler(async ({ context, input }) => {
 			const row = await findEventByShareToken(context.db, input.token);
-			if (!row?.shareEnabled || row.status === "draft") throw notFound();
+			if (!row?.shareEnabled || row.status !== "published") throw notFound();
 			await context.db
 				.insert(eventGuest)
 				.values({

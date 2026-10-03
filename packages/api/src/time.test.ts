@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	addDays,
 	daysBetween,
+	formatDate,
 	formatTime,
 	formatTimeRange,
 	siteInstant,
@@ -69,5 +70,17 @@ describe("formatTimeRange", () => {
 		expect(formatTimeRange("17:00", "22:00")).toBe("5:00 PM - 10:00 PM");
 		expect(formatTimeRange("17:00", null)).toBe("5:00 PM");
 		expect(formatTimeRange(null, "22:00")).toBeNull();
+	});
+});
+
+describe("formatDate and formatTime", () => {
+	it("format real values", () => {
+		expect(formatDate("2026-10-24")).toBe("Sat, Oct 24");
+		expect(formatTime("17:05")).toBe("5:05 PM");
+	});
+	it("hand back an invalid stored value rather than throwing", () => {
+		expect(formatDate("2026-13-01")).toBe("2026-13-01");
+		expect(formatDate("")).toBe("");
+		expect(formatTime("soon")).toBe("soon");
 	});
 });
