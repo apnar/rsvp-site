@@ -33,7 +33,9 @@ export const Route = createFileRoute("/_auth/e/$eventId/")({
 	// `a` is the answer an email button carried. It is shown picked but not
 	// saved: mail clients fetch links on their own, so nothing is recorded
 	// until a person presses the button.
-	validateSearch: z.object({ a: z.enum(["yes", "maybe", "no"]).optional() }),
+	validateSearch: z.object({
+		a: z.enum(["yes", "maybe", "no"]).optional().catch(undefined),
+	}),
 	loader: ({ context, params }) =>
 		context.queryClient.ensureQueryData(
 			orpc.events.invite.queryOptions({ input: { eventId: params.eventId } }),
@@ -340,7 +342,6 @@ function RsvpForm({ data, initial }: { data: Invite; initial: Answer | null }) {
 					);
 				}
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 
@@ -516,13 +517,11 @@ function BringSomeone({ data }: { data: Invite }) {
 				setEmail("");
 				refresh();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	const takeBack = useMutation(
 		orpc.guests.uninviteFriend.mutationOptions({
 			onSuccess: refresh,
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	if (!me || (!me.canInvite && me.friends.length === 0)) return null;

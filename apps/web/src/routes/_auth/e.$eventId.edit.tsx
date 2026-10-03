@@ -42,7 +42,7 @@ function EditEvent() {
 				← All events
 			</Link>
 			<PageHead kicker={STATUS[data.event.status]} title={data.event.title} />
-			<EventEditor key={data.event.updatedAt.toString()} loaded={data} />
+			<EventEditor key={data.event.id} loaded={data} />
 		</Page>
 	);
 }

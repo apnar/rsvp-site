@@ -26,6 +26,7 @@ import {
 	layoutsFor,
 	PAPER_SIZES,
 	type PaperSize,
+	type PrintLayout,
 } from "@/lib/paper-sizes";
 import { client, orpc } from "@/utils/orpc";
 
@@ -62,6 +63,9 @@ function GuestListPage() {
 	const nowMs = Date.parse(data.now);
 	const t = data.totals;
 	const e = data.event;
+	// Once, here: each caller reads the saved choice on its own, so separate
+	// hooks in the panel and the rows would disagree after a change.
+	const [print, setPrint] = usePrint(e.designFormat);
 	// A backstop for the card picture emails show: if the facts moved some
 	// way the editor didn't catch, it is drawn again here, quietly.
 	useEffect(() => {
@@ -85,7 +89,6 @@ function GuestListPage() {
 				);
 				refresh();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	const send = useMutation(
@@ -98,13 +101,11 @@ function GuestListPage() {
 				);
 				refresh();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	const remove = useMutation(
 		orpc.guests.remove.mutationOptions({
 			onSuccess: () => refresh(),
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 
@@ -199,6 +200,8 @@ function GuestListPage() {
 					releasedAt={e.emailsReleasedAt}
 					emailable={notInvited}
 					designFormat={e.designFormat}
+					print={print}
+					onPrint={setPrint}
 					onChange={refresh}
 				/>
 			) : null}
@@ -310,7 +313,7 @@ function GuestListPage() {
 							paper={e.paper}
 							eventId={eventId}
 							eventTitle={e.title}
-							designFormat={e.designFormat}
+							print={print}
 							nudging={nudge.isPending}
 							onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
 							onRemove={() => remove.mutate({ eventId, guestId: g.id })}
@@ -357,7 +360,7 @@ function GuestRow({
 	paper,
 	eventId,
 	eventTitle,
-	designFormat,
+	print,
 	nudging,
 	onNudge,
 	onRemove,
@@ -369,7 +372,7 @@ function GuestRow({
 	paper: boolean;
 	eventId: string;
 	eventTitle: string;
-	designFormat: CardFormat | null;
+	print: Print;
 	nudging: boolean;
 	onNudge: () => void;
 	onRemove: () => void;
@@ -470,7 +473,7 @@ function GuestRow({
 					<PaperActions
 						eventId={eventId}
 						eventTitle={eventTitle}
-						designFormat={designFormat}
+						print={print}
 						guest={g}
 					/>
 				) : null}
@@ -541,6 +544,8 @@ function PaperPanel({
 	releasedAt,
 	emailable,
 	designFormat,
+	print,
+	onPrint,
 	onChange,
 }: {
 	eventId: string;
@@ -550,9 +555,10 @@ function PaperPanel({
 	releasedAt: Date | null;
 	emailable: number;
 	designFormat: CardFormat | null;
+	print: Print;
+	onPrint: (value: Print) => void;
 	onChange: () => void;
 }) {
-	const [print, setPrint] = usePrint(designFormat);
 	const [busy, setBusy] = useState(false);
 	const [sure, setSure] = useState(false);
 	const release = useMutation(
@@ -564,7 +570,6 @@ function PaperPanel({
 				setSure(false);
 				onChange();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	return (
@@ -587,7 +592,7 @@ function PaperPanel({
 				<PrintSelect
 					value={print}
 					options={printOptions(designFormat)}
-					onChange={setPrint}
+					onChange={onPrint}
 				/>
 				<Button
 					variant="light"
@@ -633,7 +638,12 @@ function PaperPanel({
 	);
 }
 
-function printOptions(format: CardFormat | null) {
+type Print = PaperSize | PrintLayout;
+
+function printOptions(format: CardFormat | null): {
+	value: Print;
+	label: string;
+}[] {
 	return format ? layoutsFor(format) : PAPER_SIZES;
 }
 
@@ -642,17 +652,15 @@ function printOptions(format: CardFormat | null) {
  * printer): a paper size for the classic card, a sheet layout for a
  * designed one, per card format.
  */
-function usePrint(
-	format: CardFormat | null,
-): [string, (value: string) => void] {
+function usePrint(format: CardFormat | null): [Print, (value: Print) => void] {
 	const key = format ? `print-layout-${format}` : "paper-size";
-	const fallback = printOptions(format)[0]?.value ?? "card";
-	const [value, setValue] = useState<string>(fallback);
+	const fallback: Print = printOptions(format)[0]?.value ?? "card";
+	const [value, setValue] = useState<Print>(fallback);
 	useEffect(() => {
 		try {
 			const saved = localStorage.getItem(key);
-			const known = printOptions(format).some((o) => o.value === saved);
-			setValue(saved && known ? saved : fallback);
+			const known = printOptions(format).find((o) => o.value === saved);
+			setValue(known ? known.value : fallback);
 		} catch {
 			// Storage may be blocked; the default is fine.
 		}
@@ -675,9 +683,9 @@ function PrintSelect({
 	options,
 	onChange,
 }: {
-	value: string;
-	options: { value: string; label: string }[];
-	onChange: (value: string) => void;
+	value: Print;
+	options: { value: Print; label: string }[];
+	onChange: (value: Print) => void;
 }) {
 	return (
 		<>
@@ -687,7 +695,11 @@ function PrintSelect({
 			<select
 				id="paper-size"
 				value={value}
-				onChange={(ev) => onChange(ev.target.value)}
+				onChange={(ev) =>
+					onChange(
+						options.find((o) => o.value === ev.target.value)?.value ?? value,
+					)
+				}
 				className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 py-2 text-[14px] text-ink hover:border-haze focus-visible:border-lime"
 			>
 				{options.map((o) => (
@@ -707,7 +719,7 @@ function PrintSelect({
 async function downloadCards(
 	eventId: string,
 	title: string,
-	print: string,
+	print: Print,
 	guest: { id: string; name: string } | null,
 ) {
 	// Only ever called from a click. Saying so lets the server build drop the
@@ -758,17 +770,16 @@ async function downloadCards(
 function PaperActions({
 	eventId,
 	eventTitle,
-	designFormat,
+	print,
 	guest,
 }: {
 	eventId: string;
 	eventTitle: string;
-	designFormat: CardFormat | null;
+	print: Print;
 	guest: Guest;
 }) {
 	const queryClient = useQueryClient();
 	const [busy, setBusy] = useState(false);
-	const [print] = usePrint(designFormat);
 	const fresh = useMutation(
 		orpc.guests.newPaperCode.mutationOptions({
 			onSuccess: () => {
@@ -777,7 +788,6 @@ function PaperActions({
 				);
 				queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	return (
@@ -819,7 +829,6 @@ function AddEmail({ eventId, guestId }: { eventId: string; guestId: string }) {
 				setOpen(false);
 				queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	if (!open) {
@@ -891,7 +900,6 @@ function AnswerEditor({
 				queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
 				onDone();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	const coming = answer === "yes" || answer === "maybe";

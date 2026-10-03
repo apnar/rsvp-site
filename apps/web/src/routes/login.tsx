@@ -11,8 +11,8 @@ import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/login")({
 	validateSearch: z.object({
-		redirect: z.string().optional(),
-		error: z.string().optional(),
+		redirect: z.string().optional().catch(undefined),
+		error: z.string().optional().catch(undefined),
 	}),
 	component: RouteComponent,
 });

@@ -4,9 +4,9 @@ import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import { ImagePlus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { Outputs } from "@/lib/api-types";
@@ -127,6 +127,29 @@ function fieldsOf(f: EventForm) {
 	};
 }
 
+function itemsOf(loaded?: Loaded): Item[] {
+	return (loaded?.potluck ?? []).map((p) => ({
+		key: p.id,
+		id: p.id,
+		label: p.label,
+		quantity: p.quantity,
+	}));
+}
+
+/** What the API would store for these items; blank rows are dropped. */
+const itemsSig = (items: Item[]) =>
+	items
+		.filter((i) => i.label.trim())
+		.map((i) => `${i.id ?? ""}:${i.label.trim()}:${i.quantity}`)
+		.join("|");
+
+/** The send button's words: one place for what was a nested ternary. */
+function sendLabel(paper: boolean, status: string, sendCount: number) {
+	if (paper) return "Publish";
+	if (status === "draft" && sendCount === 0) return "Send invites";
+	return `Send ${plural(sendCount, "invite")}`;
+}
+
 let itemKey = 0;
 const nextKey = () => `new-${++itemKey}`;
 
@@ -161,16 +184,16 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 	const status = loaded?.event.status ?? "draft";
 	const published = status === "published";
 
-	const initial = useMemo(() => (loaded ? formOf(loaded) : BLANK), [loaded]);
-	const [form, setForm] = useState<EventForm>(initial);
-	const [items, setItems] = useState<Item[]>(() =>
-		(loaded?.potluck ?? []).map((p) => ({
-			key: p.id,
-			id: p.id,
-			label: p.label,
-			quantity: p.quantity,
-		})),
-	);
+	// The form is the host's draft: seeded once and never re-synced from the
+	// query, which refetches on focus and after every guest or co-host change
+	// and would otherwise wipe what they have typed. `base` is what the server
+	// had when the draft last matched it; only the host's own save moves it.
+	const [base, setBase] = useState(() => ({
+		form: loaded ? formOf(loaded) : BLANK,
+		items: itemsOf(loaded),
+	}));
+	const [form, setForm] = useState<EventForm>(base.form);
+	const [items, setItems] = useState<Item[]>(base.items);
 	const [coverFile, setCoverFile] = useState<File | null>(null);
 	const [coverPreview, setCoverPreview] = useState<string | null>(null);
 	const [dropCover, setDropCover] = useState(false);
@@ -182,8 +205,12 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 	const [cohostEmails, setCohostEmails] = useState<string[]>([]);
 	const [busy, setBusy] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
+	// A new event's id, kept the moment `create` returns so a retry after a
+	// later step failed updates that draft instead of making a second one.
+	const createdId = useRef<string | null>(null);
+	// Set just before a navigation the editor itself chose, after a save.
+	const leaving = useRef(false);
 
-	useEffect(() => setForm(initial), [initial]);
 	useEffect(() => {
 		if (!coverFile) return;
 		const url = URL.createObjectURL(coverFile);
@@ -194,27 +221,30 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 	const set = <K extends keyof EventForm>(key: K, value: EventForm[K]) =>
 		setForm((f) => ({ ...f, [key]: value }));
 
-	const itemsChanged = useMemo(() => {
-		const before = (loaded?.potluck ?? [])
-			.map((p) => `${p.id}:${p.label}:${p.quantity}`)
-			.join("|");
-		const after = items
-			.filter((i) => i.label.trim())
-			.map((i) => `${i.id ?? ""}:${i.label.trim()}:${i.quantity}`)
-			.join("|");
-		return before !== after;
-	}, [items, loaded]);
+	const itemsChanged = itemsSig(items) !== itemsSig(base.items);
 
 	const moved =
 		published &&
 		form.notifyChanges &&
-		(form.date !== initial.date ||
-			form.startTime !== initial.startTime ||
-			form.endTime !== initial.endTime ||
-			form.location.trim() !== initial.location);
+		(form.date !== base.form.date ||
+			form.startTime !== base.form.startTime ||
+			form.endTime !== base.form.endTime ||
+			form.location.trim() !== base.form.location);
 	const notInvited = loaded?.notInvited ?? 0;
 	const newPeople =
 		emails.trim().length > 0 || groupIds.length > 0 || pickedIds.length > 0;
+
+	const dirty =
+		JSON.stringify(form) !== JSON.stringify(base.form) ||
+		itemsChanged ||
+		coverFile !== null ||
+		dropCover ||
+		(!eventId && (newPeople || cohostEmails.length > 0));
+	const blocker = useBlocker({
+		shouldBlockFn: () => dirty && !leaving.current,
+		enableBeforeUnload: () => dirty && !leaving.current,
+		withResolver: true,
+	});
 
 	const refresh = () =>
 		queryClient.invalidateQueries({ queryKey: orpc.events.key() });
@@ -223,10 +253,11 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 	const save = async (): Promise<string> => {
 		const fields = fieldsOf(form);
 		if (!fields.title) throw new Error("Give it a name.");
-		let id = eventId;
+		let id = eventId ?? createdId.current ?? undefined;
 		let notified = 0;
 		if (!id) {
 			id = (await client.events.create(fields)).id;
+			createdId.current = id;
 		} else {
 			notified = (await client.events.update({ eventId: id, fields })).notified;
 		}
@@ -274,7 +305,37 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 			toast.success(`Told ${plural(notified, "guest")} about the change.`);
 		setCoverFile(null);
 		setDropCover(false);
+		if (eventId) {
+			// Re-seed from what the server now holds: new potluck rows get their
+			// ids (a second save must not add them again) and the draft stops
+			// counting as unsaved.
+			const fresh = await queryClient
+				.fetchQuery({
+					...orpc.events.get.queryOptions({ input: { eventId } }),
+					staleTime: 0,
+				})
+				.catch(() => null);
+			if (fresh) {
+				const next = { form: formOf(fresh), items: itemsOf(fresh) };
+				setBase(next);
+				setForm(next.form);
+				setItems(next.items);
+			}
+		}
 		return id;
+	};
+
+	const go = (
+		to:
+			| "/e/$eventId/guests"
+			| "/e/$eventId/design"
+			| "/e/$eventId"
+			| "/e/$eventId/edit",
+		id: string,
+		replace = false,
+	) => {
+		leaving.current = true;
+		return navigate({ to, params: { eventId: id }, replace });
 	};
 
 	const toggleDesign = async (on: boolean) => {
@@ -302,24 +363,42 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							: "Published. Nobody new to invite.",
 				);
 				await refresh();
-				navigate({ to: "/e/$eventId/guests", params: { eventId: id } });
+				go("/e/$eventId/guests", id);
 				return;
 			}
 			await refresh();
 			if (after === "design") {
-				navigate({ to: "/e/$eventId/design", params: { eventId: id } });
+				go("/e/$eventId/design", id);
 				return;
 			}
 			if (after === "preview") {
-				navigate({ to: "/e/$eventId", params: { eventId: id } });
+				go("/e/$eventId", id);
 				return;
 			}
 			if (!eventId) {
 				toast.success("Draft saved.");
-				navigate({ to: "/e/$eventId/edit", params: { eventId: id } });
+				go("/e/$eventId/edit", id, true);
 			} else {
 				toast.success("Saved.");
 			}
+		} catch (error) {
+			toast.error((error as Error).message);
+			// The draft exists even though a later step failed: carry on from the
+			// real one, not from this form that would create another.
+			if (!eventId && createdId.current) {
+				go("/e/$eventId/edit", createdId.current, true);
+			}
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const saveAndLeave = async () => {
+		setBusy(true);
+		try {
+			await save();
+			leaving.current = true;
+			blocker.proceed?.();
 		} catch (error) {
 			toast.error((error as Error).message);
 		} finally {
@@ -336,9 +415,28 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 				: null);
 	const guestCount = loaded?.guests.length ?? 0;
 	const sendCount = eventId ? notInvited : 0;
+	// Paper guests stay "not invited" while emails are held, so a published
+	// paper event would show a Send that does nothing; it starts emails from
+	// the guest list.
+	const held =
+		published && !!loaded?.event.paper && !loaded.event.emailsReleasedAt;
 
 	return (
 		<div className="flex flex-wrap items-start gap-[clamp(24px,4vw,44px)]">
+			{blocker.status === "blocked" ? (
+				<div className="flex basis-full flex-wrap items-center gap-3 rounded-[18px] border border-pink bg-pink/14 px-4 py-2.5 text-[14px]">
+					<span className="mr-auto">You have changes that aren't saved.</span>
+					<Button size="sm" variant="ghost" onClick={blocker.proceed}>
+						Leave without saving
+					</Button>
+					<Button size="sm" variant="light" onClick={blocker.reset}>
+						Stay
+					</Button>
+					<Button size="sm" disabled={busy} onClick={saveAndLeave}>
+						Save and leave
+					</Button>
+				</div>
+			) : null}
 			<div className="flex min-w-0 flex-[999_1_520px] flex-col gap-[18px]">
 				<section className="flex flex-col gap-4 rounded-[26px] bg-panel p-[clamp(18px,3vw,28px)]">
 					<StepHeading n={1} title="The basics" />
@@ -522,20 +620,27 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 						}
 					/>
 					<div className="flex flex-wrap items-center gap-3">
-						<PillTabs
-							label="How guests are invited"
-							value={form.paper ? "paper" : "email"}
-							onChange={(v) => {
-								if (status === "draft") set("paper", v === "paper");
-							}}
-							options={[
-								{ value: "email", label: "Email" },
-								{ value: "paper", label: "Paper" },
-							]}
-							className={
-								status === "draft" ? "" : "pointer-events-none opacity-60"
-							}
-						/>
+						{/* A disabled fieldset disables its buttons for focus and for
+						    screen readers; the choice is fixed once published. */}
+						<fieldset
+							disabled={status !== "draft"}
+							className={cn(
+								"m-0 min-w-0 border-0 p-0",
+								status !== "draft" && "opacity-60",
+							)}
+						>
+							<PillTabs
+								label="How guests are invited"
+								value={form.paper ? "paper" : "email"}
+								onChange={(v) => {
+									if (status === "draft") set("paper", v === "paper");
+								}}
+								options={[
+									{ value: "email", label: "Email" },
+									{ value: "paper", label: "Paper" },
+								]}
+							/>
+						</fieldset>
 						<span className="min-w-[200px] flex-1 text-[13px] text-haze">
 							{form.paper
 								? "You print a card for each guest with a QR code that signs them in. No email goes to guests until you start emails from the guest list, so the cards arrive first."
@@ -913,7 +1018,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 					>
 						Preview as guest
 					</Button>
-					{status === "canceled" ? null : status === "draft" ||
+					{status === "canceled" || held ? null : status === "draft" ||
 						sendCount > 0 ||
 						newPeople ? (
 						<Button
@@ -922,13 +1027,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							disabled={busy || !form.date}
 							onClick={() => run("send")}
 						>
-							{form.paper
-								? "Publish"
-								: status === "draft"
-									? sendCount > 0
-										? `Send ${plural(sendCount, "invite")}`
-										: "Send invites"
-									: `Send ${plural(sendCount, "invite")}`}
+							{sendLabel(form.paper, status, sendCount)}
 						</Button>
 					) : null}
 				</div>
@@ -979,7 +1078,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 								</span>
 							</div>
 						</div>
-						<div className="pointer-events-none p-3.5" aria-hidden>
+						<div className="pointer-events-none p-3.5" inert>
 							<AnswerPicker
 								value="yes"
 								onChange={() => {}}
@@ -995,14 +1094,11 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 }
 
 function ShareLink({ eventId, url }: { eventId: string; url: string }) {
-	const queryClient = useQueryClient();
 	const reset = useMutation(
 		orpc.events.resetShareLink.mutationOptions({
 			onSuccess: () => {
 				toast.success("New link made. The old one stopped working.");
-				queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	return (
@@ -1055,26 +1151,14 @@ function HostsSection({
 	pending: string[];
 	onPendingChange: (emails: string[]) => void;
 }) {
-	const queryClient = useQueryClient();
 	const book = useQuery(orpc.contacts.book.queryOptions());
 	const [email, setEmail] = useState("");
-	const refresh = () =>
-		queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 	const add = useMutation(
 		orpc.events.addCohost.mutationOptions({
-			onSuccess: () => {
-				setEmail("");
-				refresh();
-			},
-			onError: (error: Error) => toast.error(error.message),
+			onSuccess: () => setEmail(""),
 		}),
 	);
-	const remove = useMutation(
-		orpc.events.removeCohost.mutationOptions({
-			onSuccess: () => refresh(),
-			onError: (error: Error) => toast.error(error.message),
-		}),
-	);
+	const remove = useMutation(orpc.events.removeCohost.mutationOptions());
 	const hostEmails = new Set(loaded?.hosts.map((h) => h.email) ?? []);
 	const suggestions = (book.data?.people ?? []).filter(
 		(p) =>
@@ -1187,16 +1271,13 @@ function HostsSection({
 
 function DeleteDraft({ eventId }: { eventId: string }) {
 	const navigate = useNavigate();
-	const queryClient = useQueryClient();
 	const [sure, setSure] = useState(false);
 	const remove = useMutation(
 		orpc.events.remove.mutationOptions({
-			onSuccess: async () => {
-				await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
+			onSuccess: () => {
 				toast.success("Draft deleted.");
 				navigate({ to: "/events" });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	return sure ? (
@@ -1226,15 +1307,13 @@ function CancelEvent({
 	eventId: string;
 	stillComing: number;
 }) {
-	const queryClient = useQueryClient();
 	const navigate = useNavigate();
 	const [open, setOpen] = useState(false);
 	const [note, setNote] = useState("");
 	const [notify, setNotify] = useState(true);
 	const cancel = useMutation(
 		orpc.events.cancel.mutationOptions({
-			onSuccess: async (r) => {
-				await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
+			onSuccess: (r) => {
 				toast.success(
 					r.notified > 0
 						? `Canceled. Told ${plural(r.notified, "guest")}.`
@@ -1242,7 +1321,6 @@ function CancelEvent({
 				);
 				navigate({ to: "/events" });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	if (!open) {

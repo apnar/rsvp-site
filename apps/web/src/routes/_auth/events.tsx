@@ -19,7 +19,7 @@ import { longDay, since } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/events")({
-	validateSearch: z.object({ all: z.boolean().optional() }),
+	validateSearch: z.object({ all: z.boolean().optional().catch(undefined) }),
 	loaderDeps: ({ search }) => ({ all: search.all ?? false }),
 	loader: async ({ context, deps }) => {
 		const host = canHost(context.session.user);
@@ -65,7 +65,6 @@ function HostDashboard() {
 				);
 				queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 

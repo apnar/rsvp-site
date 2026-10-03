@@ -6,15 +6,37 @@ import { createRouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { createContext } from "@rsvp-site/api/context";
 import { appRouter } from "@rsvp-site/api/routers/index";
-import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { toast } from "sonner";
 
+declare module "@tanstack/react-query" {
+	interface Register {
+		mutationMeta: { quiet?: boolean };
+	}
+}
+
 export function createQueryClient() {
-	return new QueryClient({
+	const queryClient: QueryClient = new QueryClient({
+		// A write can change what any page shows (a guest count, a stamp), and
+		// pages used to refresh only their own namespace while staleTime kept
+		// the rest for a minute. Only queries on screen refetch; the rest are
+		// marked stale. Returned so the mutation waits for fresh data.
+		mutationCache: new MutationCache({
+			onSuccess: () => queryClient.invalidateQueries(),
+			onError: (error, _vars, _ctx, mutation) => {
+				if (mutation.meta?.quiet || mutation.options.onError) return;
+				toast.error(error.message);
+			},
+		}),
 		queryCache: new QueryCache({
 			onError: (error, query) => {
+				// A failed first load already shows the route's error page, and a
+				// thing that has just gone (a deleted draft, refetched on the way
+				// out) is not news.
+				if (query.state.data === undefined) return;
+				if (error instanceof ORPCError && error.code === "NOT_FOUND") return;
 				toast.error(`Error: ${error.message}`, {
 					action: {
 						label: "retry",
@@ -27,6 +49,7 @@ export function createQueryClient() {
 		}),
 		defaultOptions: { queries: { staleTime: 60 * 1000 } },
 	});
+	return queryClient;
 }
 
 const getORPCClient = createIsomorphicFn()

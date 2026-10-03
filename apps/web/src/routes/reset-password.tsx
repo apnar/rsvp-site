@@ -10,8 +10,8 @@ import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/reset-password")({
 	validateSearch: z.object({
-		token: z.string().optional(),
-		error: z.string().optional(),
+		token: z.string().optional().catch(undefined),
+		error: z.string().optional().catch(undefined),
 	}),
 	component: ResetPasswordPage,
 });
