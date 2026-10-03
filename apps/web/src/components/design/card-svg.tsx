@@ -212,6 +212,10 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 		? `rotate(${rot} ${x + w / 2} ${y + h / 2})`
 		: undefined;
 	let body: ReactNode = null;
+	// Opacity goes on each drawn primitive, as the canvas and the PDF do it,
+	// not on the group: a fill and its stroke, or a text and its shadow,
+	// would otherwise composite as one flattened shape and look different.
+	const o = n.opacity === 1 ? undefined : n.opacity;
 	switch (n.k) {
 		case "rect":
 			body = (
@@ -222,7 +226,9 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 					height={h}
 					rx={n.r}
 					fill={n.fill ?? "none"}
+					fillOpacity={o}
 					stroke={n.stroke ?? undefined}
+					strokeOpacity={o}
 					strokeWidth={n.stroke ? n.sw : undefined}
 					strokeDasharray={n.stroke ? dashOf(n.dash, n.sw) : undefined}
 				/>
@@ -236,7 +242,9 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 					rx={w / 2}
 					ry={h / 2}
 					fill={n.fill ?? "none"}
+					fillOpacity={o}
 					stroke={n.stroke ?? undefined}
+					strokeOpacity={o}
 					strokeWidth={n.stroke ? n.sw : undefined}
 					strokeDasharray={n.stroke ? dashOf(n.dash, n.sw) : undefined}
 				/>
@@ -250,6 +258,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 					x2={x + w}
 					y2={y + h / 2}
 					stroke={n.stroke}
+					strokeOpacity={o}
 					strokeWidth={n.sw}
 					strokeDasharray={dashOf(n.dash, n.sw)}
 				/>
@@ -260,6 +269,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 				<path
 					d={n.d}
 					fill={n.color}
+					fillOpacity={o}
 					transform={`translate(${x} ${y}) scale(${w / n.vb} ${h / n.vb})`}
 				/>
 			);
@@ -284,6 +294,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 						width={n.img.w}
 						height={n.img.h}
 						preserveAspectRatio="none"
+						opacity={o}
 						clipPath={`url(#${clip})`}
 					/>
 					{n.border ? (
@@ -295,6 +306,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 								ry={h / 2}
 								fill="none"
 								stroke={n.border.color}
+								strokeOpacity={o}
 								strokeWidth={n.border.width}
 							/>
 						) : (
@@ -306,6 +318,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 								rx={n.r}
 								fill="none"
 								stroke={n.border.color}
+								strokeOpacity={o}
 								strokeWidth={n.border.width}
 							/>
 						)
@@ -323,9 +336,10 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 							dx={n.shadow.dx}
 							dy={n.shadow.dy}
 							color={n.shadow.color}
+							opacity={o}
 						/>
 					) : null}
-					<Glyphs node={n} dx={0} dy={0} color={n.color} />
+					<Glyphs node={n} dx={0} dy={0} color={n.color} opacity={o} />
 				</>
 			);
 			break;
@@ -335,13 +349,21 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 			const m = w / 7;
 			const finder = (fx: number, fy: number) => (
 				<g key={`${fx}${fy}`}>
-					<rect x={fx} y={fy} width={m * 1.6} height={m * 1.6} fill={n.fg} />
+					<rect
+						x={fx}
+						y={fy}
+						width={m * 1.6}
+						height={m * 1.6}
+						fill={n.fg}
+						fillOpacity={o}
+					/>
 					<rect
 						x={fx + m * 0.25}
 						y={fy + m * 0.25}
 						width={m * 1.1}
 						height={m * 1.1}
 						fill={n.bg ?? "#ffffff"}
+						fillOpacity={o}
 					/>
 					<rect
 						x={fx + m * 0.5}
@@ -349,12 +371,20 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 						width={m * 0.6}
 						height={m * 0.6}
 						fill={n.fg}
+						fillOpacity={o}
 					/>
 				</g>
 			);
 			body = (
 				<>
-					<rect x={x} y={y} width={w} height={h} fill={n.bg ?? "none"} />
+					<rect
+						x={x}
+						y={y}
+						width={w}
+						height={h}
+						fill={n.bg ?? "none"}
+						fillOpacity={o}
+					/>
 					{finder(x + m * 0.5, y + m * 0.5)}
 					{finder(x + w - m * 2.1, y + m * 0.5)}
 					{finder(x + m * 0.5, y + h - m * 2.1)}
@@ -364,18 +394,14 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 						width={m * 1.8}
 						height={m * 1.8}
 						fill={n.fg}
-						opacity={0.35}
+						fillOpacity={0.35 * n.opacity}
 					/>
 				</>
 			);
 			break;
 		}
 	}
-	return (
-		<g transform={transform} opacity={n.opacity === 1 ? undefined : n.opacity}>
-			{body}
-		</g>
-	);
+	return <g transform={transform}>{body}</g>;
 }
 
 const TEXT_STYLE = {
@@ -393,11 +419,13 @@ function Glyphs({
 	dx,
 	dy,
 	color,
+	opacity,
 }: {
 	node: TextNode;
 	dx: number;
 	dy: number;
 	color: string;
+	opacity: number | undefined;
 }) {
 	return (
 		<text
@@ -406,6 +434,7 @@ function Glyphs({
 			fontStyle={n.italic ? "italic" : undefined}
 			fontSize={n.size}
 			fill={color}
+			fillOpacity={opacity}
 			style={TEXT_STYLE}
 			aria-hidden
 		>
