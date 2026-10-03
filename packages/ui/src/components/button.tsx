@@ -13,8 +13,8 @@ const buttonVariants = cva(
 		variants: {
 			variant: {
 				default:
-					"border-lime bg-lime text-night hover:border-lime-soft hover:bg-lime-soft hover:text-night active:bg-lime/85",
-				send: "border-pink bg-pink font-heading text-night hover:border-pink-soft hover:bg-pink-soft hover:text-night active:bg-pink/85",
+					"border-lime bg-lime text-on-lime hover:border-lime-soft hover:bg-lime-soft hover:text-on-lime active:bg-lime/85",
+				send: "border-pink bg-pink font-heading text-on-pink hover:border-pink-soft hover:bg-pink-soft hover:text-on-pink active:bg-pink/85",
 				light:
 					"border-ink bg-ink text-night hover:border-soft hover:bg-soft hover:text-night active:bg-haze",
 				outline:
@@ -26,7 +26,7 @@ const buttonVariants = cva(
 					"border-transparent bg-transparent text-soft hover:bg-ink/8 hover:text-ink active:bg-ink/14 aria-expanded:bg-ink/8",
 				destructive:
 					"border-destructive/50 bg-transparent text-destructive hover:bg-destructive/12 hover:text-destructive active:bg-destructive/20",
-				link: "h-auto rounded-none border-transparent bg-transparent px-0 text-lime underline-offset-[3px] hover:text-lime-soft hover:underline",
+				link: "h-auto rounded-none border-transparent bg-transparent px-0 text-lime-ink underline-offset-[3px] hover:text-lime-soft hover:underline",
 			},
 			size: {
 				default: "min-h-11 px-5 py-2.5",

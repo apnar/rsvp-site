@@ -33,7 +33,7 @@ function RequestLink() {
 	);
 
 	return (
-		<div className="flex flex-col gap-4 rounded-[28px] bg-lime p-[clamp(20px,3vw,32px)] text-night">
+		<div className="flex flex-col gap-4 rounded-[28px] bg-lime p-[clamp(20px,3vw,32px)] text-on-lime">
 			<div>
 				<span className="kicker">No password needed</span>
 				<h2 className="mt-1.5 mb-0 text-[26px]">Email me a link</h2>

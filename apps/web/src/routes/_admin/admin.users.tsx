@@ -35,7 +35,7 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 ];
 
 const SELECT =
-	"min-h-10 cursor-pointer rounded-full border border-line-strong bg-night px-3 py-2 text-[14px] text-ink [color-scheme:dark] hover:border-haze focus-visible:border-lime";
+	"min-h-10 cursor-pointer rounded-full border border-line-strong bg-night px-3 py-2 text-[14px] text-ink hover:border-haze focus-visible:border-lime";
 
 /** Everybody on the site: add them, set what they may do, or shut them out. */
 function AdminPeoplePage() {

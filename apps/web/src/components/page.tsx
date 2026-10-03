@@ -36,7 +36,7 @@ export function PageHead({
 	return (
 		<section className="flex flex-wrap items-end gap-x-7 gap-y-5">
 			<div className="flex min-w-0 flex-[1_1_420px] flex-col gap-3">
-				{kicker ? <span className="kicker text-lime">{kicker}</span> : null}
+				{kicker ? <span className="kicker text-lime-ink">{kicker}</span> : null}
 				<h1
 					className={cn(
 						"m-0 font-black tracking-[-0.04em]",

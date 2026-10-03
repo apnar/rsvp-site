@@ -34,7 +34,7 @@ function ForgotPasswordPage() {
 	return (
 		<div className="mx-auto w-full max-w-[560px] px-[clamp(16px,4vw,40px)] pt-[clamp(12px,3vw,40px)] pb-20">
 			<div className="flex flex-col gap-5 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
-				<span className="kicker text-lime">Password</span>
+				<span className="kicker text-lime-ink">Password</span>
 				<h1 className="m-0 text-[30px]">Forgot it. Happens.</h1>
 				{sent ? (
 					<p className="m-0 text-[15px] text-soft">

@@ -64,10 +64,10 @@ export function EventCard({
 				{chip ? (
 					<span
 						className={cn(
-							"pointer-events-none absolute top-3.5 left-3.5 rounded-full px-3 py-1.5 font-bold text-[12px] text-night uppercase tracking-[0.06em]",
-							chip.tone === "lime" && "bg-lime",
-							chip.tone === "pink" && "bg-pink",
-							chip.tone === "ink" && "bg-ink",
+							"pointer-events-none absolute top-3.5 left-3.5 rounded-full px-3 py-1.5 font-bold text-[12px] uppercase tracking-[0.06em]",
+							chip.tone === "lime" && "bg-lime text-on-lime",
+							chip.tone === "pink" && "bg-pink text-on-pink",
+							chip.tone === "ink" && "bg-ink text-night",
 						)}
 					>
 						{chip.label}
@@ -76,7 +76,7 @@ export function EventCard({
 			</div>
 			<div className="flex flex-1 flex-col gap-3.5 px-5 pt-[18px] pb-5">
 				<div>
-					<span className="font-bold text-[14px] text-lime">
+					<span className="font-bold text-[14px] text-lime-ink">
 						{whenShort(event)}
 					</span>
 					<h3 className="mt-1.5 mb-0 text-[22px] leading-[1.1]">

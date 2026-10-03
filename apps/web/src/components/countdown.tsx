@@ -51,7 +51,7 @@ export function CountdownTiles({
 					className="rounded-[18px] bg-panel px-2 py-[clamp(10px,2vw,18px)] text-center"
 				>
 					<div
-						className={`numeral text-[clamp(28px,5vw,52px)] ${t.tone === "lime" ? "text-lime" : t.tone === "pink" ? "text-pink" : ""}`}
+						className={`numeral text-[clamp(28px,5vw,52px)] ${t.tone === "lime" ? "text-lime-ink" : t.tone === "pink" ? "text-pink-ink" : ""}`}
 					>
 						{t.value}
 					</div>

@@ -30,7 +30,7 @@ export function Cover({
 			className={cn("size-full", className)}
 			style={{
 				background:
-					"radial-gradient(circle at 20% 30%, rgb(198 255 61 / 0.35), transparent 45%), radial-gradient(circle at 80% 70%, rgb(255 79 163 / 0.4), transparent 50%), #2b2342",
+					"radial-gradient(circle at 20% 30%, color-mix(in oklab, var(--color-lime) 35%, transparent), transparent 45%), radial-gradient(circle at 80% 70%, color-mix(in oklab, var(--color-pink) 40%, transparent), transparent 50%), var(--color-panel-2)",
 			}}
 		/>
 	);

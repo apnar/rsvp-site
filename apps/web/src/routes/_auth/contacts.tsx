@@ -102,7 +102,7 @@ function AddressBook({ book }: { book: Book }) {
 							id="book-group"
 							value={group}
 							onChange={(e) => setGroup(e.target.value)}
-							className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 text-[14px] text-ink [color-scheme:dark]"
+							className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 text-[14px] text-ink"
 						>
 							<option value="all">Everybody</option>
 							{book.groups.map((g) => (

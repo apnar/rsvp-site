@@ -145,7 +145,7 @@ function AdminEmailPage() {
 							key={s.id}
 							className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-[18px] bg-panel px-5 py-3.5"
 						>
-							<span className="flex-[0_0_130px] font-bold text-[13px] text-lime uppercase tracking-[0.06em]">
+							<span className="flex-[0_0_130px] font-bold text-[13px] text-lime-ink uppercase tracking-[0.06em]">
 								{KIND[s.kind] ?? s.kind}
 							</span>
 							<span className="min-w-0 flex-[1_1_240px]">

@@ -264,7 +264,7 @@ function HostDashboard() {
 				</Panel>
 				{draft ? (
 					<div className="flex flex-col justify-center gap-3 rounded-[26px] border border-line-strong border-dashed p-[22px]">
-						<span className="kicker text-pink">Draft</span>
+						<span className="kicker text-pink-ink">Draft</span>
 						<h2 className="m-0 text-[24px]">{draft.title}</h2>
 						<span className="text-[15px] text-soft">
 							{draft.date ? "Not sent yet." : "No date yet."} Pick up where you

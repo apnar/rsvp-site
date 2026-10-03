@@ -6,7 +6,7 @@ import { Wordmark } from "./brand";
 import UserMenu from "./user-menu";
 
 const linkClass =
-	"text-[13px] sm:text-[14px] font-medium whitespace-nowrap text-ink no-underline hover:text-lime aria-[current=page]:font-bold aria-[current=page]:text-lime";
+	"text-[13px] sm:text-[14px] font-medium whitespace-nowrap text-ink no-underline hover:text-lime-ink aria-[current=page]:font-bold aria-[current=page]:text-lime-ink";
 
 /**
  * The top bar. What it offers depends on the role in the session: the

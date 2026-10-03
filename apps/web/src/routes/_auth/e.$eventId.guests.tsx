@@ -202,7 +202,7 @@ function GuestListPage() {
 			) : null}
 
 			<section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3.5">
-				<div className="flex flex-col gap-1.5 rounded-[26px] bg-lime p-[22px] text-night">
+				<div className="flex flex-col gap-1.5 rounded-[26px] bg-lime p-[22px] text-on-lime">
 					<span className="kicker">Expected headcount</span>
 					<span className="numeral font-black text-[clamp(56px,8vw,88px)] leading-[0.95]">
 						{data.headcount}
@@ -214,8 +214,8 @@ function GuestListPage() {
 				<div className="flex flex-col justify-center gap-3.5 rounded-[26px] bg-panel p-[22px]">
 					<ResponseBar totals={t} className="h-4" />
 					<div className="grid grid-cols-4 gap-2">
-						<Count value={t.yes} label="in" tone="text-lime" />
-						<Count value={t.maybe} label="maybe" tone="text-pink" />
+						<Count value={t.yes} label="in" tone="text-lime-ink" />
+						<Count value={t.maybe} label="maybe" tone="text-pink-ink" />
 						<Count value={t.no} label="out" tone="text-ink" />
 						<Count value={t.waiting} label="no reply" tone="text-haze" />
 					</div>
@@ -240,7 +240,7 @@ function GuestListPage() {
 											<span>{item.label}</span>
 											<b
 												className={cn(
-													item.left === 0 && "text-lime",
+													item.left === 0 && "text-lime-ink",
 													item.claimed === 0 && "text-pink-soft",
 												)}
 											>
@@ -250,7 +250,7 @@ function GuestListPage() {
 										<div
 											className="h-1.5 rounded-full"
 											style={{
-												background: `linear-gradient(90deg, #c6ff3d ${pct}%, #362c52 ${pct}%)`,
+												background: `linear-gradient(90deg, var(--color-lime) ${pct}%, var(--color-line) ${pct}%)`,
 											}}
 										/>
 									</div>
@@ -649,7 +649,7 @@ function PaperSizeSelect({
 				id="paper-size"
 				value={value}
 				onChange={(ev) => onChange(ev.target.value as PaperSize)}
-				className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 py-2 text-[14px] text-ink [color-scheme:dark] hover:border-haze focus-visible:border-lime"
+				className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 py-2 text-[14px] text-ink hover:border-haze focus-visible:border-lime"
 			>
 				{PAPER_SIZES.map((o) => (
 					<option key={o.value} value={o.value}>
@@ -771,7 +771,7 @@ function AddEmail({ eventId, guestId }: { eventId: string; guestId: string }) {
 			<button
 				type="button"
 				onClick={() => setOpen(true)}
-				className="cursor-pointer border-0 bg-transparent p-0 text-[12px] text-lime hover:text-lime-soft"
+				className="cursor-pointer border-0 bg-transparent p-0 text-[12px] text-lime-ink hover:text-lime-soft"
 			>
 				+ Add email
 			</button>

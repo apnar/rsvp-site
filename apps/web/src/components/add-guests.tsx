@@ -100,7 +100,7 @@ export function BookPicker({
 					className="min-h-10 flex-1 rounded-full py-2"
 				/>
 				{selected.length > 0 ? (
-					<span className="text-[13px] text-lime">
+					<span className="text-[13px] text-lime-ink">
 						{selected.length} picked
 					</span>
 				) : null}
@@ -122,7 +122,7 @@ export function BookPicker({
 										type="checkbox"
 										checked={on}
 										onChange={() => toggle(p.userId)}
-										className="size-4 accent-[#c6ff3d]"
+										className="size-4 accent-lime"
 									/>
 									<span className="min-w-0 flex-1 truncate">
 										<b className="text-[14px]">{p.name}</b>{" "}

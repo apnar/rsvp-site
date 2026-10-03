@@ -881,9 +881,9 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 						) : (
 							<Cover coverKey={null} />
 						)}
-						<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(20_16_31/0)_35%,#14101f_100%)]" />
+						<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_35%,var(--color-night)_100%)]" />
 						<div className="pointer-events-none absolute right-[18px] bottom-[18px] left-[18px] flex flex-col gap-2.5">
-							<span className="self-start rounded-full bg-lime px-3 py-1 font-bold text-[11px] text-night uppercase tracking-[0.08em]">
+							<span className="self-start rounded-full bg-lime px-3 py-1 font-bold text-[11px] text-on-lime uppercase tracking-[0.08em]">
 								You're on the list
 							</span>
 							<span className="font-black font-heading text-[26px] leading-none tracking-[-0.04em]">
@@ -894,7 +894,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 								{form.startTime ? (
 									<>
 										{" · "}
-										<span className="text-lime">
+										<span className="text-lime-ink">
 											{formatTimeRange(form.startTime, form.endTime || null)}
 										</span>
 									</>

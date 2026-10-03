@@ -16,7 +16,7 @@ export function NotFound({
 }) {
 	return (
 		<Page className="items-start gap-5 pt-[clamp(28px,6vw,72px)]">
-			<span className="kicker text-pink">Hmm</span>
+			<span className="kicker text-pink-ink">Hmm</span>
 			<h1 className="m-0 font-black text-[clamp(34px,5.6vw,64px)] tracking-[-0.04em]">
 				{title}
 			</h1>

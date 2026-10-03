@@ -34,7 +34,7 @@ export default function UserMenu() {
 		<DropdownMenu>
 			<DropdownMenuTrigger
 				aria-label="Your account"
-				className="grid size-9 cursor-pointer place-items-center rounded-full border-0 bg-pink font-bold text-[13px] text-night outline-none focus-visible:outline-2 focus-visible:outline-lime focus-visible:outline-offset-2"
+				className="grid size-9 cursor-pointer place-items-center rounded-full border-0 bg-pink font-bold text-[13px] text-on-pink outline-none focus-visible:outline-2 focus-visible:outline-lime focus-visible:outline-offset-2"
 			>
 				{initials(session.user.name)}
 			</DropdownMenuTrigger>

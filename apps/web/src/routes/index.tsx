@@ -27,7 +27,7 @@ function Landing() {
 					</span>
 					<h1 className="m-0 font-black text-[clamp(44px,7.4vw,100px)] leading-[0.94] tracking-[-0.045em]">
 						You bring the party.{" "}
-						<span className="text-lime">We'll count heads.</span>
+						<span className="text-lime-ink">We'll count heads.</span>
 					</h1>
 					<p className="m-0 max-w-[44ch] text-[18px] text-soft leading-[1.55]">
 						Make a great-looking invite in five minutes, send it to the whole
@@ -61,7 +61,7 @@ function Landing() {
 							House Crawl · Sat, Oct 24
 						</span>
 						<div className="flex items-baseline gap-2.5">
-							<span className="numeral font-black text-[52px] text-lime leading-[0.9]">
+							<span className="numeral font-black text-[52px] text-lime-ink leading-[0.9]">
 								42
 							</span>
 							<span className="font-bold text-[16px]">families in</span>
@@ -71,7 +71,7 @@ function Landing() {
 							The Nguyens just said yes, +3
 						</span>
 					</div>
-					<span className="absolute top-[18px] left-[4%] -rotate-6 rounded-full bg-pink px-4 py-2.5 font-bold text-[14px] text-night">
+					<span className="absolute top-[18px] left-[4%] -rotate-6 rounded-full bg-pink px-4 py-2.5 font-bold text-[14px] text-on-pink">
 						Yes! +2 kids
 					</span>
 				</div>
@@ -85,7 +85,7 @@ function Landing() {
 							{i < OCCASIONS.length - 1 ? (
 								<span
 									aria-hidden
-									className={i % 2 === 0 ? "text-lime" : "text-pink"}
+									className={i % 2 === 0 ? "text-lime-ink" : "text-pink-ink"}
 								>
 									✦
 								</span>
@@ -110,13 +110,13 @@ function Landing() {
 								key={step.title}
 								className={cn(
 									"flex flex-col gap-2.5 rounded-[26px] p-6",
-									last ? "bg-pink text-night" : "bg-panel",
+									last ? "bg-pink text-on-pink" : "bg-panel",
 								)}
 							>
 								<span
 									className={cn(
 										"numeral text-[36px]",
-										last ? "text-night" : "text-lime",
+										last ? "text-on-pink" : "text-lime-ink",
 									)}
 								>
 									{String(i + 1).padStart(2, "0")}
@@ -146,7 +146,7 @@ function Landing() {
 			</section>
 
 			<section className="mx-auto max-w-[1180px] px-[clamp(16px,4vw,40px)] pb-[clamp(48px,7vw,80px)]">
-				<div className="flex flex-wrap items-end justify-between gap-6 rounded-[32px] bg-lime p-[clamp(28px,5vw,56px)] text-night">
+				<div className="flex flex-wrap items-end justify-between gap-6 rounded-[32px] bg-lime p-[clamp(28px,5vw,56px)] text-on-lime">
 					<h2 className="m-0 flex-[1_1_400px] font-black text-[clamp(34px,5.4vw,68px)] leading-[0.95] tracking-[-0.045em]">
 						Your next party starts here.
 					</h2>

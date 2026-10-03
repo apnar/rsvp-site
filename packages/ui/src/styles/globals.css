@@ -32,11 +32,20 @@
 	--color-lime-soft: #e2ff9a;
 	--color-pink: #ff4fa3;
 	--color-pink-soft: #ff8cc4;
+	/* Text on a lime or pink fill, and lime or pink used as text on a
+	   panel. On After Dark these are night and the accents themselves; an
+	   event's own design sets them apart so a pale accent or a light page
+	   still reads (packages/design/src/theme.ts). */
+	--color-on-lime: #14101f;
+	--color-on-pink: #14101f;
+	--color-lime-ink: #c6ff3d;
+	--color-pink-ink: #ff4fa3;
 
 	--font-sans: "Manrope", system-ui, sans-serif;
 	--font-heading: "Unbounded", system-ui, sans-serif;
 
-	--shadow-lime: 0 0 28px rgb(198 255 61 / 0.35);
+	--shadow-lime: 0 0 28px
+		color-mix(in oklab, var(--color-lime) 35%, transparent);
 	--shadow-float: 0 24px 48px rgb(0 0 0 / 0.45);
 }
 
@@ -50,7 +59,7 @@
 	--popover: var(--color-panel);
 	--popover-foreground: var(--color-ink);
 	--primary: var(--color-lime);
-	--primary-foreground: var(--color-night);
+	--primary-foreground: var(--color-on-lime);
 	--secondary: var(--color-panel-2);
 	--secondary-foreground: var(--color-ink);
 	--muted: var(--color-panel);
@@ -70,7 +79,7 @@
 	--sidebar: var(--color-panel);
 	--sidebar-foreground: var(--color-ink);
 	--sidebar-primary: var(--color-lime);
-	--sidebar-primary-foreground: var(--color-night);
+	--sidebar-primary-foreground: var(--color-on-lime);
 	--sidebar-accent: var(--color-panel-2);
 	--sidebar-accent-foreground: var(--color-ink);
 	--sidebar-border: var(--color-line);
@@ -124,7 +133,7 @@
 	}
 	html {
 		@apply bg-night font-sans text-ink;
-		color-scheme: dark;
+		color-scheme: var(--page-scheme, dark);
 	}
 	body {
 		@apply bg-night font-sans text-[16px] text-ink leading-[1.55];
@@ -140,7 +149,7 @@
 		text-wrap: balance;
 	}
 	a {
-		@apply text-lime underline-offset-[3px] hover:text-lime-soft;
+		@apply text-lime-ink underline-offset-[3px] hover:text-lime-soft;
 	}
 	:focus {
 		outline: none;
@@ -150,7 +159,7 @@
 		outline-offset: 2px;
 	}
 	::selection {
-		background: rgb(198 255 61 / 0.3);
+		background: color-mix(in oklab, var(--color-lime) 30%, transparent);
 	}
 }
 

@@ -48,9 +48,9 @@ export function AnswerPicker({
 						value === a.value &&
 							!pending &&
 							(a.value === "yes"
-								? "bg-lime text-night shadow-lime hover:text-night"
+								? "bg-lime text-on-lime shadow-lime hover:text-on-lime"
 								: a.value === "maybe"
-									? "bg-pink text-night hover:text-night"
+									? "bg-pink text-on-pink hover:text-on-pink"
 									: "bg-ink text-night hover:text-night"),
 						value === a.value &&
 							pending &&
@@ -206,7 +206,7 @@ export function StepHeading({
 }) {
 	return (
 		<div className="flex items-center gap-3">
-			<span className="grid size-8 flex-none place-items-center rounded-full bg-lime font-bold font-heading text-[14px] text-night">
+			<span className="grid size-8 flex-none place-items-center rounded-full bg-lime font-bold font-heading text-[14px] text-on-lime">
 				{n}
 			</span>
 			<h2 className="m-0 text-[20px]">{title}</h2>

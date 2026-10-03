@@ -87,14 +87,14 @@ function InvitePage() {
 				<div className="absolute inset-0">
 					<Cover coverKey={e.coverKey} />
 				</div>
-				<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(20_16_31/0.55)_0%,rgb(20_16_31/0.2)_40%,#14101f_100%)]" />
+				<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_20%,transparent)_40%,var(--color-night)_100%)]" />
 				<header className="relative mx-auto flex w-full max-w-[1180px] items-center gap-4 px-[clamp(16px,4vw,40px)] py-[18px]">
 					<Link to="/events" className="mr-auto no-underline">
 						<Wordmark />
 					</Link>
 					<Link
 						to="/events"
-						className="font-medium text-[14px] text-ink no-underline hover:text-lime"
+						className="font-medium text-[14px] text-ink no-underline hover:text-lime-ink"
 					>
 						{data.isHost ? "My events" : "My invites"}
 					</Link>
@@ -103,8 +103,12 @@ function InvitePage() {
 				<div className="relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)] pb-9">
 					<span
 						className={cn(
-							"self-start rounded-full px-3.5 py-1.5 font-bold text-[13px] text-night uppercase tracking-[0.08em]",
-							canceled ? "bg-ink" : data.me ? "bg-lime" : "bg-pink",
+							"self-start rounded-full px-3.5 py-1.5 font-bold text-[13px] uppercase tracking-[0.08em]",
+							canceled
+								? "bg-ink text-night"
+								: data.me
+									? "bg-lime text-on-lime"
+									: "bg-pink text-on-pink",
 						)}
 					>
 						{canceled
@@ -121,7 +125,7 @@ function InvitePage() {
 					<div className="flex flex-wrap gap-x-7 gap-y-2 font-medium text-[17px]">
 						{e.dateLabel ? <span>{e.dateLabel}</span> : null}
 						{e.timeLabel ? (
-							<span className="text-lime">{e.timeLabel}</span>
+							<span className="text-lime-ink">{e.timeLabel}</span>
 						) : null}
 						{e.location ? <span>{e.location}</span> : null}
 						{e.hostLine ? (
@@ -180,10 +184,10 @@ function InvitePage() {
 							<ResponseBar totals={data.totals} className="h-3.5 bg-panel" />
 							<div className="flex flex-wrap gap-x-[18px] gap-y-1.5 text-[14px] text-soft">
 								<span>
-									<b className="text-lime">{data.totals.yes}</b> in
+									<b className="text-lime-ink">{data.totals.yes}</b> in
 								</span>
 								<span>
-									<b className="text-pink">{data.totals.maybe}</b> maybe
+									<b className="text-pink-ink">{data.totals.maybe}</b> maybe
 								</span>
 								<span>
 									<b className="text-ink">{data.totals.no}</b> can't
@@ -213,7 +217,7 @@ function HostPanel({ data }: { data: Invite }) {
 	const e = data.event;
 	return (
 		<section className="flex flex-col gap-4 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
-			<span className="kicker text-lime">
+			<span className="kicker text-lime-ink">
 				{e.status === "canceled" ? "Canceled" : "Host view"}
 			</span>
 			<h2 className="m-0 text-[30px]">
@@ -306,7 +310,9 @@ function RsvpForm({ data, initial }: { data: Invite; initial: Answer | null }) {
 		>
 			<div>
 				{e.deadlineLabel ? (
-					<span className="kicker text-lime">RSVP by {e.deadlineLabel}</span>
+					<span className="kicker text-lime-ink">
+						RSVP by {e.deadlineLabel}
+					</span>
 				) : null}
 				<h2 className="mt-1.5 mb-0 text-[30px]">
 					You coming, {firstName(me.name)}?
@@ -464,7 +470,7 @@ function BringSomeone({ data }: { data: Invite }) {
 	return (
 		<section className="flex flex-col gap-3.5 rounded-[28px] border border-line border-dashed p-[clamp(20px,3vw,28px)]">
 			<div>
-				<span className="kicker text-pink">Bring someone</span>
+				<span className="kicker text-pink-ink">Bring someone</span>
 				<h2 className="mt-1.5 mb-0 text-[22px]">Know who'd love this?</h2>
 			</div>
 			{me.friends.length > 0 ? (

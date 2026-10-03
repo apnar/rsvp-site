@@ -50,10 +50,10 @@ export function ResponseCounts({
 			)}
 		>
 			<span>
-				<b className="text-lime">{totals.yes}</b> in
+				<b className="text-lime-ink">{totals.yes}</b> in
 			</span>
 			<span>
-				<b className="text-pink">{totals.maybe}</b> maybe
+				<b className="text-pink-ink">{totals.maybe}</b> maybe
 			</span>
 			{totals.no > 0 ? (
 				<span>
@@ -76,10 +76,10 @@ export function AnswerTag({
 	const base =
 		"inline-block flex-none rounded-full px-3 py-1 font-bold text-[12px] tracking-[0.04em]";
 	if (response === "yes") {
-		return <span className={cn(base, "bg-lime text-night")}>YES</span>;
+		return <span className={cn(base, "bg-lime text-on-lime")}>YES</span>;
 	}
 	if (response === "maybe") {
-		return <span className={cn(base, "bg-pink text-night")}>MAYBE</span>;
+		return <span className={cn(base, "bg-pink text-on-pink")}>MAYBE</span>;
 	}
 	if (response === "no") {
 		return <span className={cn(base, "bg-line text-soft")}>CAN'T</span>;

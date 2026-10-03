@@ -18,8 +18,8 @@ export function StatTile({
 			<div
 				className={cn(
 					"numeral text-[40px]",
-					tone === "lime" && "text-lime",
-					tone === "pink" && "text-pink",
+					tone === "lime" && "text-lime-ink",
+					tone === "pink" && "text-pink-ink",
 					tone === "haze" && "text-haze",
 				)}
 			>

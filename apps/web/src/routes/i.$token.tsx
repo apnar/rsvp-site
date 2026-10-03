@@ -58,14 +58,14 @@ function Teaser() {
 			<div className="absolute inset-0">
 				<Cover coverKey={data.coverKey} />
 			</div>
-			<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(20_16_31/0.55)_0%,rgb(20_16_31/0.3)_35%,#14101f_85%)]" />
+			<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_30%,transparent)_35%,var(--color-night)_85%)]" />
 			<header className="relative mx-auto flex w-full max-w-[1180px] items-center px-[clamp(16px,4vw,40px)] py-[18px]">
 				<Link to="/" className="no-underline">
 					<Wordmark />
 				</Link>
 			</header>
 			<div className="relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)] pb-[clamp(32px,6vw,72px)]">
-				<span className="self-start rounded-full bg-lime px-3.5 py-1.5 font-bold text-[13px] text-night uppercase tracking-[0.08em]">
+				<span className="self-start rounded-full bg-lime px-3.5 py-1.5 font-bold text-[13px] text-on-lime uppercase tracking-[0.08em]">
 					{canceled ? "Canceled" : "You're invited"}
 				</span>
 				<h1 className="m-0 max-w-[14ch] font-black text-[clamp(40px,7.4vw,96px)] leading-[0.95] tracking-[-0.04em]">
@@ -74,7 +74,7 @@ function Teaser() {
 				<div className="flex flex-wrap gap-x-7 gap-y-2 font-medium text-[17px]">
 					{data.dateLabel ? <span>{data.dateLabel}</span> : null}
 					{data.timeLabel ? (
-						<span className="text-lime">{data.timeLabel}</span>
+						<span className="text-lime-ink">{data.timeLabel}</span>
 					) : null}
 					{data.hostLine ? (
 						<span className="text-haze">Hosted by {data.hostLine}</span>

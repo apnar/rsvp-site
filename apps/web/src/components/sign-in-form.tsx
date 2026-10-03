@@ -56,7 +56,7 @@ export default function SignInForm() {
 	return (
 		<div className="flex flex-col gap-5 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
 			<div>
-				<span className="kicker text-lime">Sign in</span>
+				<span className="kicker text-lime-ink">Sign in</span>
 				<h1 className="mt-1.5 mb-0 text-[30px]">Back for more?</h1>
 			</div>
 

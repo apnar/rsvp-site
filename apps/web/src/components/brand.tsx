@@ -9,7 +9,7 @@ export function Wordmark({ className }: { className?: string }) {
 				className,
 			)}
 		>
-			botch<span className="text-lime">•</span>rsvp
+			botch<span className="text-lime-ink">•</span>rsvp
 		</span>
 	);
 }
@@ -29,10 +29,11 @@ export function Avatar({
 			aria-hidden
 			className={cn(
 				"grid size-11 flex-none place-items-center rounded-full font-bold text-sm",
-				tone === "pink" && "bg-pink text-night",
+				tone === "pink" && "bg-pink text-on-pink",
 				tone === "plain" && "bg-panel-2 text-ink",
 				tone === "outline" && "border border-line-strong text-haze",
-				tone === "dim" && "bg-[#241e36] text-haze",
+				tone === "dim" &&
+					"bg-[color-mix(in_srgb,var(--color-panel-2)_40%,var(--color-panel))] text-haze",
 				className,
 			)}
 		>
