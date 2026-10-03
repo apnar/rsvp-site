@@ -69,10 +69,12 @@ export function createAuth() {
 			// then stop thinking about it.
 			expiresIn: 60 * 60 * 24 * 180,
 			updateAge: 60 * 60 * 24,
-			// The session cookie carries the user for five minutes, so ordinary
-			// navigation costs no D1 read. A role changed by SQL takes that long
-			// to show up.
-			cookieCache: { enabled: true, maxAge: 5 * 60 },
+			// No cookie cache: every request asks D1 whether its session still
+			// stands. With one, a revoked session (sign out everywhere, a new
+			// link, a deactivation) kept working for as long as the cookie's
+			// copy lasted, which is the window those exist to close. A session
+			// read is one indexed row.
+			cookieCache: { enabled: false },
 		},
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,

@@ -25,7 +25,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
 | D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0015 applied |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
-| Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` and `/paper` sign-ins and "email me my link" |
+| Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` sign-in and "email me my link", and per person on guests inviting friends |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
 | Sender | `"Botch RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
@@ -91,8 +91,8 @@ pnpm --filter @rsvp-site/email exec vitest run src/links.test.ts
 pnpm --filter @rsvp-site/api exec vitest run -t "dueEmails"
 ```
 
-Only `packages/db`, `packages/email`, `packages/api` and `packages/design`
-have tests — pure functions (templates, Brevo request shaping, link paths,
+Every package with logic has tests (`packages/db`, `email`, `api`,
+`design`, and `apps/web` with its own vitest config) — pure functions (templates, Brevo request shaping, link paths,
 address parsing, roles, headcount and potluck arithmetic, the email
 schedule's timezone maths, event rules, design validation, text layout,
 the scene and the designer's editing logic). Nothing in the test run
@@ -161,9 +161,12 @@ pages and API share an origin: no CORS, ordinary same-site cookies.
 Packages (all consumed as raw TypeScript source via `exports` — no build step for
 libraries; only `apps/web` builds):
 
-- `packages/db` — Drizzle schema (`src/schema/*`), D1 migrations,
-  `src/people.ts`, which owns every read and write of a person's state, and
-  `src/roles.ts` (pure; the web app imports it too).
+- `packages/db` — Drizzle schema (`src/schema/*`), D1 migrations, the
+  person modules that own every read and write of a person's state
+  (`people.ts` lookup and create, re-exporting `addresses.ts` parsing,
+  `tokens.ts` sign-in/footer tokens, `status.ts` deactivate/role/subscribe),
+  `batch.ts` (D1 chunking and batches) and `src/roles.ts` (pure; the web app
+  imports it too).
 - `packages/auth` — Better Auth factory (`createAuth()`) plus the custom
   `email-link` plugin in `src/link.ts`.
 - `packages/api` — oRPC routers (`src/routers/*`; `events.*` is split by
@@ -212,8 +215,10 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
 - oRPC procedures come from `packages/api/src/index.ts`: `publicProcedure`,
   `protectedProcedure` (a session), `personProcedure` (the caller re-read
   from D1 as `context.me`), `hostProcedure` and `adminProcedure`. Roles are
-  checked against `context.me`, never `session.user`: the cookie caches the
-  user for five minutes, and a demoted host must stop hosting now.
+  checked against `context.me`, never `session.user`: the session's copy of
+  the user is from sign-in, and a demoted host must stop hosting now.
+  Better Auth's cookie cache is off, so a revoked session fails on its next
+  request; don't turn it back on.
 - Event access is `accessTo` / `hostAccessTo` in `api/src/events.ts`. A
   stranger to an event gets the same NOT_FOUND as a wrong id, guests never
   see drafts, and admins pass everywhere. A host's procedure takes
@@ -257,8 +262,11 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
 - Paper events (`event.paper`, fixed once published): guest email of every
   kind is held while `emailsHeld(row)` (paper and no `emails_released_at`);
   check it before any guest-facing send. QR keys are
-  `event_guest.paper_token`, held by the host, so `/api/auth/paper` signs in
-  plain `user` accounts only. Name-only guests are `user.no_email` with a
+  `event_guest.paper_token`, held by the host, so a key never signs anybody
+  in: `/p/<key>` (the `paper` router: `paper.invite`, `paper.respond`)
+  reads and answers that one invitation with no session, and
+  `/api/auth/paper` only forwards old cards there. Answers from a card and
+  from a session share `answers.ts`. Name-only guests are `user.no_email` with a
   placeholder address; `mailableWhere` and `sendWelcome` skip them and reads
   blank the address. PDFs are built client-side (`lib/paper-pdf-core.ts` is
   the pure layout, renderable from Node to check it; `lib/paper-sizes.ts`
@@ -362,6 +370,15 @@ decide → claim → send.
 - `link_token` and `unsubscribe_token` are stamped at insert by
   `findOrCreatePeople`, and by the Better Auth `user.create.after` hook
   (`stampTokens`) for rows it makes, so nobody exists with no way in.
+
+- A guest's friend invitations are capped on `event_guest.invites_sent`
+  (the inviter's row), bumped in the same batch as the insert; taking one
+  back doesn't hand it back. A sign-in token can be replaced
+  (`people.newLink` for admins, `account.signOutEverywhere` for anyone),
+  which also ends every session.
+- Workers' per-request (invocation) logs are off in `wrangler.jsonc`:
+  sign-in and unsubscribe URLs carry their tokens. Log addresses through
+  `redactEmail`, never a token or a `k=` URL.
 
 ### Email and sign-in links
 
