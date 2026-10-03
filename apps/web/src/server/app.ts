@@ -32,7 +32,9 @@ const rpcHandler = new RPCHandler(appRouter, {
  */
 export const app = new Hono().basePath("/api");
 
-app.use(logger());
+// Workers Logs already records every request with its status; the line
+// per request is for the dev console only.
+if (import.meta.env.DEV) app.use(logger());
 
 /**
  * The doors somebody could knock on all night: guessing passwords, mailing
