@@ -89,3 +89,36 @@ export function coverSrc(coverKey: string): string {
 export function firstName(name: string): string {
 	return name.trim().split(/\s+/)[0] ?? name;
 }
+
+/** "In" from "in". */
+export function capitalize(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Whether a typed search finds somebody. Addresses are stored lowercase, so
+ * only the query needs folding.
+ */
+export function matchesPerson(
+	p: { name: string; email: string },
+	query: string,
+): boolean {
+	const q = query.trim().toLowerCase();
+	return !q || p.name.toLowerCase().includes(q) || p.email.includes(q);
+}
+
+/** "The Nguyens, Priya S., the Okafors, Coach Dana and 38 more" */
+export function crowdLine(names: string[], shown = 4): string {
+	if (names.length === 0) return "";
+	if (names.length <= shown) {
+		return names.length === 1
+			? (names[0] ?? "")
+			: `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+	}
+	return `${names.slice(0, shown).join(", ")} and ${names.length - shown} more`;
+}
+
+/** End with a period, unless a name already did ("Marcus T."). */
+export function sentence(text: string): string {
+	return /[.!?]$/.test(text) ? text : `${text}.`;
+}

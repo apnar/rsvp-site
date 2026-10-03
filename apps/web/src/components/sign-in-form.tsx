@@ -2,6 +2,7 @@ import { safeReturnPath } from "@rsvp-site/email/links";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { useForm } from "@tanstack/react-form";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	Link,
 	useNavigate,
@@ -18,6 +19,7 @@ import { Field } from "./controls";
 export default function SignInForm() {
 	const navigate = useNavigate();
 	const router = useRouter();
+	const queryClient = useQueryClient();
 	const { redirect } = useSearch({ from: "/login" });
 
 	const form = useForm({
@@ -33,6 +35,9 @@ export default function SignInForm() {
 				},
 				{
 					onSuccess: async () => {
+						// Somebody else may have used this tab before: their events
+						// and invites must not outlive their session.
+						queryClient.clear();
 						// The session hangs off the root route's context, so the
 						// router has to fetch it again before we move.
 						await router.invalidate();
@@ -57,7 +62,7 @@ export default function SignInForm() {
 		<div className="flex flex-col gap-5 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
 			<div>
 				<span className="kicker text-lime-ink">Sign in</span>
-				<h1 className="mt-1.5 mb-0 text-[30px]">Back for more?</h1>
+				<h2 className="mt-1.5 mb-0 text-[30px]">Back for more?</h2>
 			</div>
 
 			<form

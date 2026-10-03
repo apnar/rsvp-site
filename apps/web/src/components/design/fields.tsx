@@ -258,10 +258,18 @@ export function Segmented<T extends string>({
 	options: readonly { value: T; label: ReactNode; title?: string }[];
 	onChange: (v: T) => void;
 }) {
+	const labelId = useId();
 	return (
 		<div className="flex min-w-0 flex-col gap-1">
-			<span className="text-[12px] text-haze">{label}</span>
-			<div className="flex rounded-full bg-night p-0.5">
+			<span id={labelId} className="text-[12px] text-haze">
+				{label}
+			</span>
+			{/* biome-ignore lint/a11y/useSemanticElements: a fieldset would bring a border and legend the design does not have. */}
+			<div
+				role="group"
+				aria-labelledby={labelId}
+				className="flex rounded-full bg-night p-0.5"
+			>
 				{options.map((o) => (
 					<button
 						key={o.value}
@@ -271,7 +279,7 @@ export function Segmented<T extends string>({
 						onClick={() => onChange(o.value)}
 						className={cn(
 							"min-h-8 flex-1 cursor-pointer rounded-full border-0 bg-transparent px-2 text-[13px] text-soft",
-							o.value === value && "bg-ink text-night",
+							o.value === value && "bg-ink text-on-ink",
 						)}
 					>
 						{o.label}
@@ -322,11 +330,18 @@ export function Slider({
 	format?: (v: number) => string;
 }) {
 	const id = useId();
+	const shown = format ? format(value) : String(value);
 	return (
-		<Labelled label={`${label}: ${format ? format(value) : value}`} id={id}>
+		<div className="flex min-w-0 flex-col gap-1">
+			{/* The value is for eyes; a screen reader gets it as the slider's
+			    value text rather than as part of its name. */}
+			<label htmlFor={id} className="text-[12px] text-haze">
+				{label}: <span aria-hidden>{shown}</span>
+			</label>
 			<input
 				id={id}
 				type="range"
+				aria-valuetext={shown}
 				className="w-full accent-lime"
 				min={min}
 				max={max}
@@ -334,6 +349,6 @@ export function Slider({
 				value={value}
 				onChange={(e) => onChange(Number(e.target.value))}
 			/>
-		</Labelled>
+		</div>
 	);
 }

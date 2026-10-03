@@ -15,11 +15,9 @@ import {
 	useId,
 } from "react";
 
-const ANSWERS: { value: Answer; label: string }[] = [
-	{ value: "yes", label: "Yes!" },
-	{ value: "maybe", label: "Maybe" },
-	{ value: "no", label: "Can't" },
-];
+import { ANSWER_LABELS } from "@/content/site";
+
+const ANSWERS: Answer[] = ["yes", "maybe", "no"];
 
 /**
  * Radios dressed as one segmented pill. `pending` marks an answer that came
@@ -44,33 +42,31 @@ export function AnswerPicker({
 			<legend className="sr-only">Are you coming?</legend>
 			{ANSWERS.map((a) => (
 				<label
-					key={a.value}
+					key={a}
 					className={cn(
 						"flex flex-1 cursor-pointer items-center justify-center rounded-full text-center font-bold text-soft transition-[background-color,color,box-shadow] hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime",
 						size === "lg"
 							? "px-1 py-3.5 text-[16px]"
 							: "px-0.5 py-2.5 text-[14px]",
-						value === a.value &&
+						value === a &&
 							!pending &&
-							(a.value === "yes"
+							(a === "yes"
 								? "bg-lime text-on-lime shadow-lime hover:text-on-lime"
-								: a.value === "maybe"
+								: a === "maybe"
 									? "bg-pink text-on-pink hover:text-on-pink"
 									: "bg-ink text-on-ink hover:text-on-ink"),
-						value === a.value &&
-							pending &&
-							"text-ink ring-2 ring-lime ring-inset",
+						value === a && pending && "text-ink ring-2 ring-lime ring-inset",
 					)}
 				>
 					<input
 						type="radio"
 						name={name}
-						value={a.value}
-						checked={value === a.value}
-						onChange={() => onChange(a.value)}
+						value={a}
+						checked={value === a}
+						onChange={() => onChange(a)}
 						className="sr-only"
 					/>
-					{a.label}
+					{ANSWER_LABELS[a]}
 				</label>
 			))}
 		</fieldset>
@@ -133,10 +129,12 @@ export function Switch({
 	checked,
 	onChange,
 	label,
+	disabled = false,
 }: {
 	checked: boolean;
 	onChange: (checked: boolean) => void;
 	label: string;
+	disabled?: boolean;
 }) {
 	return (
 		<label className="relative inline-flex h-7 w-[50px] flex-none cursor-pointer rounded-full has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime has-[:focus-visible]:outline-offset-2">
@@ -144,6 +142,7 @@ export function Switch({
 				type="checkbox"
 				className="peer sr-only"
 				checked={checked}
+				disabled={disabled}
 				onChange={(e) => onChange(e.target.checked)}
 				aria-label={label}
 			/>

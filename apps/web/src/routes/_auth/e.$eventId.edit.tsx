@@ -7,12 +7,18 @@ import { orNotFound } from "@/lib/not-found";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/edit")({
-	loader: ({ context, params }) =>
-		orNotFound(
-			context.queryClient.ensureQueryData(
-				orpc.events.get.queryOptions({ input: { eventId: params.eventId } }),
+	loader: async ({ context, params }) => {
+		// The editor's pickers read the address book. prefetchQuery never
+		// throws, so a failure there leaves the editor to ask again instead of
+		// failing the page.
+		const [loaded] = await Promise.all([
+			orNotFound(
+				context.queryClient.ensureQueryData(eventQuery(params.eventId)),
 			),
-		),
+			context.queryClient.prefetchQuery(orpc.contacts.book.queryOptions()),
+		]);
+		return loaded;
+	},
 	head: ({ loaderData }) => ({
 		meta: [
 			{
@@ -23,6 +29,9 @@ export const Route = createFileRoute("/_auth/e/$eventId/edit")({
 	component: EditEvent,
 });
 
+const eventQuery = (eventId: string) =>
+	orpc.events.get.queryOptions({ input: { eventId } });
+
 const STATUS = {
 	draft: "Draft · not sent",
 	published: "Sent",
@@ -31,9 +40,7 @@ const STATUS = {
 
 function EditEvent() {
 	const { eventId } = Route.useParams();
-	const { data } = useSuspenseQuery(
-		orpc.events.get.queryOptions({ input: { eventId } }),
-	);
+	const { data } = useSuspenseQuery(eventQuery(eventId));
 	return (
 		<Page className="gap-7">
 			<Link

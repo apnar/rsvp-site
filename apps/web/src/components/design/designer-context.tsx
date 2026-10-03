@@ -7,7 +7,7 @@ import type { ImageTray, SetDoc } from "./editor-state";
  * is not here: it changes on every drag step, and each panel takes it as a
  * prop so it is plain which ones follow it.
  */
-export type DesignerContextValue = {
+type DesignerContextValue = {
 	set: SetDoc;
 	paper: boolean;
 	tray: ImageTray;

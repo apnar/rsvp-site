@@ -6,19 +6,17 @@ import type { Placed } from "@rsvp-site/design/templates/index";
 import { warningsOf } from "@rsvp-site/design/warnings";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Redo2, Undo2 } from "lucide-react";
 import {
 	useCallback,
 	useDeferredValue,
-	useEffect,
 	useMemo,
 	useReducer,
 	useRef,
 	useState,
 } from "react";
-import { toast } from "sonner";
 import { Switch } from "@/components/controls";
 import { AddMenu } from "@/components/design/add-menu";
 import { DesignCanvas } from "@/components/design/canvas";
@@ -32,12 +30,19 @@ import { UnsavedBar } from "@/components/design/unsaved-bar";
 import { useDesignSave } from "@/components/design/use-design-save";
 import { useImageTray } from "@/components/design/use-image-tray";
 import { useKeys } from "@/components/design/use-keys";
+import type { Loaded } from "@/components/event-editor/form";
 import { pageTitle } from "@/content/site";
+import { buildCardsPdf } from "@/lib/cards-pdf";
 import { fontFaceCss } from "@/lib/design-font-css";
-import { messageOf } from "@/lib/errors";
 import { orNotFound } from "@/lib/not-found";
 import { layoutsFor } from "@/lib/paper-sizes";
+import { openPdf } from "@/lib/pdf-io";
 import { orpc } from "@/utils/orpc";
+
+const designQuery = (eventId: string) =>
+	orpc.designs.get.queryOptions({ input: { eventId } });
+const eventQuery = (eventId: string) =>
+	orpc.events.get.queryOptions({ input: { eventId } });
 
 /**
  * The designer. Rendered in the browser only: it measures the screen,
@@ -53,16 +58,13 @@ export const Route = createFileRoute("/_auth/e/$eventId/design")({
 	// who has since saved straight back to the templates.
 	gcTime: 0,
 	loader: async ({ context, params }) => {
-		const input = { input: { eventId: params.eventId } };
 		const [design, event, faces] = await orNotFound(
 			Promise.all([
 				context.queryClient.fetchQuery({
-					...orpc.designs.get.queryOptions(input),
+					...designQuery(params.eventId),
 					staleTime: 0,
 				}),
-				context.queryClient.ensureQueryData(
-					orpc.events.get.queryOptions(input),
-				),
+				context.queryClient.ensureQueryData(eventQuery(params.eventId)),
 				loadFaces(allFaces()),
 			]),
 		);
@@ -84,17 +86,8 @@ const FONT_CSS = fontFaceCss(allFaces());
 
 /** The event's facts, with stand-ins where it has none yet. */
 function valuesOf(
-	event: {
-		title: string;
-		location: string;
-		hostLine: string;
-		details: string;
-	},
-	labels: {
-		dateLabel: string | null;
-		timeLabel: string | null;
-		deadlineLabel: string | null;
-	},
+	event: Pick<Loaded["event"], "title" | "location" | "hostLine" | "details">,
+	labels: Loaded["labels"],
 ): Values {
 	return {
 		title: event.title || SAMPLE_VALUES.title,
@@ -122,20 +115,23 @@ const RAW_VALUES: Values = {
 function Designer() {
 	const { eventId } = Route.useParams();
 	const { faces } = Route.useLoaderData();
-	const { data: saved } = useSuspenseQuery(
-		orpc.designs.get.queryOptions({ input: { eventId } }),
-	);
-	const { data: loaded } = useSuspenseQuery(
-		orpc.events.get.queryOptions({ input: { eventId } }),
-	);
+	const { data: saved } = useSuspenseQuery(designQuery(eventId));
+	const { data: loaded } = useSuspenseQuery(eventQuery(eventId));
 	const e = loaded.event;
 	const values = useMemo(() => valuesOf(e, loaded.labels), [e, loaded.labels]);
 	const start = useMemo(() => {
 		const parsed = saved.doc ? parseDesign(saved.doc) : null;
 		return parsed?.ok ? parsed.design : null;
 	}, [saved.doc]);
-	const [picking, setPicking] = useState(start === null);
+	// What the editor opened on: the saved design, or the template picked.
 	const [first, setFirst] = useState<Design | null>(start);
+	const [startingOver, setStartingOver] = useState(false);
+	// A saved design that arrives after the page did (a refetch) opens, as
+	// long as nothing has been picked yet. Settled while rendering, which
+	// React allows for state of this very component, so no frame shows the
+	// template picker for a design that is there.
+	if (start && !first) setFirst(start);
+	const picking = startingOver || !first;
 	// A new editor only when a template is picked; a refetch of the saved
 	// design must never reset work in progress.
 	const [epoch, setEpoch] = useState(0);
@@ -143,20 +139,12 @@ function Designer() {
 	// The newest version this visit has saved. An editor made by "Start
 	// over" must carry on from it, or its first save looks like it is
 	// overwriting somebody else's.
-	const savedHere = useRef(0);
-	// A saved design that arrives after the page did (a refetch) opens, as
-	// long as nothing has been picked yet.
-	useEffect(() => {
-		if (start && !first) {
-			setFirst(start);
-			setPicking(false);
-		}
-	}, [start, first]);
+	const [savedHere, setSavedHere] = useState(0);
 
 	return (
 		<div className="flex flex-col">
 			<style dangerouslySetInnerHTML={{ __html: FONT_CSS }} />
-			{picking || !first ? (
+			{picking ? (
 				<PickTemplate
 					eventId={eventId}
 					title={e.title}
@@ -166,11 +154,11 @@ function Designer() {
 					values={values}
 					copied={copied.current}
 					canCancel={first !== null}
-					onCancel={() => setPicking(false)}
+					onCancel={() => setStartingOver(false)}
 					onPick={(d) => {
 						setFirst(d);
 						setEpoch((n) => n + 1);
-						setPicking(false);
+						setStartingOver(false);
 					}}
 				/>
 			) : (
@@ -183,14 +171,12 @@ function Designer() {
 					faces={faces}
 					values={values}
 					initial={first}
-					version={Math.max(saved.version, savedHere.current)}
+					version={Math.max(saved.version, savedHere)}
 					designOn={saved.version === 0 ? true : saved.designOn}
 					images={saved.images}
 					unsaved={first !== start}
-					onStartOver={() => setPicking(true)}
-					onSaved={(v) => {
-						savedHere.current = Math.max(savedHere.current, v);
-					}}
+					onStartOver={() => setStartingOver(true)}
+					onSaved={(v) => setSavedHere((prev) => Math.max(prev, v))}
 				/>
 			)}
 		</div>
@@ -301,35 +287,25 @@ function Editor({
 	const lagging = useDeferredValue(doc);
 	const warnings = useMemo(() => warn(lagging), [warn, lagging]);
 
-	const previewPdf = async () => {
-		// Only ever called from a click, as on the guest list: saying so drops
-		// the PDF library from the Worker, which would carry it for nothing.
-		if (import.meta.env.SSR) return;
-		try {
-			const { buildDesignInvites } = await import("@/lib/design-pdf");
-			const layout = layoutsFor(doc.format)[0]?.value ?? "exact";
-			const pdf = await buildDesignInvites({
-				design: doc,
-				values,
+	// A look at the paper card for one made-up guest. A mutation for the
+	// pending state and the error toast, though nothing is written.
+	const previewPdf = useMutation({
+		mutationFn: async () => {
+			const pdf = await buildCardsPdf({
+				source: { design: doc, values },
 				guests: [
 					{
 						id: "sample",
 						name: values.guest,
-						url: `${window.location.origin}/api/auth/paper?k=sample`,
+						url: `${window.location.origin}/p/sample`,
 					},
 				],
-				layout,
+				print: layoutsFor(doc.format)[0]?.value ?? "exact",
 				title,
 			});
-			const url = URL.createObjectURL(
-				new Blob([pdf as Uint8Array<ArrayBuffer>], { type: "application/pdf" }),
-			);
-			window.open(url, "_blank", "noopener");
-			setTimeout(() => URL.revokeObjectURL(url), 60_000);
-		} catch (error) {
-			toast.error(messageOf(error) || "The PDF didn't build.");
-		}
-	};
+			openPdf(pdf);
+		},
+	});
 
 	const landscape = scene.w > scene.h;
 
@@ -365,7 +341,12 @@ function Editor({
 					</span>
 				</span>
 				{paper ? (
-					<Button variant="outline" size="sm" onClick={previewPdf}>
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={previewPdf.isPending}
+						onClick={() => previewPdf.mutate()}
+					>
 						Preview PDF
 					</Button>
 				) : null}
@@ -397,7 +378,7 @@ function Editor({
 						Start over from a template
 					</Button>
 				</aside>
-				<main className="order-1 flex min-w-0 flex-col items-center gap-3 lg:order-2">
+				<section className="order-1 flex min-w-0 flex-col items-center gap-3 lg:order-2">
 					<DesignCanvas
 						doc={doc}
 						scene={scene}
@@ -421,7 +402,7 @@ function Editor({
 						/>
 						Show the {"{placeholders}"} instead of your event's details
 					</label>
-				</main>
+				</section>
 				<aside className="order-2 flex flex-col gap-4 lg:order-3">
 					{warnings.length > 0 ? (
 						<ul className="m-0 flex list-none flex-col gap-1.5 p-0">

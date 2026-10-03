@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId, useMemo, useState } from "react";
 
+import { matchesPerson } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 /** Contact groups as toggle chips: "King Farm Swim Team · 64". */
@@ -60,11 +61,8 @@ function BookPicker({
 	const book = useQuery(orpc.contacts.book.queryOptions());
 	const [query, setQuery] = useState("");
 	const people = useMemo(() => {
-		const q = query.trim().toLowerCase();
 		return (book.data?.people ?? []).filter(
-			(p) =>
-				!exclude?.has(p.userId) &&
-				(!q || p.name.toLowerCase().includes(q) || p.email.includes(q)),
+			(p) => !exclude?.has(p.userId) && matchesPerson(p, query),
 		);
 	}, [book.data, query, exclude]);
 	if (!book.data) return null;

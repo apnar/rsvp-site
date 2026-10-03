@@ -40,8 +40,14 @@ export function useEventDraft(loaded?: Loaded) {
 	// New events only: co-hosts to add once the draft exists.
 	const [cohostEmails, setCohostEmails] = useState<string[]>([]);
 
+	// The preview is the chosen file's object URL and nothing else: once the
+	// file is saved or dropped it has to go, or it would point at a revoked
+	// blob and hide the cover that was just uploaded.
 	useEffect(() => {
-		if (!coverFile) return;
+		if (!coverFile) {
+			setCoverPreview(null);
+			return;
+		}
 		const url = URL.createObjectURL(coverFile);
 		setCoverPreview(url);
 		return () => URL.revokeObjectURL(url);
@@ -92,7 +98,6 @@ export function useEventDraft(loaded?: Loaded) {
 		itemsChanged,
 		coverFile,
 		setCoverFile,
-		setCoverPreview,
 		dropCover,
 		setDropCover,
 		coverShown,

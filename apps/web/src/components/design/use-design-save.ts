@@ -1,11 +1,11 @@
+import { ORPCError } from "@orpc/client";
 import { type Design, parseDesign } from "@rsvp-site/design/schema";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { refreshCard } from "@/lib/design-card";
-import { messageOf } from "@/lib/errors";
-import { client, orpc } from "@/utils/orpc";
+import { orpc } from "@/utils/orpc";
 
 /**
  * Saving, and knowing whether there is anything to save: the version this
@@ -41,7 +41,25 @@ export function useDesignSave({
 	const [version, setVersion] = useState(startVersion);
 	const [designOn, setDesignOn] = useState(startOn);
 	const [savedOn, setSavedOn] = useState(unsaved ? !startOn : startOn);
-	const [saving, setSaving] = useState(false);
+
+	// The only mutation here that has to word its own failure: a conflict
+	// means somebody else saved first, and the answer is to reload.
+	const saveDesign = useMutation(
+		orpc.designs.save.mutationOptions({
+			onError: (error) =>
+				toast.error(
+					error.message,
+					error instanceof ORPCError && error.code === "CONFLICT"
+						? {
+								action: {
+									label: "Reload",
+									onClick: () => window.location.reload(),
+								},
+							}
+						: undefined,
+				),
+		}),
+	);
 
 	const dirty = doc !== savedDoc || designOn !== savedOn;
 	const blocker = useBlocker({
@@ -62,9 +80,8 @@ export function useDesignSave({
 			toast.error(blocking);
 			return false;
 		}
-		setSaving(true);
 		try {
-			const r = await client.designs.save({
+			const r = await saveDesign.mutateAsync({
 				eventId,
 				doc: parsed.design,
 				version,
@@ -94,24 +111,10 @@ export function useDesignSave({
 					? "Saved. Guests see this card."
 					: "Saved. Guests still see the plain invitation.",
 			);
-			await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 			return true;
-		} catch (error) {
-			const conflict = (error as { code?: string }).code === "CONFLICT";
-			toast.error(
-				messageOf(error),
-				conflict
-					? {
-							action: {
-								label: "Reload",
-								onClick: () => window.location.reload(),
-							},
-						}
-					: undefined,
-			);
+		} catch {
+			// The mutation's onError has said why.
 			return false;
-		} finally {
-			setSaving(false);
 		}
 	};
 
@@ -131,7 +134,7 @@ export function useDesignSave({
 		designOn,
 		setDesignOn,
 		dirty,
-		saving,
+		saving: saveDesign.isPending,
 		blocker,
 		saveFromButton,
 		saveAndLeave,

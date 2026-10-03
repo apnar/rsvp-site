@@ -9,11 +9,9 @@ import { type Design, refsOf } from "@rsvp-site/design/schema";
 import { FONT_FILES } from "./design-fonts.gen";
 import { type DesignGuest, layoutDesignInvites } from "./design-pdf-core";
 import { designSrc } from "./design-src";
-import { bytes } from "./paper-pdf";
 import type { PrintLayout } from "./paper-sizes";
+import { bytes } from "./pdf-io";
 import { scaleImage } from "./shrink-image";
-
-export { download } from "./paper-pdf";
 
 /**
  * An image as bytes pdf-lib can embed. JPEG and PNG go as they are; a

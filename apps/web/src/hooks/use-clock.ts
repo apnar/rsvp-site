@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { nextTickDelay } from "@/lib/countdown";
+
 /**
  * A clock that starts where the server left it.
  *
@@ -17,22 +19,16 @@ export function useClock(serverNowIso: string, targetIso: string | null) {
 	const [now, setNow] = useState(() => Date.parse(serverNowIso));
 
 	useEffect(() => {
-		let timer: ReturnType<typeof setTimeout>;
-		const target = targetIso ? Date.parse(targetIso) : null;
+		// With no start time nothing on screen depends on the clock.
+		if (!targetIso) return;
+		const target = Date.parse(targetIso);
+		let timer: ReturnType<typeof setTimeout> | undefined;
 
-		const schedule = () => {
-			const t = Date.now();
-			const remaining = target === null ? Number.POSITIVE_INFINITY : target - t;
-			// Seconds only matter in the last hour. Above that half a minute is
-			// plenty, and it does not keep a phone's radio warm for two days.
-			const step = remaining > 60 * 60 * 1000 ? 30_000 : 1_000;
-			// Align to the boundary so the digits change when they should and
-			// the interval cannot drift.
-			timer = setTimeout(tick, step - (t % step));
-		};
 		const tick = () => {
-			setNow(Date.now());
-			schedule();
+			const t = Date.now();
+			setNow(t);
+			const delay = nextTickDelay(target - t);
+			timer = delay === null ? undefined : setTimeout(tick, delay);
 		};
 
 		tick();

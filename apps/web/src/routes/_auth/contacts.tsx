@@ -3,14 +3,11 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import {
-	useMutation,
-	useQueryClient,
-	useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
@@ -18,15 +15,21 @@ import { NativeSelect } from "@/components/native-select";
 import { Page, PageHead, Panel } from "@/components/page";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
-import { initials, plural } from "@/lib/format";
+import { initials, matchesPerson, plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
+const bookQuery = () => orpc.contacts.book.queryOptions();
+
 export const Route = createFileRoute("/_auth/contacts")({
+	// The group being shown is in the URL so Back and a refresh keep it;
+	// everybody is the absence of it.
+	validateSearch: z.object({
+		group: z.string().optional().catch(undefined),
+	}),
 	beforeLoad: ({ context }) => {
 		if (!canHost(context.session.user)) throw redirect({ to: "/events" });
 	},
-	loader: ({ context }) =>
-		context.queryClient.ensureQueryData(orpc.contacts.book.queryOptions()),
+	loader: ({ context }) => context.queryClient.ensureQueryData(bookQuery()),
 	head: () => ({ meta: [{ title: pageTitle("Contacts") }] }),
 	component: ContactsPage,
 });
@@ -35,15 +38,8 @@ type Book = Outputs["contacts"]["book"];
 type Group = Book["groups"][number];
 type Person = Book["people"][number];
 
-function useRefresh() {
-	const queryClient = useQueryClient();
-	return () => queryClient.invalidateQueries({ queryKey: orpc.contacts.key() });
-}
-
-const onError = (error: Error) => toast.error(error.message);
-
 function ContactsPage() {
-	const { data } = useSuspenseQuery(orpc.contacts.book.queryOptions());
+	const { data } = useSuspenseQuery(bookQuery());
 	return (
 		<Page>
 			<PageHead kicker="Contacts" title="Your people." />
@@ -65,15 +61,18 @@ function ContactsPage() {
 
 function AddressBook({ book }: { book: Book }) {
 	const [query, setQuery] = useState("");
-	const [group, setGroup] = useState<string>("all");
-	const shown = useMemo(() => {
-		const q = query.trim().toLowerCase();
-		return book.people.filter(
-			(p) =>
-				(group === "all" || p.groupIds.includes(group)) &&
-				(!q || p.name.toLowerCase().includes(q) || p.email.includes(q)),
-		);
-	}, [book.people, query, group]);
+	const { group: picked } = Route.useSearch();
+	const navigate = Route.useNavigate();
+	// A group that has since been deleted shows everybody, as no filter.
+	const group = book.groups.some((g) => g.id === picked) ? picked : undefined;
+	const shown = useMemo(
+		() =>
+			book.people.filter(
+				(p) =>
+					(!group || p.groupIds.includes(group)) && matchesPerson(p, query),
+			),
+		[book.people, query, group],
+	);
 
 	return (
 		<Panel className="gap-3.5">
@@ -102,8 +101,16 @@ function AddressBook({ book }: { book: Book }) {
 						</label>
 						<NativeSelect
 							id="book-group"
-							value={group}
-							onChange={(e) => setGroup(e.target.value)}
+							value={group ?? "all"}
+							onChange={(e) =>
+								navigate({
+									search: (prev) => ({
+										...prev,
+										group:
+											e.target.value === "all" ? undefined : e.target.value,
+									}),
+								})
+							}
 							className="min-h-11 px-4"
 						>
 							<option value="all">Everybody</option>
@@ -133,16 +140,8 @@ function AddressBook({ book }: { book: Book }) {
 
 /** One person, with a chip per group to put them in or take them out. */
 function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
-	const refresh = useRefresh();
-	const setMember = useMutation(
-		orpc.contacts.setMember.mutationOptions({ onSuccess: refresh, onError }),
-	);
-	const remove = useMutation(
-		orpc.contacts.removePerson.mutationOptions({
-			onSuccess: refresh,
-			onError,
-		}),
-	);
+	const setMember = useMutation(orpc.contacts.setMember.mutationOptions());
+	const remove = useMutation(orpc.contacts.removePerson.mutationOptions());
 	return (
 		<li className="flex flex-col gap-2 border-line border-t py-3">
 			<div className="flex items-center gap-3">
@@ -205,16 +204,13 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 }
 
 function AddPeople() {
-	const refresh = useRefresh();
 	const [emails, setEmails] = useState("");
 	const add = useMutation(
 		orpc.contacts.addPeople.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(`Added ${plural(r.added, "person", "people")}.`);
 				setEmails("");
-				refresh();
 			},
-			onError,
 		}),
 	);
 	return (
@@ -253,16 +249,13 @@ function AddPeople() {
 }
 
 function Groups({ groups }: { groups: Group[] }) {
-	const refresh = useRefresh();
 	const [name, setName] = useState("");
 	const create = useMutation(
 		orpc.contacts.create.mutationOptions({
 			onSuccess: () => {
 				toast.success("Group made. Tick people into it in the address book.");
 				setName("");
-				refresh();
 			},
-			onError,
 		}),
 	);
 	return (
@@ -306,18 +299,13 @@ function Groups({ groups }: { groups: Group[] }) {
 }
 
 function GroupRow({ group }: { group: Group }) {
-	const refresh = useRefresh();
 	const [name, setName] = useState(group.name);
-	const rename = useMutation(
-		orpc.contacts.rename.mutationOptions({ onSuccess: refresh, onError }),
-	);
-	const remove = useMutation(
-		orpc.contacts.remove.mutationOptions({ onSuccess: refresh, onError }),
-	);
+	const rename = useMutation(orpc.contacts.rename.mutationOptions());
+	const remove = useMutation(orpc.contacts.remove.mutationOptions());
 	return (
 		<li className="flex items-center gap-2 border-line border-t py-2">
 			<label htmlFor={`group-${group.id}`} className="sr-only">
-				Group name
+				Name of the group {group.name}
 			</label>
 			<Input
 				id={`group-${group.id}`}

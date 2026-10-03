@@ -66,7 +66,7 @@ const MARK_PT = 12;
 
 export type DesignGuest = { id: string; name: string; url: string };
 
-export type DesignAssets = {
+type DesignAssets = {
 	/** Metrics, for the layout. */
 	faces: Faces;
 	/** The faces' .woff files, for embedding. */

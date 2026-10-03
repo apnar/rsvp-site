@@ -4,7 +4,7 @@ import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query
 import Loader from "./components/loader";
 import { NotFound, RouteError } from "./components/not-found";
 import { routeTree } from "./routeTree.gen";
-import { createQueryClient, orpc } from "./utils/orpc";
+import { createQueryClient } from "./utils/orpc";
 
 export const getRouter = () => {
 	const queryClient = createQueryClient();
@@ -13,7 +13,7 @@ export const getRouter = () => {
 		routeTree,
 		scrollRestoration: true,
 		defaultPreloadStaleTime: 0,
-		context: { orpc, queryClient },
+		context: { queryClient },
 		defaultPendingComponent: () => <Loader />,
 		// A loader's orNotFound passes the API's own words ("No such event.").
 		defaultNotFoundComponent: ({ data }) => (

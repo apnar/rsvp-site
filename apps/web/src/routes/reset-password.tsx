@@ -1,5 +1,6 @@
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,11 +22,31 @@ function ResetPasswordPage() {
 	const navigate = useNavigate();
 	const [password, setPassword] = useState("");
 	const [confirm, setConfirm] = useState("");
-	const [busy, setBusy] = useState(false);
+	const queryClient = useQueryClient();
 
 	const dead = !token || Boolean(error);
 
-	const submit = async (e: React.FormEvent) => {
+	// Better Auth returns failures instead of throwing them; throw so the
+	// mutation toasts and resets.
+	const reset = useMutation({
+		mutationFn: async (token: string) => {
+			const result = await authClient.resetPassword({
+				newPassword: password,
+				token,
+			});
+			if (result.error) {
+				throw new Error(result.error.message || "That link did not work.");
+			}
+		},
+		onSuccess: () => {
+			// Whoever resets here moves on to sign in; nothing cached may carry over.
+			queryClient.clear();
+			toast.success("Password changed. Sign in with the new one.");
+			navigate({ to: "/login" });
+		},
+	});
+
+	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!token) return;
 		if (password.length < 8) {
@@ -36,18 +57,7 @@ function ResetPasswordPage() {
 			toast.error("Those two do not match.");
 			return;
 		}
-		setBusy(true);
-		const result = await authClient.resetPassword({
-			newPassword: password,
-			token,
-		});
-		setBusy(false);
-		if (result.error) {
-			toast.error(result.error.message || "That link did not work.");
-			return;
-		}
-		toast.success("Password changed. Sign in with the new one.");
-		navigate({ to: "/login" });
+		reset.mutate(token);
 	};
 
 	return (
@@ -92,8 +102,8 @@ function ResetPasswordPage() {
 								onChange={(e) => setConfirm(e.target.value)}
 							/>
 						</Field>
-						<Button type="submit" className="w-full" disabled={busy}>
-							{busy ? "Saving..." : "Change password"}
+						<Button type="submit" className="w-full" disabled={reset.isPending}>
+							{reset.isPending ? "Saving..." : "Change password"}
 						</Button>
 					</form>
 				)}

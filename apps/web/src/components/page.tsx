@@ -1,7 +1,35 @@
 import { cn } from "@rsvp-site/ui/lib/utils";
 import type { ReactNode } from "react";
 
-/** The design's page column: 1180px, with a gutter that shrinks on a phone. */
+/**
+ * The design's column: 1180px, with a gutter that shrinks on a phone. The
+ * header, footer, hero and every page body hang off it, so they line up.
+ */
+export function Container({
+	children,
+	className,
+	as: Tag = "div",
+	id,
+}: {
+	children: ReactNode;
+	className?: string;
+	as?: "div" | "section" | "header" | "footer";
+	id?: string;
+}) {
+	return (
+		<Tag
+			id={id}
+			className={cn(
+				"mx-auto w-full max-w-[1180px] px-[clamp(16px,4vw,40px)]",
+				className,
+			)}
+		>
+			{children}
+		</Tag>
+	);
+}
+
+/** A page's column: a Container that stacks its sections with room between. */
 export function Page({
 	children,
 	className,
@@ -10,14 +38,14 @@ export function Page({
 	className?: string;
 }) {
 	return (
-		<div
+		<Container
 			className={cn(
-				"mx-auto flex w-full max-w-[1180px] flex-col gap-[clamp(28px,5vw,56px)] px-[clamp(16px,4vw,40px)] pt-[clamp(12px,2.5vw,28px)] pb-20",
+				"flex flex-col gap-[clamp(28px,5vw,56px)] pt-[clamp(12px,2.5vw,28px)] pb-20",
 				className,
 			)}
 		>
 			{children}
-		</div>
+		</Container>
 	);
 }
 

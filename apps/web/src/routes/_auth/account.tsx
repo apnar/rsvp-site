@@ -5,22 +5,28 @@ import {
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	useNavigate,
+	useRouter,
+} from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ConfirmAction } from "@/components/confirm-action";
 import { Field, SettingRow, Switch } from "@/components/controls";
 import { Page, PageHead, Panel } from "@/components/page";
 import { pageTitle } from "@/content/site";
 import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/utils/orpc";
 
+const meQuery = () => orpc.account.me.queryOptions();
+const hasPasswordQuery = () => orpc.account.hasPassword.queryOptions();
+
 export const Route = createFileRoute("/_auth/account")({
 	loader: ({ context }) =>
 		Promise.all([
-			context.queryClient.ensureQueryData(orpc.account.me.queryOptions()),
-			context.queryClient.ensureQueryData(
-				orpc.account.hasPassword.queryOptions(),
-			),
+			context.queryClient.ensureQueryData(meQuery()),
+			context.queryClient.ensureQueryData(hasPasswordQuery()),
 		]),
 	head: () => ({ meta: [{ title: pageTitle("Your account") }] }),
 	component: AccountPage,
@@ -40,7 +46,7 @@ const REASON = {
 } as const;
 
 function AccountPage() {
-	const { data: me } = useSuspenseQuery(orpc.account.me.queryOptions());
+	const { data: me } = useSuspenseQuery(meQuery());
 	return (
 		<Page>
 			<PageHead kicker="Your account" title={me.name} />
@@ -49,6 +55,7 @@ function AccountPage() {
 				<div className="flex flex-col gap-5">
 					<EmailPrefs />
 					<PasswordPanel />
+					<SignOutEverywhere />
 				</div>
 			</div>
 		</Page>
@@ -57,18 +64,16 @@ function AccountPage() {
 
 function NameAndEmail() {
 	const router = useRouter();
-	const queryClient = useQueryClient();
-	const { data: me } = useSuspenseQuery(orpc.account.me.queryOptions());
+	const { data: me } = useSuspenseQuery(meQuery());
 	const [name, setName] = useState(me.name);
 	const save = useMutation(
 		orpc.account.setName.mutationOptions({
 			onSuccess: async () => {
 				toast.success("Saved.");
-				await queryClient.invalidateQueries({ queryKey: orpc.account.key() });
-				// The header reads the name from the session; refetch it.
+				// The header reads the name from the session, which is not a
+				// query; refetch it.
 				await router.invalidate();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	return (
@@ -109,16 +114,13 @@ function NameAndEmail() {
 }
 
 function EmailPrefs() {
-	const queryClient = useQueryClient();
-	const { data: me } = useSuspenseQuery(orpc.account.me.queryOptions());
+	const { data: me } = useSuspenseQuery(meQuery());
 	const on = me.unsubscribedAt === null;
 	const setEmail = useMutation(
 		orpc.account.setEmail.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(r.unsubscribedAt ? "No more email." : "Email's back on.");
-				queryClient.invalidateQueries({ queryKey: orpc.account.key() });
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	// Somebody invited on paper by name alone: there is nothing to switch.
@@ -149,45 +151,43 @@ function EmailPrefs() {
  * a password is for anyone who would rather type one.
  */
 function PasswordPanel() {
-	const queryClient = useQueryClient();
-	const { data: has } = useSuspenseQuery(
-		orpc.account.hasPassword.queryOptions(),
-	);
+	const { data: has } = useSuspenseQuery(hasPasswordQuery());
 	const [current, setCurrent] = useState("");
 	const [next, setNext] = useState("");
-	const [busy, setBusy] = useState(false);
 	const { hasPassword } = has;
 
 	const setPassword = useMutation(
 		orpc.account.setPassword.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: orpc.account.key() });
 				setNext("");
 				toast.success("Password set. The emailed links still work.");
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 
-	const submit = async (e: { preventDefault(): void }) => {
+	// Better Auth reports a failure in the result rather than throwing; the
+	// mutation needs it thrown to reset, toast and stop the spinner.
+	const changePassword = useMutation({
+		mutationFn: async () => {
+			const result = await authClient.changePassword({
+				currentPassword: current,
+				newPassword: next,
+			});
+			if (result.error) {
+				throw new Error(result.error.message || "That didn't take.");
+			}
+		},
+		onSuccess: () => {
+			setCurrent("");
+			setNext("");
+			toast.success("Changed.");
+		},
+	});
+
+	const submit = (e: { preventDefault(): void }) => {
 		e.preventDefault();
-		if (!hasPassword) {
-			setPassword.mutate({ newPassword: next });
-			return;
-		}
-		setBusy(true);
-		const result = await authClient.changePassword({
-			currentPassword: current,
-			newPassword: next,
-		});
-		setBusy(false);
-		if (result.error) {
-			toast.error(result.error.message || "That didn't take.");
-			return;
-		}
-		setCurrent("");
-		setNext("");
-		toast.success("Changed.");
+		if (hasPassword) changePassword.mutate();
+		else setPassword.mutate({ newPassword: next });
 	};
 
 	return (
@@ -229,10 +229,54 @@ function PasswordPanel() {
 				type="submit"
 				variant="outline"
 				className="self-start"
-				disabled={busy || setPassword.isPending || next.length < 8}
+				disabled={
+					changePassword.isPending || setPassword.isPending || next.length < 8
+				}
 			>
 				{hasPassword ? "Change it" : "Set a password"}
 			</Button>
+		</Panel>
+	);
+}
+
+/**
+ * A forwarded email, a shared computer, a lost phone: every link we have
+ * mailed carries the same key, and it never expired on its own. This
+ * replaces it and ends every session, this one included; the next email
+ * brings the new link, or "Email me my link" on the sign-in page.
+ */
+function SignOutEverywhere() {
+	const router = useRouter();
+	const navigate = useNavigate();
+	const queryClient = useQueryClient();
+	const out = useMutation(
+		orpc.account.signOutEverywhere.mutationOptions({
+			onSuccess: async () => {
+				queryClient.clear();
+				await router.invalidate();
+				navigate({ to: "/login" });
+			},
+		}),
+	);
+	return (
+		<Panel className="gap-3">
+			<h2 className="m-0 text-[20px]">Sign out everywhere</h2>
+			<p className="m-0 text-[14px] text-haze">
+				Ends every session on every device and stops the links in emails you
+				already have from working. Ask for a new link from the sign-in page.
+			</p>
+			<ConfirmAction
+				confirm="Sign me out everywhere"
+				pending={out.isPending}
+				onConfirm={() => out.mutate({})}
+				className="flex flex-wrap gap-1.5"
+				trigger={{
+					variant: "outline",
+					size: "sm",
+					className: "self-start",
+					children: "Sign out everywhere",
+				}}
+			/>
 		</Panel>
 	);
 }

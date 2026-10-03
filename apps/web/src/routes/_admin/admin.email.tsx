@@ -3,14 +3,9 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import {
-	useMutation,
-	useQueryClient,
-	useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Field } from "@/components/controls";
 import { PreviewPanel, reportSend } from "@/components/email-preview";
 import { Notice } from "@/components/notice";
@@ -19,11 +14,14 @@ import { pageTitle } from "@/content/site";
 import { when } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
+const statusQuery = () => orpc.mail.status.queryOptions();
+const recentQuery = () => orpc.mail.recent.queryOptions();
+
 export const Route = createFileRoute("/_admin/admin/email")({
 	loader: ({ context }) =>
 		Promise.all([
-			context.queryClient.ensureQueryData(orpc.mail.status.queryOptions()),
-			context.queryClient.ensureQueryData(orpc.mail.recent.queryOptions()),
+			context.queryClient.ensureQueryData(statusQuery()),
+			context.queryClient.ensureQueryData(recentQuery()),
 		]),
 	head: () => ({ meta: [{ title: pageTitle("Email") }] }),
 	component: AdminEmailPage,
@@ -49,16 +47,12 @@ const KIND: Record<EmailKind, string> = {
  * is sent from the events themselves; this is for the rare word to all.
  */
 function AdminEmailPage() {
-	const queryClient = useQueryClient();
-	const { data: status } = useSuspenseQuery(orpc.mail.status.queryOptions());
-	const { data: recent } = useSuspenseQuery(orpc.mail.recent.queryOptions());
+	const { data: status } = useSuspenseQuery(statusQuery());
+	const { data: recent } = useSuspenseQuery(recentQuery());
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
-	const onError = (error: Error) => toast.error(error.message);
 
-	const preview = useMutation(
-		orpc.mail.previewMessage.mutationOptions({ onError }),
-	);
+	const preview = useMutation(orpc.mail.previewMessage.mutationOptions());
 	const send = useMutation(
 		orpc.mail.sendMessage.mutationOptions({
 			onSuccess: (result, input) => {
@@ -68,9 +62,7 @@ function AdminEmailPage() {
 					setBody("");
 					preview.reset();
 				}
-				queryClient.invalidateQueries({ queryKey: orpc.mail.key() });
 			},
-			onError,
 		}),
 	);
 	const ready = subject.trim() && body.trim();

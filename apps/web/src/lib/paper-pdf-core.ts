@@ -95,7 +95,7 @@ function wrap(
 }
 
 /** The largest size, down to `min`, at which `text` fits in `lines` lines. */
-function fit(
+function fitText(
 	text: string,
 	font: PDFFont,
 	start: number,
@@ -225,7 +225,7 @@ function drawInvite(
 		color: C.paper,
 	});
 
-	const title = fit(event.title, fonts.black, 30 * u, 16 * u, inner, 3);
+	const title = fitText(event.title, fonts.black, 30 * u, 16 * u, inner, 3);
 	let cursor = bandY + 16 * u + (title.lines.length - 1) * title.size * 1.02;
 	for (const line of title.lines) {
 		page.drawText(line, {

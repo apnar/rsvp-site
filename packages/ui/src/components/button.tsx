@@ -16,7 +16,10 @@ const buttonVariants = cva(
 					"border-lime bg-lime text-on-lime hover:border-lime-soft hover:bg-lime-soft hover:text-on-lime active:bg-lime/85",
 				send: "border-pink bg-pink font-heading text-on-pink hover:border-pink-soft hover:bg-pink-soft hover:text-on-pink active:bg-pink/85",
 				light:
-					"border-ink bg-ink text-night hover:border-soft hover:bg-soft hover:text-night active:bg-haze",
+					"border-ink bg-ink text-on-ink hover:border-soft hover:bg-soft hover:text-on-ink active:bg-haze",
+				// The dark pill for a lime panel, where lime and ink would vanish.
+				night:
+					"border-night bg-night text-ink hover:border-panel-2 hover:bg-panel-2 hover:text-ink active:bg-panel",
 				outline:
 					"border-line-strong bg-transparent text-ink hover:border-haze hover:bg-ink/6 hover:text-ink active:bg-ink/12 aria-expanded:bg-ink/6",
 				secondary:

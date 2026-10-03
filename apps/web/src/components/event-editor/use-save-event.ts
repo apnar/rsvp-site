@@ -1,6 +1,6 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { toast } from "sonner";
 
 import { DRY_RUN_SUFFIX } from "@/content/site";
@@ -18,6 +18,8 @@ type Destination =
 	| "/e/$eventId"
 	| "/e/$eventId/edit";
 
+type After = "stay" | "send" | "preview" | "design";
+
 /**
  * Saving the draft and what follows it: the steps of `save`, the
  * stay/send/preview/design paths of `run`, and the guard against leaving
@@ -27,7 +29,6 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const eventId = loaded?.event.id;
-	const [busy, setBusy] = useState(false);
 	// A new event's id, kept the moment `create` returns so a retry after a
 	// later step failed updates that draft instead of making a second one.
 	const createdId = useRef<string | null>(null);
@@ -39,9 +40,6 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 		enableBeforeUnload: () => draft.dirty && !leaving.current,
 		withResolver: true,
 	});
-
-	const refresh = () =>
-		queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 
 	/** Save everything; returns the event id. */
 	const save = async (): Promise<string> => {
@@ -129,64 +127,65 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 		return navigate({ to, params: { eventId: id }, replace });
 	};
 
-	const run = async (after: "stay" | "send" | "preview" | "design") => {
-		setBusy(true);
-		try {
+	// Both are mutations so the cache refreshes everything a save or a send
+	// touched (the guest list included) and says so when a step fails.
+	const runEvent = useMutation({
+		mutationFn: async (after: After) => {
 			const id = await save();
-			if (after === "send") {
-				const r = await client.events.send({ eventId: id });
+			return {
+				id,
+				sent:
+					after === "send" ? await client.events.send({ eventId: id }) : null,
+			};
+		},
+		onSuccess: ({ id, sent }, after) => {
+			if (sent) {
 				toast.success(
-					r.held
+					sent.held
 						? "Published. Download the cards from the guest list; no emails go out until you start them."
-						: r.sent > 0
-							? `Sent ${plural(r.sent, "invite")}.${r.dryRun ? DRY_RUN_SUFFIX : ""}`
+						: sent.sent > 0
+							? `Sent ${plural(sent.sent, "invite")}.${sent.dryRun ? DRY_RUN_SUFFIX : ""}`
 							: "Published. Nobody new to invite.",
 				);
-				await refresh();
 				go("/e/$eventId/guests", id);
-				return;
-			}
-			await refresh();
-			if (after === "design") {
+			} else if (after === "design") {
 				go("/e/$eventId/design", id);
-				return;
-			}
-			if (after === "preview") {
+			} else if (after === "preview") {
 				go("/e/$eventId", id);
-				return;
-			}
-			if (!eventId) {
+			} else if (!eventId) {
 				toast.success("Draft saved.");
 				go("/e/$eventId/edit", id, true);
 			} else {
 				toast.success("Saved.");
 			}
-		} catch (error) {
-			toast.error(messageOf(error));
-			// The draft exists even though a later step failed: carry on from the
-			// real one, not from this form that would create another.
-			if (!eventId && createdId.current) {
-				go("/e/$eventId/edit", createdId.current, true);
-			}
-		} finally {
-			setBusy(false);
-		}
-	};
+		},
+	});
 
-	const saveAndLeave = async () => {
-		setBusy(true);
-		try {
-			await save();
+	const run = (after: After) =>
+		runEvent.mutate(after, {
+			onError: () => {
+				// The draft exists even though a later step failed: carry on from
+				// the real one, not from this form that would create another.
+				if (!eventId && createdId.current) {
+					go("/e/$eventId/edit", createdId.current, true);
+				}
+			},
+		});
+
+	const leave = useMutation({
+		mutationFn: save,
+		onSuccess: () => {
 			leaving.current = true;
 			blocker.proceed?.();
-		} catch (error) {
-			toast.error(messageOf(error));
-		} finally {
-			setBusy(false);
-		}
-	};
+		},
+	});
 
-	return { busy, run, saveAndLeave, blocker, refresh };
+	return {
+		busy: runEvent.isPending || leave.isPending,
+		run,
+		saveAndLeave: () => leave.mutate(),
+		blocker,
+	};
 }
 
 export type SaveEvent = ReturnType<typeof useSaveEvent>;

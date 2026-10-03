@@ -18,7 +18,6 @@ export function AddGuests({
 	published,
 	paper = false,
 	onList,
-	onAdded,
 }: {
 	eventId: string;
 	published: boolean;
@@ -26,7 +25,6 @@ export function AddGuests({
 	paper?: boolean;
 	/** Who is already on the list, left out of the address-book picker. */
 	onList?: ReadonlySet<string>;
-	onAdded: () => void;
 }) {
 	const [pick, setPick] = useState<GuestPick>(NO_PICK);
 
@@ -50,9 +48,7 @@ export function AddGuests({
 					`${parts.join(", ")}.${published && r.added > 0 && !paper ? " Send when you're ready." : ""}`,
 				);
 				setPick(NO_PICK);
-				onAdded();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 

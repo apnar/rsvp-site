@@ -66,7 +66,8 @@ export function HostsSection({
 								<button
 									type="button"
 									aria-label={`Remove ${h.name} as a host`}
-									className="cursor-pointer border-0 bg-transparent text-haze hover:text-ink"
+									disabled={remove.isPending}
+									className="cursor-pointer border-0 bg-transparent text-haze hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
 									onClick={() =>
 										remove.mutate({ eventId: loaded.event.id, userId: h.id })
 									}

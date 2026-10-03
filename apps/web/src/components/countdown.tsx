@@ -1,4 +1,5 @@
-import { useClock } from "@/hooks/use-countdown";
+import { useClock } from "@/hooks/use-clock";
+import { countdownTile } from "@/lib/countdown";
 
 /**
  * The tile row under the invite hero: time to go, then the counts. The
@@ -16,26 +17,7 @@ export function CountdownTiles({
 }) {
 	const now = useClock(nowIso, startsAtIso);
 	const remaining = startsAtIso ? Date.parse(startsAtIso) - now : null;
-	const time =
-		remaining === null
-			? null
-			: remaining <= 0
-				? { value: "Now", label: "party on" }
-				: remaining >= 86_400_000
-					? {
-							value: String(Math.floor(remaining / 86_400_000)),
-							label: Math.floor(remaining / 86_400_000) === 1 ? "day" : "days",
-						}
-					: remaining >= 3_600_000
-						? {
-								value: String(Math.floor(remaining / 3_600_000)),
-								label:
-									Math.floor(remaining / 3_600_000) === 1 ? "hour" : "hours",
-							}
-						: {
-								value: String(Math.max(1, Math.floor(remaining / 60_000))),
-								label: "minutes",
-							};
+	const time = remaining === null ? null : countdownTile(remaining);
 	const all = [
 		...(time ? [{ ...time, tone: "lime" as const }] : []),
 		...tiles,

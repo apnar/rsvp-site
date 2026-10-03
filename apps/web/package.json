@@ -9,6 +9,7 @@
 		"check-types": "tsc --noEmit",
 		"deploy": "vite build && wrangler deploy",
 		"cf-typegen": "wrangler types",
+		"test": "vitest run",
 		"db:migrate:local": "wrangler d1 migrations apply DB --local",
 		"db:migrate:remote": "wrangler d1 migrations apply DB --remote"
 	},
@@ -76,6 +77,7 @@
 		"tsx": "^4.23.13",
 		"typescript": "catalog:",
 		"vite": "^8.1.5",
+		"vitest": "^4.1.4",
 		"wrangler": "^4.129.1"
 	}
 }

@@ -1,8 +1,8 @@
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { Field } from "@/components/controls";
 import { authClient } from "@/lib/auth-client";
@@ -13,22 +13,26 @@ export const Route = createFileRoute("/forgot-password")({
 
 function ForgotPasswordPage() {
 	const [email, setEmail] = useState("");
-	const [busy, setBusy] = useState(false);
 	const [sent, setSent] = useState(false);
 
-	const submit = async (e: React.FormEvent) => {
+	// Better Auth returns failures instead of throwing them; throw so the
+	// mutation toasts and resets.
+	const request = useMutation({
+		mutationFn: async () => {
+			const result = await authClient.requestPasswordReset({
+				email,
+				redirectTo: "/reset-password",
+			});
+			if (result.error) {
+				throw new Error(result.error.message || "Something went sideways.");
+			}
+		},
+		onSuccess: () => setSent(true),
+	});
+
+	const submit = (e: React.FormEvent) => {
 		e.preventDefault();
-		setBusy(true);
-		const result = await authClient.requestPasswordReset({
-			email,
-			redirectTo: "/reset-password",
-		});
-		setBusy(false);
-		if (result.error) {
-			toast.error(result.error.message || "Something went sideways.");
-			return;
-		}
-		setSent(true);
+		request.mutate();
 	};
 
 	return (
@@ -53,8 +57,12 @@ function ForgotPasswordPage() {
 								onChange={(e) => setEmail(e.target.value)}
 							/>
 						</Field>
-						<Button type="submit" className="w-full" disabled={busy}>
-							{busy ? "Sending..." : "Send me a reset link"}
+						<Button
+							type="submit"
+							className="w-full"
+							disabled={request.isPending}
+						>
+							{request.isPending ? "Sending..." : "Send me a reset link"}
 						</Button>
 					</form>
 				)}

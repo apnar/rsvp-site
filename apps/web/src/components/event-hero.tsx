@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { Cover } from "./cover";
 import { DesignTheme } from "./design/design-theme";
+import { Container } from "./page";
 
 /**
  * The top of an invitation: the cover (or the host's own theme), a header
@@ -106,22 +107,20 @@ export function EventHero({
 			)}
 			{header}
 			{stacked ? (
-				<div className="mx-auto flex w-full max-w-[1180px] flex-col items-center gap-5 px-[clamp(16px,4vw,40px)] pt-2 pb-9 text-center">
+				<Container className="flex flex-col items-center gap-5 pt-2 pb-9 text-center">
 					{card}
 					<h1 className="sr-only">{title}</h1>
 					{chip("self-center")}
 					{facts("justify-center")}
-				</div>
+				</Container>
 			) : (
 				<>
 					{card ? (
-						<div className="relative mx-auto w-full max-w-[1180px] px-[clamp(16px,4vw,40px)] pb-6">
-							{card}
-						</div>
+						<Container className="relative pb-6">{card}</Container>
 					) : null}
-					<div
+					<Container
 						className={cn(
-							"relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)]",
+							"relative mt-auto flex flex-col gap-[18px]",
 							size === "page" ? "pb-9" : "pb-[clamp(32px,6vw,72px)]",
 						)}
 					>
@@ -131,7 +130,7 @@ export function EventHero({
 						</h1>
 						{facts()}
 						{children}
-					</div>
+					</Container>
 				</>
 			)}
 		</section>

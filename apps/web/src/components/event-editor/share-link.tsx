@@ -26,8 +26,13 @@ export function ShareLink({ eventId, url }: { eventId: string; url: string }) {
 				variant="light"
 				size="sm"
 				onClick={async () => {
-					await navigator.clipboard.writeText(url);
-					toast.success("Copied.");
+					try {
+						await navigator.clipboard.writeText(url);
+						toast.success("Copied.");
+					} catch {
+						// No permission, or an insecure page: the field above is selectable.
+						toast.error("Couldn't copy. Select the link and copy it.");
+					}
 				}}
 			>
 				Copy

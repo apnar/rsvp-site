@@ -80,6 +80,7 @@ export function ImageFields({
 			<ImagePicker
 				tray={tray}
 				label="Swap the picture"
+				current={el.ref}
 				onPick={(ref, iw, ih) =>
 					patch({ ref, iw, ih, fx: 0.5, fy: 0.5, zoom: 1 }, "ref")
 				}

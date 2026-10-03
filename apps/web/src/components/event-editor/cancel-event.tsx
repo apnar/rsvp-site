@@ -3,7 +3,7 @@ import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Field, Switch } from "@/components/controls";
@@ -21,6 +21,16 @@ export function CancelEvent({
 	const [open, setOpen] = useState(false);
 	const [note, setNote] = useState("");
 	const [notify, setNotify] = useState(true);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const noteRef = useRef<HTMLTextAreaElement>(null);
+	const wasOpen = useRef(false);
+	// Focus follows the swap, as in ConfirmAction: a keyboard user is never
+	// left on a button that has just vanished.
+	useEffect(() => {
+		if (open) noteRef.current?.focus();
+		else if (wasOpen.current) triggerRef.current?.focus();
+		wasOpen.current = open;
+	}, [open]);
 	const cancel = useMutation(
 		orpc.events.cancel.mutationOptions({
 			onSuccess: (r) => {
@@ -36,6 +46,7 @@ export function CancelEvent({
 	if (!open) {
 		return (
 			<Button
+				ref={triggerRef}
 				variant="destructive"
 				className="mr-auto"
 				onClick={() => setOpen(true)}
@@ -53,6 +64,7 @@ export function CancelEvent({
 			<b>Cancel this event?</b>
 			<Field label="A note for your guests (optional)" htmlFor="cancel-note">
 				<Textarea
+					ref={noteRef}
 					id="cancel-note"
 					value={note}
 					maxLength={1000}

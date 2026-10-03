@@ -4,6 +4,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Fragment } from "react";
 
 import { Cover } from "@/components/cover";
+import { Container } from "@/components/page";
 import { ResponseBar } from "@/components/response-bar";
 import { FEATURES, OCCASIONS, STEPS } from "@/content/site";
 
@@ -20,7 +21,10 @@ const START = { to: "/login", search: { redirect: "/e/new" } } as const;
 function Landing() {
 	return (
 		<>
-			<section className="mx-auto grid max-w-[1180px] grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-center gap-[clamp(36px,5vw,64px)] px-[clamp(16px,4vw,40px)] py-[clamp(28px,6vw,72px)]">
+			<Container
+				as="section"
+				className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-center gap-[clamp(36px,5vw,64px)] py-[clamp(28px,6vw,72px)]"
+			>
 				<div className="flex flex-col gap-6">
 					<span className="self-start rounded-full border border-pink px-3.5 py-1.5 font-bold text-[13px] text-pink-ink uppercase tracking-[0.08em]">
 						Invites + RSVPs
@@ -75,7 +79,7 @@ function Landing() {
 						Yes! +2 kids
 					</span>
 				</div>
-			</section>
+			</Container>
 
 			<div className="overflow-hidden border-line border-y">
 				<div className="flex gap-7 whitespace-nowrap py-[18px] font-bold font-heading text-[clamp(20px,2.8vw,32px)] tracking-[-0.03em]">
@@ -95,9 +99,10 @@ function Landing() {
 				</div>
 			</div>
 
-			<section
+			<Container
+				as="section"
 				id="how"
-				className="mx-auto flex max-w-[1180px] scroll-mt-6 flex-col gap-7 px-[clamp(16px,4vw,40px)] pt-[clamp(48px,7vw,96px)]"
+				className="flex scroll-mt-6 flex-col gap-7 pt-[clamp(48px,7vw,96px)]"
 			>
 				<h2 className="m-0 font-black text-[clamp(30px,4.4vw,52px)] leading-none tracking-[-0.04em]">
 					Four steps to a full house
@@ -129,9 +134,12 @@ function Landing() {
 						);
 					})}
 				</div>
-			</section>
+			</Container>
 
-			<section className="mx-auto flex max-w-[1180px] flex-col gap-7 px-[clamp(16px,4vw,40px)] py-[clamp(48px,7vw,96px)]">
+			<Container
+				as="section"
+				className="flex flex-col gap-7 py-[clamp(48px,7vw,96px)]"
+			>
 				<h2 className="m-0 font-black text-[clamp(30px,4.4vw,52px)] leading-none tracking-[-0.04em]">
 					Every answer a host needs
 				</h2>
@@ -143,9 +151,9 @@ function Landing() {
 						</div>
 					))}
 				</div>
-			</section>
+			</Container>
 
-			<section className="mx-auto max-w-[1180px] px-[clamp(16px,4vw,40px)] pb-[clamp(48px,7vw,80px)]">
+			<Container as="section" className="pb-[clamp(48px,7vw,80px)]">
 				<div className="flex flex-wrap items-end justify-between gap-6 rounded-[32px] bg-lime p-[clamp(28px,5vw,56px)] text-on-lime">
 					<h2 className="m-0 flex-[1_1_400px] font-black text-[clamp(34px,5.4vw,68px)] leading-[0.95] tracking-[-0.045em]">
 						Your next party starts here.
@@ -162,7 +170,7 @@ function Landing() {
 						Start an invite
 					</Link>
 				</div>
-			</section>
+			</Container>
 		</>
 	);
 }

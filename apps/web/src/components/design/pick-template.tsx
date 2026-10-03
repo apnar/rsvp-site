@@ -8,8 +8,10 @@ import {
 	type TemplateContext,
 } from "@rsvp-site/design/templates/index";
 import { Button } from "@rsvp-site/ui/components/button";
-import { useEffect, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Container } from "@/components/page";
 import { designSrc } from "@/lib/design-src";
 import { messageOf } from "@/lib/errors";
 import { naturalSize } from "@/lib/shrink-image";
@@ -82,26 +84,31 @@ export function PickTemplate({
 			setPreparing(null);
 		}
 	};
-	useEffect(() => {
-		if (!coverKey) return;
-		let live = true;
-		// The cover is copied into the design's own images, so templates can
-		// show it and replacing the cover later can't pull it out of the card.
-		client.designs
-			.copyCover({ eventId })
-			.then(async ({ ref }) => {
+	// The cover is copied into the design's own images, so templates can
+	// show it and replacing the cover later can't pull it out of the card.
+	// A copy is a write, so it is a mutation, started once per cover: the
+	// guard is a ref because StrictMode runs an effect twice and a second
+	// copy would upload a second picture.
+	const copyCover = useMutation({
+		mutationFn: async () => {
+			try {
+				const { ref } = await client.designs.copyCover({ eventId });
 				if (!ref) return null;
 				const { width, height } = await naturalSize(designSrc(ref));
 				return { ref, iw: width, ih: height };
-			})
-			.catch(() => null)
-			.then((cover) => {
-				if (live) setCtx({ cover, paper });
-			});
-		return () => {
-			live = false;
-		};
-	}, [coverKey, eventId, paper]);
+			} catch {
+				// No cover to show on the templates is better than no templates.
+				return null;
+			}
+		},
+		onSuccess: (cover) => setCtx({ cover, paper }),
+	});
+	const copiedFor = useRef<string | null>(null);
+	useEffect(() => {
+		if (!coverKey || copiedFor.current === `${eventId}/${coverKey}`) return;
+		copiedFor.current = `${eventId}/${coverKey}`;
+		copyCover.mutate();
+	}, [coverKey, eventId, copyCover.mutate]);
 	return (
 		<>
 			<TopBar eventId={eventId} title={title}>
@@ -111,7 +118,7 @@ export function PickTemplate({
 					</Button>
 				) : null}
 			</TopBar>
-			<div className="mx-auto flex w-full max-w-[1180px] flex-col gap-5 px-[clamp(16px,4vw,40px)] py-8">
+			<Container className="flex flex-col gap-5 py-8">
 				<div>
 					<h1 className="m-0 text-[clamp(26px,4vw,40px)]">
 						Pick a starting point
@@ -136,7 +143,7 @@ export function PickTemplate({
 				) : (
 					<p className="text-haze">Fetching your cover photo…</p>
 				)}
-			</div>
+			</Container>
 		</>
 	);
 }

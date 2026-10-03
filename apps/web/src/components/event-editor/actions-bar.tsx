@@ -27,8 +27,7 @@ export function ActionsBar({
 	// Paper guests stay "not invited" while emails are held, so a published
 	// paper event would show a Send that does nothing; it starts emails from
 	// the guest list.
-	const held =
-		published && !!loaded?.event.paper && !loaded.event.emailsReleasedAt;
+	const held = published && !!loaded?.emailsHeld;
 
 	return (
 		<>

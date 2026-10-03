@@ -99,6 +99,7 @@ export function BackgroundFields({ doc }: { doc: Design }) {
 					<ImagePicker
 						tray={tray}
 						label={bg.kind === "image" ? "Swap the photo" : "Pick a photo"}
+						current={bg.kind === "image" ? bg.ref : undefined}
 						onPick={(ref, iw, ih) => {
 							setWantPhoto(false);
 							put({

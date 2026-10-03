@@ -1,5 +1,7 @@
-import type { Totals } from "@rsvp-site/api/headcount";
+import type { Answer, Totals } from "@rsvp-site/api/headcount";
 import { cn } from "@rsvp-site/ui/lib/utils";
+
+import { ANSWER_LABELS, COUNT_LABELS } from "@/content/site";
 
 /**
  * The stacked yes / maybe / no / waiting bar: lime, pink, muted, empty.
@@ -38,9 +40,12 @@ export function ResponseBar({
 export function ResponseCounts({
 	totals,
 	className,
+	alwaysShowOut = false,
 }: {
 	totals: Pick<Totals, "yes" | "maybe" | "no" | "waiting">;
 	className?: string;
+	/** The invite page lists all four; a card drops "out" while it is zero. */
+	alwaysShowOut?: boolean;
 }) {
 	return (
 		<div
@@ -50,43 +55,49 @@ export function ResponseCounts({
 			)}
 		>
 			<span>
-				<b className="text-lime-ink">{totals.yes}</b> in
+				<b className="text-lime-ink">{totals.yes}</b> {COUNT_LABELS.yes}
 			</span>
 			<span>
-				<b className="text-pink-ink">{totals.maybe}</b> maybe
+				<b className="text-pink-ink">{totals.maybe}</b> {COUNT_LABELS.maybe}
 			</span>
-			{totals.no > 0 ? (
+			{totals.no > 0 || alwaysShowOut ? (
 				<span>
-					<b className="text-ink">{totals.no}</b> out
+					<b className="text-ink">{totals.no}</b> {COUNT_LABELS.no}
 				</span>
 			) : null}
 			<span>
-				<b className="text-ink">{totals.waiting}</b> waiting
+				<b className="text-ink">{totals.waiting}</b> {COUNT_LABELS.waiting}
 			</span>
 		</div>
 	);
 }
 
 /** The small answer chip: YES, MAYBE, CAN'T, NO REPLY. */
-export function AnswerTag({
-	response,
-}: {
-	response: "yes" | "maybe" | "no" | null;
-}) {
+export function AnswerTag({ response }: { response: Answer | null }) {
 	const base =
-		"inline-block flex-none rounded-full px-3 py-1 font-bold text-[12px] tracking-[0.04em]";
+		"inline-block flex-none rounded-full px-3 py-1 font-bold text-[12px] uppercase tracking-[0.04em]";
 	if (response === "yes") {
-		return <span className={cn(base, "bg-lime text-on-lime")}>YES</span>;
+		return (
+			<span className={cn(base, "bg-lime text-on-lime")}>
+				{ANSWER_LABELS.yes}
+			</span>
+		);
 	}
 	if (response === "maybe") {
-		return <span className={cn(base, "bg-pink text-on-pink")}>MAYBE</span>;
+		return (
+			<span className={cn(base, "bg-pink text-on-pink")}>
+				{ANSWER_LABELS.maybe}
+			</span>
+		);
 	}
 	if (response === "no") {
-		return <span className={cn(base, "bg-line text-soft")}>CAN'T</span>;
+		return (
+			<span className={cn(base, "bg-line text-soft")}>{ANSWER_LABELS.no}</span>
+		);
 	}
 	return (
 		<span className={cn(base, "border border-line-strong text-haze")}>
-			NO REPLY
+			{ANSWER_LABELS.none}
 		</span>
 	);
 }

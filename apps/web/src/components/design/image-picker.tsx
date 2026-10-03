@@ -12,21 +12,26 @@ import type { ImageTray } from "./editor-state";
 export function ImagePicker({
 	tray,
 	label,
+	current,
 	onPick,
 }: {
 	tray: ImageTray;
 	label: string;
+	/** The image in use now, marked as pressed. */
+	current?: string;
 	onPick: (ref: string, iw: number, ih: number) => void;
 }) {
 	return (
 		<div className="flex flex-col gap-2">
 			<span className="text-[12px] text-haze">{label}</span>
 			<div className="grid grid-cols-4 gap-1.5">
-				{tray.images.map((ref) => (
+				{tray.images.map((ref, i) => (
 					<button
 						key={ref}
 						type="button"
-						className="aspect-square cursor-pointer overflow-hidden rounded-[8px] border border-line-strong bg-night p-0 hover:border-lime"
+						aria-label={`Use image ${i + 1}`}
+						aria-pressed={ref === current}
+						className="aspect-square cursor-pointer overflow-hidden rounded-[8px] border border-line-strong bg-night p-0 hover:border-lime aria-pressed:border-lime"
 						onClick={async () => {
 							const { iw, ih } = await tray.sizeOf(ref);
 							onPick(ref, iw, ih);
@@ -53,6 +58,7 @@ export function ImagePicker({
 						type="file"
 						accept="image/jpeg,image/png,image/webp"
 						className="sr-only"
+						disabled={tray.busy}
 						onChange={async (e) => {
 							const file = e.target.files?.[0];
 							e.target.value = "";
@@ -83,6 +89,8 @@ export function StickerGrid({
 					key={s}
 					type="button"
 					title={s.replace(/-/g, " ")}
+					aria-label={s.replace(/-/g, " ")}
+					aria-pressed={s === value}
 					onClick={() => onPick(s)}
 					className={cn(
 						"grid aspect-square cursor-pointer place-items-center rounded-[8px] border border-transparent bg-transparent p-1 hover:border-line-strong",

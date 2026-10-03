@@ -13,20 +13,15 @@ import manropeBoldUrl from "@fontsource/manrope/files/manrope-latin-700-normal.w
 import unboundedBoldUrl from "@fontsource/unbounded/files/unbounded-latin-700-normal.woff?url";
 import unboundedBlackUrl from "@fontsource/unbounded/files/unbounded-latin-900-normal.woff?url";
 
+import { coverSrc } from "./format";
 import {
 	layoutPaperInvites,
 	type PaperEvent,
 	type PaperGuest,
 } from "./paper-pdf-core";
 import type { PaperSize } from "./paper-sizes";
-import { saveFile } from "./save-file";
+import { bytes } from "./pdf-io";
 import { scaleImage } from "./shrink-image";
-
-export async function bytes(url: string): Promise<ArrayBuffer> {
-	const res = await fetch(url);
-	if (!res.ok) throw new Error(`Could not load ${url}`);
-	return res.arrayBuffer();
-}
 
 /**
  * The cover as JPEG bytes, whatever it was uploaded as: pdf-lib embeds only
@@ -35,7 +30,7 @@ export async function bytes(url: string): Promise<ArrayBuffer> {
 async function coverJpeg(coverKey: string): Promise<ArrayBuffer | null> {
 	try {
 		const { blob } = await scaleImage(
-			await (await fetch(`/api/${coverKey}`)).blob(),
+			await (await fetch(coverSrc(coverKey))).blob(),
 			{
 				max: 1800,
 				type: "image/jpeg",
@@ -66,12 +61,4 @@ export async function buildPaperInvites(input: {
 		...input,
 		assets: { black, bold, body, bodyBold, cover },
 	});
-}
-
-/** Hand the browser a PDF to save. */
-export function download(data: Uint8Array, fileName: string) {
-	saveFile(
-		new Blob([data as Uint8Array<ArrayBuffer>], { type: "application/pdf" }),
-		fileName.replace(/[\\/:*?"<>|]+/g, "").trim() || "invites.pdf",
-	);
 }

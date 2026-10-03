@@ -10,7 +10,7 @@ import type { Outputs } from "@/lib/api-types";
  */
 
 export type Preview = Outputs["mail"]["previewMessage"];
-export type ListOutcome = Outputs["mail"]["sendMessage"];
+type ListOutcome = Outputs["mail"]["sendMessage"];
 
 export function reportSend(result: ListOutcome) {
 	const failed = result.attempted - result.sent;

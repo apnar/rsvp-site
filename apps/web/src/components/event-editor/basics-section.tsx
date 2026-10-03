@@ -1,14 +1,13 @@
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
+import { useMutation } from "@tanstack/react-query";
 import { ImagePlus, Trash2 } from "lucide-react";
 import { useRef } from "react";
-import { toast } from "sonner";
 
 import { Field, StepHeading, Switch } from "@/components/controls";
 import { Panel } from "@/components/page";
 import { refreshCard } from "@/lib/design-card";
-import { messageOf } from "@/lib/errors";
 import { shrinkCover } from "@/lib/shrink-image";
 import { client } from "@/utils/orpc";
 
@@ -30,16 +29,13 @@ export function BasicsSection({
 	const eventId = loaded?.event.id;
 	const fileRef = useRef<HTMLInputElement>(null);
 
-	const toggleDesign = async (on: boolean) => {
-		if (!eventId) return;
-		try {
+	const toggleDesign = useMutation({
+		mutationFn: async (on: boolean) => {
+			if (!eventId) return;
 			await client.designs.setOn({ eventId, on });
 			if (on) await refreshCard(eventId, true).catch(() => {});
-			await save.refresh();
-		} catch (error) {
-			toast.error(messageOf(error));
-		}
-	};
+		},
+	});
 
 	return (
 		<Panel>
@@ -73,7 +69,6 @@ export function BasicsSection({
 							className="bg-night/70"
 							onClick={() => {
 								draft.setCoverFile(null);
-								draft.setCoverPreview(null);
 								draft.setDropCover(true);
 							}}
 						>
@@ -108,7 +103,8 @@ export function BasicsSection({
 				{loaded?.hasDesign ? (
 					<Switch
 						checked={loaded.event.designOn}
-						onChange={toggleDesign}
+						onChange={(on) => toggleDesign.mutate(on)}
+						disabled={toggleDesign.isPending}
 						label="Guests see the designed card"
 					/>
 				) : null}

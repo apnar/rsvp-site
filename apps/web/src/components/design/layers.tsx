@@ -30,6 +30,9 @@ export const Layers = memo(function Layers({
 			{[...doc.elements].reverse().map((el, ri) => {
 				const i = top - ri;
 				const on = selected.includes(el.id);
+				// Every button names its layer: "Lock" alone, nine times over,
+				// tells a screen reader nothing about which.
+				const name = elementLabel(el);
 				return (
 					<li
 						key={el.id}
@@ -40,18 +43,19 @@ export const Layers = memo(function Layers({
 					>
 						<button
 							type="button"
+							aria-pressed={on}
 							onClick={(e) => onSelect([el.id], e.shiftKey)}
 							className={cn(
 								"min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent py-1.5 text-left text-[13px]",
 								el.hidden ? "text-haze line-through" : "text-ink",
 							)}
 						>
-							{elementLabel(el)}
+							{name}
 						</button>
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							aria-label="Bring forward"
+							aria-label={`Bring ${name} forward`}
 							disabled={i === top}
 							onClick={() => set(restack(doc, el.id, "up"))}
 						>
@@ -60,7 +64,7 @@ export const Layers = memo(function Layers({
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							aria-label="Send backward"
+							aria-label={`Send ${name} backward`}
 							disabled={i === 0}
 							onClick={() => set(restack(doc, el.id, "down"))}
 						>
@@ -69,7 +73,7 @@ export const Layers = memo(function Layers({
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							aria-label={el.locked ? "Unlock" : "Lock"}
+							aria-label={`${el.locked ? "Unlock" : "Lock"} ${name}`}
 							onClick={() => set(patchEl(doc, el.id, { locked: !el.locked }))}
 						>
 							{el.locked ? <Lock /> : <LockOpen className="opacity-40" />}
@@ -77,7 +81,7 @@ export const Layers = memo(function Layers({
 						<Button
 							variant="ghost"
 							size="icon-xs"
-							aria-label={el.hidden ? "Show" : "Hide"}
+							aria-label={`${el.hidden ? "Show" : "Hide"} ${name}`}
 							onClick={() => set(patchEl(doc, el.id, { hidden: !el.hidden }))}
 						>
 							{el.hidden ? <EyeOff /> : <Eye className="opacity-40" />}

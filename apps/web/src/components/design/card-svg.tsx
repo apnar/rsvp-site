@@ -68,7 +68,7 @@ function facesIn(scene: Scene): FaceKey[] {
 	];
 }
 
-export function textOf(scene: Scene): string {
+function textOf(scene: Scene): string {
 	return scene.nodes
 		.flatMap((n) => (n.k === "text" && n.content.trim() ? [n.content] : []))
 		.join(". ");

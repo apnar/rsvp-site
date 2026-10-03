@@ -8,6 +8,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@rsvp-site/ui/components/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	Link,
 	useNavigate,
@@ -27,6 +28,7 @@ import { initials } from "@/lib/format";
 export default function UserMenu() {
 	const navigate = useNavigate();
 	const router = useRouter();
+	const queryClient = useQueryClient();
 	const { session } = useRouteContext({ from: "__root__" });
 	if (!session) return null;
 
@@ -70,6 +72,9 @@ export default function UserMenu() {
 							authClient.signOut({
 								fetchOptions: {
 									onSuccess: async () => {
+										// The next person to sign in on this tab must not see
+										// this one's events from the cache.
+										queryClient.clear();
 										// The session came from the root route; make the
 										// router go and notice it is gone.
 										await router.invalidate();

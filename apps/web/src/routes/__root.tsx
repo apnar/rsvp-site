@@ -12,10 +12,10 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { Wordmark } from "@/components/brand";
+import { Container } from "@/components/page";
 import SiteHeader from "@/components/site-header";
 import { SITE_NAME, TAGLINE } from "@/content/site";
 import { getUser } from "@/functions/get-user";
-import type { orpc } from "@/utils/orpc";
 
 import appCss from "../index.css?url";
 
@@ -26,7 +26,6 @@ import appCss from "../index.css?url";
 const NIGHT = "#14101f";
 
 export interface RouterAppContext {
-	orpc: typeof orpc;
 	queryClient: QueryClient;
 }
 
@@ -90,7 +89,10 @@ function RootDocument() {
 					<main className="flex-1">
 						<Outlet />
 					</main>
-					<footer className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center gap-x-5 gap-y-2 px-[clamp(16px,4vw,40px)] pt-5 pb-8 text-[13px] text-haze">
+					<Container
+						as="footer"
+						className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-5 pb-8 text-[13px] text-haze"
+					>
 						<Link to="/" className="mr-auto no-underline">
 							<Wordmark className="text-[15px] text-haze" />
 						</Link>
@@ -103,7 +105,7 @@ function RootDocument() {
 								Sign in
 							</Link>
 						)}
-					</footer>
+					</Container>
 				</div>
 				<Toaster richColors />
 				<TanStackRouterDevtools position="bottom-left" />

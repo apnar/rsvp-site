@@ -10,7 +10,6 @@ import { plural } from "@/lib/format";
 
 import type { Loaded } from "./form";
 import type { EventDraft } from "./use-event-draft";
-import type { SaveEvent } from "./use-save-event";
 
 /**
  * Step 3: email or paper, and who is on the list. An existing event adds
@@ -19,11 +18,9 @@ import type { SaveEvent } from "./use-save-event";
 export function GuestsSection({
 	loaded,
 	draft,
-	save,
 }: {
 	loaded?: Loaded;
 	draft: EventDraft;
-	save: SaveEvent;
 }) {
 	const { form, set } = draft;
 	const eventId = loaded?.event.id;
@@ -89,7 +86,6 @@ export function GuestsSection({
 						published={published}
 						paper={form.paper}
 						onList={new Set(loaded?.guests.map((g) => g.userId))}
-						onAdded={() => save.refresh()}
 					/>
 				</>
 			) : (

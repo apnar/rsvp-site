@@ -1,11 +1,7 @@
 import { extraPeople } from "@rsvp-site/api/headcount";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { Button, buttonVariants } from "@rsvp-site/ui/components/button";
-import {
-	useMutation,
-	useQueryClient,
-	useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -17,6 +13,10 @@ import { StatTile } from "@/components/stat-tile";
 import { pageTitle } from "@/content/site";
 import { firstName, longDay, since } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
+
+const mineQuery = (all: boolean) =>
+	orpc.events.mine.queryOptions({ input: { all } });
+const invitesQuery = () => orpc.events.invites.queryOptions();
 
 export const Route = createFileRoute("/_auth/events")({
 	// Both live in the URL so Back and a refresh keep the view. The default
@@ -30,12 +30,8 @@ export const Route = createFileRoute("/_auth/events")({
 	loader: async ({ context, deps }) => {
 		const host = canHost(context.session.user);
 		await Promise.all([
-			context.queryClient.ensureQueryData(orpc.events.invites.queryOptions()),
-			host
-				? context.queryClient.ensureQueryData(
-						orpc.events.mine.queryOptions({ input: { all: deps.all } }),
-					)
-				: null,
+			context.queryClient.ensureQueryData(invitesQuery()),
+			host ? context.queryClient.ensureQueryData(mineQuery(deps.all)) : null,
 		]);
 	},
 	head: () => ({ meta: [{ title: pageTitle("Your events") }] }),
@@ -51,10 +47,7 @@ function HostDashboard() {
 	const { session } = Route.useRouteContext();
 	const { all = false, tab = "upcoming" } = Route.useSearch();
 	const navigate = Route.useNavigate();
-	const queryClient = useQueryClient();
-	const { data } = useSuspenseQuery(
-		orpc.events.mine.queryOptions({ input: { all } }),
-	);
+	const { data } = useSuspenseQuery(mineQuery(all));
 
 	const nudge = useMutation(
 		orpc.events.nudge.mutationOptions({
@@ -64,7 +57,6 @@ function HostDashboard() {
 						? `Nudged ${result.sent}.`
 						: "Everyone was nudged in the last 12 hours.",
 				);
-				queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 			},
 		}),
 	);
@@ -306,7 +298,7 @@ function HostDashboard() {
 
 /** Events the caller is a guest at. A host's own section, a user's whole page. */
 function InvitedTo({ heading = true }: { heading?: boolean }) {
-	const { data } = useSuspenseQuery(orpc.events.invites.queryOptions());
+	const { data } = useSuspenseQuery(invitesQuery());
 	if (heading && data.upcoming.length === 0) return null;
 	return (
 		<section className="flex flex-col gap-4">
@@ -352,7 +344,7 @@ function InvitedTo({ heading = true }: { heading?: boolean }) {
 
 function Invites() {
 	const { session } = Route.useRouteContext();
-	const { data } = useSuspenseQuery(orpc.events.invites.queryOptions());
+	const { data } = useSuspenseQuery(invitesQuery());
 	return (
 		<Page>
 			<PageHead

@@ -3,7 +3,6 @@ import { Input } from "@rsvp-site/ui/components/input";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 import { z } from "zod";
 
 import { Notice } from "@/components/notice";
@@ -29,7 +28,6 @@ function RequestLink() {
 	const request = useMutation(
 		orpc.people.requestLink.mutationOptions({
 			onSuccess: () => setAsked(true),
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 
@@ -37,7 +35,7 @@ function RequestLink() {
 		<div className="flex flex-col gap-4 rounded-[28px] bg-lime p-[clamp(20px,3vw,32px)] text-on-lime">
 			<div>
 				<span className="kicker">No password needed</span>
-				<h2 className="mt-1.5 mb-0 text-[26px]">Email me a link</h2>
+				<h1 className="mt-1.5 mb-0 text-[26px]">Email me a link</h1>
 			</div>
 			<p className="m-0 text-[15px]">
 				Every invitation signs you in. Lost it? We'll send a fresh link.
@@ -65,14 +63,9 @@ function RequestLink() {
 						placeholder="you@example.com"
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
-						className="min-w-[200px] flex-1 border-night/30 bg-ink text-night placeholder:text-night/50 hover:border-night focus-visible:border-night"
+						className="min-w-[200px] flex-1 border-night/30 bg-ink text-on-ink placeholder:text-on-ink/50 hover:border-night focus-visible:border-night"
 					/>
-					<Button
-						type="submit"
-						variant="light"
-						disabled={request.isPending}
-						className="border-night bg-night text-ink hover:border-panel-2 hover:bg-panel-2 hover:text-ink"
-					>
+					<Button type="submit" variant="night" disabled={request.isPending}>
 						{request.isPending ? "Sending..." : "Send it"}
 					</Button>
 				</form>

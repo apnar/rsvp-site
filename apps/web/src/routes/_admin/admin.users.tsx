@@ -2,14 +2,11 @@ import type { Role } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import {
-	useMutation,
-	useQueryClient,
-	useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
@@ -18,12 +15,20 @@ import { Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { DRY_RUN_SUFFIX, pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
-import { initials, shortDate } from "@/lib/format";
+import { initials, matchesPerson, shortDate } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
+const SHOWS = ["user", "host", "admin", "off"] as const;
+
+const peopleQuery = () => orpc.people.list.queryOptions();
+
 export const Route = createFileRoute("/_admin/admin/users")({
-	loader: ({ context }) =>
-		context.queryClient.ensureQueryData(orpc.people.list.queryOptions()),
+	// The tab is in the URL so Back and a refresh keep it; "all" is the
+	// absence of it.
+	validateSearch: z.object({
+		show: z.enum(SHOWS).optional().catch(undefined),
+	}),
+	loader: ({ context }) => context.queryClient.ensureQueryData(peopleQuery()),
 	head: () => ({ meta: [{ title: pageTitle("People") }] }),
 	component: AdminPeoplePage,
 });
@@ -36,18 +41,19 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 	{ value: "admin", label: "Admin" },
 ];
 
+/** A select's value as the role it names, or nothing for anything else. */
+const roleFrom = (value: string): Role | undefined =>
+	ROLE_OPTIONS.find((o) => o.value === value)?.value;
+
 /** Everybody on the site: add them, set what they may do, or shut them out. */
 function AdminPeoplePage() {
-	const queryClient = useQueryClient();
 	const { session } = Route.useRouteContext();
-	const { data: people } = useSuspenseQuery(orpc.people.list.queryOptions());
+	const { data: people } = useSuspenseQuery(peopleQuery());
+	const { show = "all" } = Route.useSearch();
+	const navigate = Route.useNavigate();
 	const [query, setQuery] = useState("");
-	const [show, setShow] = useState<"all" | Role | "off">("all");
-	const refresh = () =>
-		queryClient.invalidateQueries({ queryKey: orpc.people.key() });
 
 	const shown = useMemo(() => {
-		const q = query.trim().toLowerCase();
 		return people.filter((p) => {
 			if (
 				show === "off"
@@ -56,20 +62,27 @@ function AdminPeoplePage() {
 			) {
 				return false;
 			}
-			return !q || p.name.toLowerCase().includes(q) || p.email.includes(q);
+			return matchesPerson(p, query);
 		});
 	}, [people, query, show]);
 	const count = (role: Role) => people.filter((p) => p.role === role).length;
 
 	return (
 		<div className="flex flex-col gap-7">
-			<AddPerson onAdded={refresh} />
+			<AddPerson />
 			<section className="flex flex-col gap-3.5">
 				<div className="flex flex-wrap items-center gap-2.5">
 					<PillTabs
 						label="Show"
 						value={show}
-						onChange={setShow}
+						onChange={(next) =>
+							navigate({
+								search: (prev) => ({
+									...prev,
+									show: next === "all" ? undefined : next,
+								}),
+							})
+						}
 						options={[
 							{ value: "all", label: "All", count: people.length },
 							{ value: "user", label: "Guests", count: count("user") },
@@ -96,12 +109,7 @@ function AdminPeoplePage() {
 				</div>
 				<div className="flex flex-col gap-2">
 					{shown.map((p) => (
-						<PersonRow
-							key={p.id}
-							person={p}
-							isYou={p.id === session.user.id}
-							onChange={refresh}
-						/>
+						<PersonRow key={p.id} person={p} isYou={p.id === session.user.id} />
 					))}
 				</div>
 			</section>
@@ -109,7 +117,7 @@ function AdminPeoplePage() {
 	);
 }
 
-function AddPerson({ onAdded }: { onAdded: () => void }) {
+function AddPerson() {
 	const [email, setEmail] = useState("");
 	const [name, setName] = useState("");
 	const [role, setRole] = useState<Role>("host");
@@ -121,9 +129,7 @@ function AddPerson({ onAdded }: { onAdded: () => void }) {
 				);
 				setEmail("");
 				setName("");
-				onAdded();
 			},
-			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
 	return (
@@ -162,7 +168,7 @@ function AddPerson({ onAdded }: { onAdded: () => void }) {
 					<NativeSelect
 						id="new-role"
 						value={role}
-						onChange={(e) => setRole(e.target.value as Role)}
+						onChange={(e) => setRole(roleFrom(e.target.value) ?? role)}
 						className="min-h-12 rounded-[14px] px-4"
 					>
 						{ROLE_OPTIONS.map((o) => (
@@ -180,47 +186,34 @@ function AddPerson({ onAdded }: { onAdded: () => void }) {
 	);
 }
 
-function PersonRow({
-	person: p,
-	isYou,
-	onChange,
-}: {
-	person: Person;
-	isYou: boolean;
-	onChange: () => void;
-}) {
-	const onError = (error: Error) => toast.error(error.message);
+function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 	const setRole = useMutation(
 		orpc.people.setRole.mutationOptions({
 			onSuccess: () => {
 				toast.success(
 					"Role changed. It can take a few minutes to show for them.",
 				);
-				onChange();
 			},
-			onError,
 		}),
 	);
 	const sendLink = useMutation(
 		orpc.people.sendLink.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(`Link sent.${r.dryRun ? DRY_RUN_SUFFIX : ""}`);
-				onChange();
 			},
-			onError,
 		}),
 	);
-	const deactivate = useMutation(
-		orpc.people.deactivate.mutationOptions({
+	const newLink = useMutation(
+		orpc.people.newLink.mutationOptions({
 			onSuccess: () => {
-				onChange();
+				toast.success(
+					"Their old link stopped working and they're signed out everywhere. Send them the new one.",
+				);
 			},
-			onError,
 		}),
 	);
-	const reactivate = useMutation(
-		orpc.people.reactivate.mutationOptions({ onSuccess: onChange, onError }),
-	);
+	const deactivate = useMutation(orpc.people.deactivate.mutationOptions());
+	const reactivate = useMutation(orpc.people.reactivate.mutationOptions());
 	const off = p.status === "deactivated";
 
 	return (
@@ -260,9 +253,10 @@ function PersonRow({
 				id={`role-${p.id}`}
 				value={p.role}
 				disabled={isYou || off || setRole.isPending}
-				onChange={(e) =>
-					setRole.mutate({ userId: p.id, role: e.target.value as Role })
-				}
+				onChange={(e) => {
+					const role = roleFrom(e.target.value);
+					if (role) setRole.mutate({ userId: p.id, role });
+				}}
 			>
 				{ROLE_OPTIONS.map((o) => (
 					<option key={o.value} value={o.value}>
@@ -290,6 +284,20 @@ function PersonRow({
 						>
 							Send link
 						</Button>
+						{isYou ? null : (
+							<ConfirmAction
+								confirm="Replace it"
+								pending={newLink.isPending}
+								onConfirm={(close) =>
+									newLink.mutate({ userId: p.id }, { onSuccess: close })
+								}
+								trigger={{
+									variant: "ghost",
+									size: "sm",
+									children: "New link",
+								}}
+							/>
+						)}
 						{isYou ? null : (
 							<ConfirmAction
 								confirm="Shut them out"
