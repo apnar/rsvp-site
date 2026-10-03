@@ -140,7 +140,7 @@ export default function SignInForm() {
 
 			<div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
 				<span className="text-haze">
-					No password? Most people don't. Use the link below.
+					No password? Most people don't. Use the email link above.
 				</span>
 				<Link to="/forgot-password">Forgot it?</Link>
 			</div>

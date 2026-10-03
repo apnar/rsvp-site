@@ -428,15 +428,16 @@ function useKeys(state: EditorState, dispatch: Dispatch<EditorAction>) {
 					"nudge",
 				);
 			} else if (
-				(ev.key === "]" || ev.key === "[") &&
+				(ev.code === "BracketRight" || ev.code === "BracketLeft") &&
 				selected.length === 1 &&
 				selected[0]
 			) {
+				// `code`, not `key`: Shift turns "]" into "}" and "[" into "{".
 				set(
 					restack(
 						doc,
 						selected[0],
-						ev.key === "]"
+						ev.code === "BracketRight"
 							? ev.shiftKey
 								? "top"
 								: "up"
