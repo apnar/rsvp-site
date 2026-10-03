@@ -70,7 +70,7 @@ pnpm run build            # vite build -> Worker bundle + assets
 pnpm run check            # biome check --write .  (format + lint + organize imports)
 pnpm exec biome ci .      # what CI runs; stricter than check (lints SVGs too)
 pnpm run check-types      # tsc --noEmit across the workspace
-pnpm run test             # vitest run in packages/db, packages/email, packages/api
+pnpm run test             # vitest run in packages/db, packages/email, packages/api, packages/design
 pnpm run deploy           # build + wrangler deploy (needs a TTY; see below)
 ```
 
@@ -91,9 +91,10 @@ pnpm --filter @rsvp-site/email exec vitest run src/links.test.ts
 pnpm --filter @rsvp-site/api exec vitest run -t "dueEmails"
 ```
 
-Only `packages/db`, `packages/email` and `packages/api` have tests — pure
-functions (templates, Brevo request shaping, link paths, address parsing,
-roles, headcount and potluck arithmetic, the email schedule's timezone maths).
+Only `packages/db`, `packages/email`, `packages/api` and `packages/design`
+have tests — pure functions (templates, Brevo request shaping, link paths,
+address parsing, roles, headcount and potluck arithmetic, the email
+schedule's timezone maths, design validation and text layout).
 Nothing in the test run touches D1 or the network.
 
 Database:
@@ -155,6 +156,15 @@ libraries; only `apps/web` builds):
   drizzle and `cloudflare:workers`), and the cron pass in `src/jobs/event-mail.ts`.
 - `packages/email` — pure template/Brevo code (`src/index.ts`) plus
   `src/worker.ts`, the only file there that touches the Worker env.
+- `packages/design` — invitation designs, pure: the zod schema
+  (`schema.ts`), the curated fonts (`fonts.ts`) and their generated
+  metrics (`metrics/`), placeholders, text layout (`text.ts`), the scene
+  every renderer draws (`scene.ts`), the page theme (`theme.ts`), stickers
+  and templates. No drizzle, no `cloudflare:workers`, no DOM, no pdf-lib:
+  the Worker validates with it and the browser renders with it.
+  `metrics/` and `stickers.ts` come from
+  `pnpm --filter web exec tsx scripts/gen-design-fonts.ts` (then
+  `pnpm run check` to format them); rerun it after changing `FONTS`.
 - `packages/env` — `env` re-exported from `cloudflare:workers`; the binding types
   in `env.d.ts` must be kept in sync with `apps/web/wrangler.jsonc`.
 - `packages/ui` — shared shadcn/base-ui primitives and the design tokens.

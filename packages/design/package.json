@@ -1,5 +1,5 @@
 {
-	"name": "@rsvp-site/api",
+	"name": "@rsvp-site/design",
 	"type": "module",
 	"exports": {
 		".": {
@@ -14,16 +14,6 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@orpc/client": "catalog:",
-		"@orpc/openapi": "catalog:",
-		"@orpc/server": "catalog:",
-		"@orpc/zod": "catalog:",
-		"@rsvp-site/auth": "workspace:*",
-		"@rsvp-site/db": "workspace:*",
-		"@rsvp-site/design": "workspace:*",
-		"@rsvp-site/email": "workspace:*",
-		"@rsvp-site/env": "workspace:*",
-		"drizzle-orm": "^0.45.2",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

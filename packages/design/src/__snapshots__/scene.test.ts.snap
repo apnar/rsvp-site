@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutCard > fills placeholders and lays the title out the same way every time 1`] = `
+[
+  "Ava turns nine",
+]
+`;
