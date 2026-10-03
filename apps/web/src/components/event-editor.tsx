@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { Outputs } from "@/lib/api-types";
+import { refreshCard } from "@/lib/design-card";
 import { coverSrc, plural } from "@/lib/format";
 import { client, orpc } from "@/utils/orpc";
 
@@ -263,6 +264,10 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 				userIds: pickedIds,
 			});
 		}
+		if (loaded?.hasDesign) {
+			// The card picture bakes in the date, place and title.
+			await refreshCard(id, true).catch(() => {});
+		}
 		if (notified > 0)
 			toast.success(`Told ${plural(notified, "guest")} about the change.`);
 		setCoverFile(null);
@@ -277,6 +282,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 		if (!eventId) return;
 		try {
 			await client.designs.setOn({ eventId, on });
+			if (on) await refreshCard(eventId, true).catch(() => {});
 			await refresh();
 		} catch (error) {
 			toast.error((error as Error).message);

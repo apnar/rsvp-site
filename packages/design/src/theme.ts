@@ -108,6 +108,8 @@ export type DesignEmailLook = {
 	text: string;
 	accent: string;
 	onAccent: string;
+	accent2: string;
+	onAccent2: string;
 	link: string;
 	headingStack: string;
 };
@@ -130,6 +132,8 @@ export function emailLook(
 		text: isLight(t.text) ? "#1f1930" : t.text,
 		accent,
 		onAccent: onColor(accent),
+		accent2: t.accent2,
+		onAccent2: onColor(t.accent2),
 		link: readable(t.accent2, WHITE, "#000000"),
 		headingStack: `"${FONTS[t.headingFont].label}", ${fallbackStack(t.headingFont)}`,
 	};

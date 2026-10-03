@@ -241,6 +241,8 @@ export type EventCard = {
 	dateLabel: string | null;
 	timeLabel: string | null;
 	coverKey: string | null;
+	/** The designed card's picture, when the design is on, and its page colour. */
+	card: { key: string; bg: string } | null;
 	hostLine: string;
 	totals: Totals;
 	potluck: PotluckLine[];
@@ -290,6 +292,10 @@ export async function cardsFor(
 		dateLabel: row.date ? formatDate(row.date) : null,
 		timeLabel: formatTimeRange(row.startTime, row.endTime),
 		coverKey: row.coverKey,
+		card:
+			row.designOn && row.cardKey && row.theme
+				? { key: row.cardKey, bg: row.theme.bg }
+				: null,
 		hostLine: row.hostLine,
 		totals: tally(guests.filter((g) => g.eventId === row.id)),
 		potluck: row.potluckEnabled

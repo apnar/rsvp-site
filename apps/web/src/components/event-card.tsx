@@ -4,7 +4,7 @@ import { cn } from "@rsvp-site/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { inDays } from "@/lib/format";
+import { designSrc, inDays } from "@/lib/format";
 
 import { Cover } from "./cover";
 import { ResponseBar, ResponseCounts } from "./response-bar";
@@ -17,6 +17,8 @@ export type CardEvent = {
 	dateLabel: string | null;
 	timeLabel: string | null;
 	coverKey: string | null;
+	/** The designed card's picture and its page colour, when the design is on. */
+	card?: { key: string; bg: string } | null;
 	totals: Totals;
 };
 
@@ -60,7 +62,21 @@ export function EventCard({
 	return (
 		<article className="group relative flex flex-col overflow-hidden rounded-[26px] border border-line bg-panel transition-colors hover:border-line-strong">
 			<div className="relative aspect-[16/10]">
-				<Cover coverKey={event.coverKey} />
+				{event.card ? (
+					<div
+						className="flex size-full items-center justify-center p-3"
+						style={{ background: event.card.bg }}
+					>
+						<img
+							src={designSrc(event.card.key)}
+							alt=""
+							loading="lazy"
+							className="block h-full w-auto max-w-full rounded-[4px] object-contain shadow-float"
+						/>
+					</div>
+				) : (
+					<Cover coverKey={event.coverKey} />
+				)}
 				{chip ? (
 					<span
 						className={cn(

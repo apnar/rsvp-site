@@ -148,6 +148,47 @@ export function listFooterText(): string {
 /** How the site names itself in running text. */
 export const SITE_LABEL = "Botch RSVP";
 
+/**
+ * An event's own design, as far as email can carry it. The card itself is
+ * a picture (mail clients can't be trusted with fonts or positioning);
+ * around it, the design's colours replace After Dark's. The body stays
+ * light for the same reason it always has. Every value here is a plain
+ * hex colour or a font stack from the design registry.
+ */
+export type EmailLook = {
+	/** The card drawn as an image, absolute and token-free. */
+	cardUrl: string | null;
+	/** What the card says, for mail that blocks images. */
+	cardAlt: string;
+	band: string;
+	ground: string;
+	text: string;
+	accent: string;
+	onAccent: string;
+	accent2: string;
+	onAccent2: string;
+	/** Links and the kicker: the second accent, made readable on white. */
+	link: string;
+	headingStack: string;
+};
+
+const pill = (bg: string, fg: string) =>
+	`display:inline-block; margin:0 6px 8px 0; padding:13px 22px; border-radius:999px; background:${bg}; color:${fg} !important; text-decoration:none; font-weight:800; font-size:15px;`;
+
+/**
+ * The body was built with After Dark's styles by the helpers above; a look
+ * swaps those for its own. The swaps are of strings this file wrote, so
+ * nothing anybody typed is touched (it is escaped, and never contains a
+ * style declaration).
+ */
+function restyle(html: string, look: EmailLook): string {
+	return html
+		.replaceAll(styles.button, pill(look.accent, look.onAccent))
+		.replaceAll(styles.buttonPink, pill(look.accent2, look.onAccent2))
+		.replaceAll(COLORS.pinkText, look.link)
+		.replaceAll(`color:${COLORS.ink}`, `color:${look.text}`);
+}
+
 export function layout(input: {
 	title: string;
 	kicker?: string;
@@ -156,7 +197,11 @@ export function layout(input: {
 	footerHtml?: string;
 	/** An absolute, token-free image URL shown full width under the band. */
 	coverUrl?: string | null;
+	/** The event's design, which replaces the band and the cover. */
+	look?: EmailLook | null;
 }): string {
+	const look = input.look ?? null;
+	if (look) return lookLayout(input, look);
 	const cover = input.coverUrl
 		? `<img src="${escapeHtml(input.coverUrl)}" alt="" width="560" style="${styles.cover}">`
 		: "";
@@ -178,6 +223,43 @@ ${cover}
 ${input.bodyHtml}
 </div>
 ${input.footerHtml ?? ""}
+</div>
+</body>
+</html>`;
+}
+
+function lookLayout(
+	input: {
+		title: string;
+		kicker?: string;
+		heading: string;
+		bodyHtml: string;
+		footerHtml?: string;
+	},
+	look: EmailLook,
+): string {
+	// The card is the header: no wordmark band, no cover. Without a card
+	// image yet, a band in the design's own colour stands in.
+	const top = look.cardUrl
+		? `<img src="${escapeHtml(look.cardUrl)}" alt="${escapeHtml(look.cardAlt)}" width="560" style="${styles.cover} border-radius:20px 20px 0 0;">`
+		: `<div style="background:${look.band}; padding:18px 24px; border-radius:20px 20px 0 0;"><p style="${styles.wordmark}">${escapeHtml(look.cardAlt)}</p></div>`;
+	return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>${escapeHtml(input.title)}</title>
+</head>
+<body style="margin:0; padding:0; background:${look.ground}; ${FONT} color:${look.text};">
+<div style="${styles.wrap}">
+${top}
+<div style="${styles.card}">
+<p style="${styles.kicker.replace(COLORS.pinkText, look.link)}">${escapeHtml(input.kicker ?? SENDER.name)}</p>
+<h1 style="${styles.h1} font-family:${look.headingStack.replaceAll('"', "'")};">${escapeHtml(input.heading)}</h1>
+${restyle(input.bodyHtml, look)}
+</div>
+${input.footerHtml ? restyle(input.footerHtml, look) : ""}
 </div>
 </body>
 </html>`;

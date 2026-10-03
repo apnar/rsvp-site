@@ -42,6 +42,7 @@ import {
 } from "@/components/design/inspector";
 import { Layers } from "@/components/design/layers";
 import { TemplatePicker } from "@/components/design/template-picker";
+import { refreshCard } from "@/lib/design-card";
 import { fontFaceCss } from "@/lib/design-font-css";
 import { designSrc } from "@/lib/format";
 import { layoutsFor } from "@/lib/paper-sizes";
@@ -510,6 +511,12 @@ function Editor({
 			setVersion(r.version);
 			setSavedDoc(doc);
 			setSavedOn(designOn);
+			// The picture emails and link previews show, from what was saved.
+			refreshCard(eventId).catch(() =>
+				toast.error(
+					"The card picture for emails didn't update. Save again to retry.",
+				),
+			);
 			toast.success(
 				designOn
 					? "Saved. Guests see this card."

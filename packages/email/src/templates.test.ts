@@ -199,3 +199,48 @@ describe("auth templates", () => {
 		expect(reset.text).toContain(url);
 	});
 });
+
+describe("an event with its own design", () => {
+	const look = {
+		cardUrl: `${site}/api/designs/e1/card-1.jpg`,
+		cardAlt: 'Ava\'s "big" night · Sat, Oct 24',
+		band: "#1d2b6b",
+		ground: "#eef0f8",
+		text: "#1f1930",
+		accent: "#ffd84d",
+		onAccent: "#14101f",
+		accent2: "#2b6bff",
+		onAccent2: "#ffffff",
+		link: "#1d4fd8",
+		headingStack: '"Playfair Display", Georgia, serif',
+	};
+	const designed = inviteEmail({ ...facts, look }, null);
+
+	it("opens on the card instead of the band and the cover", () => {
+		expect(designed.html).toContain(`<img src="${look.cardUrl}"`);
+		expect(designed.html).not.toContain("covers/abc.jpg");
+		expect(designed.html).not.toContain("botch<span");
+	});
+
+	it("describes the card for mail that blocks images", () => {
+		expect(designed.html).toContain(`alt="${escapeHtml(look.cardAlt)}"`);
+	});
+
+	it("colours the buttons and links with the design", () => {
+		expect(designed.html).toContain("background:#ffd84d; color:#14101f");
+		expect(designed.html).toContain("color:#1d4fd8");
+		expect(designed.html).not.toContain("#C6FF3D");
+		expect(designed.html).not.toContain("#B0236C");
+	});
+
+	it("keeps the per-recipient placeholders intact", () => {
+		expect(designed.html).toContain(PARAM.key);
+		expect(designed.html).toContain(PARAM.unsubscribeUrl);
+	});
+
+	it("leaves an undesigned event exactly as it was", () => {
+		expect(inviteEmail({ ...facts, look: null }, null).html).toBe(
+			inviteEmail(facts, null).html,
+		);
+	});
+});

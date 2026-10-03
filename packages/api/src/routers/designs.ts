@@ -1,7 +1,9 @@
 import { ORPCError } from "@orpc/server";
 import type { Person } from "@rsvp-site/db/people";
 import { event, eventDesign } from "@rsvp-site/db/schema/event";
+import { basisOf } from "@rsvp-site/design/basis";
 import {
+	type Design,
 	designPrefix,
 	parseDesign,
 	refsBelongTo,
@@ -11,7 +13,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Context } from "../context";
-import { type EventRow, hostAccessTo } from "../events";
+import { designValues, type EventRow, hostAccessTo } from "../events";
 import { hostProcedure } from "../index";
 
 type Env = Context["env"];
@@ -232,7 +234,8 @@ export const designsRouter = {
 	/**
 	 * Save the design. `version` is the one the editor started from: if a
 	 * co-host saved in between, this one is refused rather than writing
-	 * over theirs. A new card image, when the browser drew one, comes along.
+	 * over theirs. The card image follows (cardInputs, then uploadCard),
+	 * drawn by the browser from what was saved.
 	 */
 	save: hostProcedure
 		.input(
@@ -240,8 +243,6 @@ export const designsRouter = {
 				doc: z.unknown(),
 				version: z.number().int().min(0),
 				designOn: z.boolean(),
-				card: cardFile.optional(),
-				basis: basis.optional(),
 			}),
 		)
 		.handler(async ({ context, input }) => {
@@ -298,29 +299,52 @@ export const designsRouter = {
 				});
 			}
 
-			const cardKey = input.card
-				? await putCard(context.env, row.id, input.card, context.me.id)
-				: row.cardKey;
 			await context.db
 				.update(event)
-				.set({
-					designOn: input.designOn,
-					theme: design.theme,
-					cardKey,
-					cardBasis: input.card ? (input.basis ?? null) : row.cardBasis,
-				})
+				.set({ designOn: input.designOn, theme: design.theme })
 				.where(eq(event.id, row.id));
 			await prune(
 				context.env,
 				row.id,
-				new Set([...refs, ...(cardKey ? [cardKey] : [])]),
+				new Set([...refs, ...(row.cardKey ? [row.cardKey] : [])]),
 			);
-			return { version, cardKey };
+			return { version };
 		}),
 
 	/**
-	 * A fresh card image after the event's facts changed under it (the
-	 * date moved, the title was reworded). The design itself is unchanged.
+	 * What the browser needs to draw the card image, and whether the one
+	 * stored was drawn from something else: an older version, or facts
+	 * that have changed since.
+	 */
+	cardInputs: hostProcedure
+		.input(idInput)
+		.handler(async ({ context, input }) => {
+			const { event: row } = await hostAccessTo(
+				context.db,
+				context.me,
+				input.eventId,
+			);
+			const saved = await context.db
+				.select({ doc: eventDesign.doc, version: eventDesign.version })
+				.from(eventDesign)
+				.where(eq(eventDesign.eventId, row.id))
+				.get();
+			if (!saved) return null;
+			const values = designValues(row, "");
+			const basis = basisOf(saved.version, values);
+			return {
+				// Parsed on the way in (save).
+				doc: saved.doc as Design,
+				values,
+				basis,
+				stale: row.cardBasis !== basis,
+			};
+		}),
+
+	/**
+	 * A card image, drawn by the browser from cardInputs after a save, or
+	 * after the event's facts changed under it (the date moved, the title
+	 * was reworded). `basis` is what it was drawn from.
 	 */
 	uploadCard: hostProcedure
 		.input(idInput.extend({ card: cardFile, basis }))

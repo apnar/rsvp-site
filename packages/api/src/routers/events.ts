@@ -62,7 +62,13 @@ import {
 import { canInviteOthers, invitesLeft } from "../guest-invites";
 import { headcount, openSlots, tally } from "../headcount";
 import { hostProcedure, personProcedure, publicProcedure } from "../index";
-import { eventFacts, sendInvites, sendToList, signInUrl } from "../mail";
+import {
+	eventFacts,
+	lookOf,
+	sendInvites,
+	sendToList,
+	signInUrl,
+} from "../mail";
 import { startsAt } from "../schedule";
 import { formatDate, formatTimeRange, todayOnSite } from "../time";
 import { deleteDesignMedia, needsQr } from "./designs";
@@ -1038,6 +1044,11 @@ export const eventsRouter = {
 		.handler(async ({ context, input }) => {
 			const row = await findEventByShareToken(context.db, input.token);
 			if (!row?.shareEnabled || row.status === "draft") throw notFound();
+			const design =
+				row.designOn && row.theme && row.cardKey
+					? { theme: row.theme, cardKey: row.cardKey }
+					: null;
+			const image = design ? design.cardKey : row.coverKey;
 			return {
 				eventId: row.id,
 				title: row.title,
@@ -1045,6 +1056,11 @@ export const eventsRouter = {
 				coverKey: row.coverKey,
 				status: row.status,
 				...labelsOf(row),
+				// The card the host designed, as its picture: the share page is
+				// public, and the full card is laid out only for people on the list.
+				design,
+				/** For link previews in chat apps, which need an absolute URL. */
+				imageUrl: image ? coverUrl(siteUrl(), image) : null,
 			};
 		}),
 
@@ -1096,6 +1112,7 @@ export const eventsRouter = {
 					title: row.title,
 					url: signInUrl(token.linkToken, `/i/${row.shareToken}`),
 					coverUrl: row.coverKey ? coverUrl(siteUrl(), row.coverKey) : null,
+					look: lookOf(row),
 				}),
 				{ tags: ["join_link"] },
 			);

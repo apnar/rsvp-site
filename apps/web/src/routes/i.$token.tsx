@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 import { Wordmark } from "@/components/brand";
 import { Cover } from "@/components/cover";
+import { DesignTheme } from "@/components/design/design-theme";
+import { designSrc } from "@/lib/format";
 import { client, orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/i/$token")({
@@ -33,6 +35,21 @@ export const Route = createFileRoute("/i/$token")({
 					: "You're invited · Botch RSVP",
 			},
 			{ name: "robots", content: "noindex" },
+			...(loaderData
+				? [
+						{ property: "og:title", content: loaderData.title },
+						{ property: "og:type", content: "website" },
+						...(loaderData.imageUrl
+							? [
+									{ property: "og:image", content: loaderData.imageUrl },
+									{ name: "twitter:card", content: "summary_large_image" },
+								]
+							: []),
+					]
+				: []),
+			...(loaderData?.design
+				? [{ name: "theme-color", content: loaderData.design.theme.bg }]
+				: []),
 		],
 	}),
 	component: Teaser,
@@ -55,15 +72,32 @@ function Teaser() {
 
 	return (
 		<section className="relative flex min-h-svh flex-col overflow-hidden">
-			<div className="absolute inset-0">
-				<Cover coverKey={data.coverKey} />
-			</div>
-			<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_30%,transparent)_35%,var(--color-night)_85%)]" />
+			{data.design ? (
+				<DesignTheme theme={data.design.theme} />
+			) : (
+				<>
+					<div className="absolute inset-0">
+						<Cover coverKey={data.coverKey} />
+					</div>
+					<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_30%,transparent)_35%,var(--color-night)_85%)]" />
+				</>
+			)}
 			<header className="relative mx-auto flex w-full max-w-[1180px] items-center px-[clamp(16px,4vw,40px)] py-[18px]">
 				<Link to="/" className="no-underline">
 					<Wordmark />
 				</Link>
 			</header>
+			{data.design ? (
+				<div className="relative mx-auto w-full max-w-[1180px] px-[clamp(16px,4vw,40px)] pb-6">
+					<img
+						src={designSrc(data.design.cardKey)}
+						alt={[data.title, data.dateLabel, data.timeLabel]
+							.filter(Boolean)
+							.join(" · ")}
+						className="mx-auto block h-auto max-h-[78vh] w-auto max-w-full rounded-[6px] shadow-float"
+					/>
+				</div>
+			) : null}
 			<div className="relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)] pb-[clamp(32px,6vw,72px)]">
 				<span className="self-start rounded-full bg-lime px-3.5 py-1.5 font-bold text-[13px] text-on-lime uppercase tracking-[0.08em]">
 					{canceled ? "Canceled" : "You're invited"}

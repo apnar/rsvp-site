@@ -19,6 +19,7 @@ import { Page, PageHead } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import type { Outputs } from "@/lib/api-types";
+import { refreshCard } from "@/lib/design-card";
 import { ago, initials, plural, shortDate } from "@/lib/format";
 import {
 	type CardFormat,
@@ -61,6 +62,11 @@ function GuestListPage() {
 	const nowMs = Date.parse(data.now);
 	const t = data.totals;
 	const e = data.event;
+	// A backstop for the card picture emails show: if the facts moved some
+	// way the editor didn't catch, it is drawn again here, quietly.
+	useEffect(() => {
+		if (e.designFormat) refreshCard(eventId, true).catch(() => {});
+	}, [eventId, e.designFormat]);
 	const published = e.status === "published";
 	const notInvited = data.guests.filter(
 		(g) => g.invitedAt === null && !g.unreachable,

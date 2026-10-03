@@ -7,7 +7,9 @@ import {
 import { NO_EMAIL_DOMAIN } from "@rsvp-site/db/schema/auth";
 import { type EmailKind, emailSend } from "@rsvp-site/db/schema/email";
 import { eventGuest } from "@rsvp-site/db/schema/event";
+import { emailLook } from "@rsvp-site/design/theme";
 import type {
+	EmailLook,
 	EventFacts,
 	ListRecipient,
 	ListResult,
@@ -15,6 +17,7 @@ import type {
 	SendOutcome,
 } from "@rsvp-site/email";
 import {
+	cardUrl,
 	hostAlertEmail,
 	inviteEmail,
 	messageEmail,
@@ -58,7 +61,22 @@ export function eventFacts(row: EventRow): EventFacts {
 		coverKey: row.coverKey,
 		siteUrl: siteUrl(),
 		...labelsOf(row),
+		look: lookOf(row),
 	};
+}
+
+/** The event's design as email can carry it, when the design is on. */
+export function lookOf(row: EventRow): EmailLook | null {
+	if (!row.designOn || !row.theme) return null;
+	const labels = labelsOf(row);
+	const alt = [row.title, labels.dateLabel, labels.timeLabel]
+		.filter(Boolean)
+		.join(" · ");
+	return emailLook(
+		row.theme,
+		row.cardKey ? cardUrl(siteUrl(), row.cardKey) : null,
+		alt,
+	);
 }
 
 export function renderMessage(input: {

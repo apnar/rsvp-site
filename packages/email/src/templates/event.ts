@@ -18,6 +18,7 @@ import {
 } from "../links";
 import {
 	buttons,
+	type EmailLook,
 	escapeHtml,
 	type Fact,
 	factsTable,
@@ -43,6 +44,8 @@ export type EventFacts = {
 	deadlineLabel: string | null;
 	coverKey: string | null;
 	siteUrl: string;
+	/** The event's design, when it is on: the card replaces band and cover. */
+	look?: EmailLook | null;
 };
 
 const P = "margin:0 0 14px; font-size:16px; line-height:1.5;";
@@ -115,6 +118,7 @@ function render(facts: EventFacts, parts: Parts): Rendered {
 		kicker: parts.kicker,
 		heading: parts.heading,
 		coverUrl: facts.coverKey ? coverUrl(facts.siteUrl, facts.coverKey) : null,
+		look: facts.look,
 		bodyHtml: [
 			para(parts.lead),
 			parts.facts.length > 0 ? factsTable(parts.facts) : "",
@@ -391,6 +395,7 @@ export function joinLinkEmail(input: {
 	title: string;
 	url: string;
 	coverUrl: string | null;
+	look?: EmailLook | null;
 }): Rendered {
 	const subject = `Your invite: ${input.title}`;
 	const html = layout({
@@ -398,6 +403,7 @@ export function joinLinkEmail(input: {
 		kicker: "Here's your link",
 		heading: input.title,
 		coverUrl: input.coverUrl,
+		look: input.look,
 		bodyHtml: [
 			para(
 				"Tap below to see the details and answer. The link signs you in, so keep it to yourself.",
