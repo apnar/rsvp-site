@@ -208,7 +208,7 @@ async function invitePayload(
 	]);
 	const myName = access.guest
 		? (guests.find((g) => g.id === access.guest?.id)?.name ?? "")
-		: "Your guest";
+		: "your guest";
 	const card = await designedCard(db, row, "web", myName);
 	const totals = tally(guests);
 	const mine = access.guest;
@@ -423,7 +423,7 @@ export const eventsRouter = {
 				.from(eventDesign)
 				.where(eq(eventDesign.eventId, row.id))
 				.get(),
-			designedCard(context.db, row, "web", "Your guest"),
+			designedCard(context.db, row, "web", "your guest"),
 		]);
 		return {
 			event: row,

@@ -32,7 +32,7 @@ export const nightSociety: Template = {
 		goose: { file: "goose.png", iw: 116, ih: 102 },
 		geese: { file: "geese.png", iw: 324, ih: 196 },
 	},
-	build: ({ assets, paper }) => {
+	build: ({ assets }) => {
 		const art = (
 			id: string,
 			name: string,
@@ -161,7 +161,7 @@ export const nightSociety: Template = {
 					color: GOLD,
 					shadow: { color: "#060504", dx: 1, dy: 2 },
 				},
-				line("subtitle", 688.5, 32.4, "An Evening Gathering", {
+				line("subtitle", 688.5, 32.4, "An Evening Gathering for {guest}", {
 					weight: 700,
 					italic: true,
 				}),
@@ -173,14 +173,37 @@ export const nightSociety: Template = {
 					w: 276,
 					size: 15.7,
 				}),
+				// The QR code is part of the card whether or not the event is on
+				// paper yet (it only ever prints), set in the frame's gold: dark
+				// modules on a gold tile, which phones read as readily as black
+				// on white, inside a thin gold rule like the frame's.
+				{
+					id: "qrrule",
+					type: "rect",
+					name: "QR frame",
+					x: 692,
+					y: 967,
+					w: 166,
+					h: 166,
+					stroke: FRAME,
+					strokeWidth: 1.6,
+					show: "paper",
+				},
 				...qrBlock(
-					paper,
+					true,
 					{ x: 700, y: 975, size: 150 },
-					{ font: "merriweather", color: TEXT },
+					{ font: "merriweather", color: GOLD },
 				).map((el) =>
 					el.type === "qr"
-						? { ...el, fg: "#14130f", bg: "#e8dcc3" }
-						: { ...el, size: 17, tracking: 0.08, italic: true },
+						? { ...el, fg: "#17140f", bg: GOLD }
+						: {
+								...el,
+								y: el.y + 12,
+								text: "Scan to reply",
+								size: 17,
+								tracking: 0.08,
+								italic: true,
+							},
 				),
 			],
 		};
