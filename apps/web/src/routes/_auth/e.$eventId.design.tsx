@@ -144,6 +144,7 @@ function Designer() {
 	// A new editor only when a template is picked; a refetch of the saved
 	// design must never reset work in progress.
 	const [epoch, setEpoch] = useState(0);
+	const copied = useRef(new Map<string, Placed>());
 
 	return (
 		<div className="flex flex-col">
@@ -156,6 +157,7 @@ function Designer() {
 					paper={e.paper}
 					faces={faces}
 					values={values}
+					copied={copied.current}
 					canCancel={first !== null}
 					onCancel={() => setPicking(false)}
 					onPick={(d) => {
@@ -221,6 +223,7 @@ function PickTemplate({
 	canCancel,
 	onCancel,
 	onPick,
+	copied,
 }: {
 	eventId: string;
 	title: string;
@@ -231,14 +234,17 @@ function PickTemplate({
 	canCancel: boolean;
 	onCancel: () => void;
 	onPick: (d: Design) => void;
+	/**
+	 * A template's pictures, once copied into this event, by
+	 * "<template>/<name>": picking it again in the same visit reuses them
+	 * (and the server would hand back the same ones anyway).
+	 */
+	copied: Map<string, Placed>;
 }) {
 	const [ctx, setCtx] = useState<TemplateContext | null>(
 		coverKey ? null : { cover: null, paper },
 	);
 	const [preparing, setPreparing] = useState<string | null>(null);
-	// A template's pictures, once copied into this event, by "<template>/<name>":
-	// picking it again in the same visit reuses them.
-	const copied = useRef(new Map<string, Placed>());
 	const pick = async (t: Template) => {
 		if (!ctx) return;
 		if (!t.assets) {
@@ -250,7 +256,7 @@ function PickTemplate({
 			const assets: Record<string, Placed> = {};
 			for (const [name, a] of Object.entries(t.assets)) {
 				const key = `${t.id}/${name}`;
-				let placed = copied.current.get(key);
+				let placed = copied.get(key);
 				if (!placed) {
 					// The template's own pictures become this event's, like any
 					// upload, so the design names only images the event holds.
@@ -260,7 +266,7 @@ function PickTemplate({
 					const file = new File([blob], a.file, { type: blob.type });
 					const { ref } = await client.designs.uploadImage({ eventId, file });
 					placed = { ref, iw: a.iw, ih: a.ih };
-					copied.current.set(key, placed);
+					copied.set(key, placed);
 				}
 				assets[name] = placed;
 			}
@@ -533,7 +539,7 @@ function Editor({
 				});
 				const size = { iw: shrunk.width, ih: shrunk.height };
 				sizes.current.set(ref, size);
-				setImages((list) => [ref, ...list]);
+				setImages((list) => [ref, ...list.filter((r) => r !== ref)]);
 				return { ref, ...size };
 			} catch (error) {
 				toast.error((error as Error).message);

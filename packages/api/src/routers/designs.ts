@@ -120,6 +120,22 @@ async function prune(env: Env, eventId: string, keep: Set<string>) {
 	if (drop.length > 0) await env.MEDIA.delete(drop);
 }
 
+/**
+ * The key of an object already holding exactly these bytes, if any. R2's
+ * etag for a single upload is the MD5 of its content, so this costs one
+ * digest and no reads.
+ */
+async function alreadyHeld(
+	held: readonly R2Object[],
+	bytes: ArrayBuffer,
+): Promise<string | null> {
+	const digest = await crypto.subtle.digest("MD5", bytes);
+	const md5 = [...new Uint8Array(digest)]
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
+	return held.find((o) => o.etag === md5)?.key ?? null;
+}
+
 /** Every object under an event's design prefix, for deleting the event. */
 export async function deleteDesignMedia(env: Env, eventId: string) {
 	const keys = (await listPrefix(env, designPrefix(eventId))).map((o) => o.key);
@@ -170,6 +186,11 @@ export const designsRouter = {
 			const held = (await listPrefix(context.env, prefix)).filter(
 				(o) => !isCard(o.key, prefix),
 			);
+			const bytes = await (input.file as unknown as Blob).arrayBuffer();
+			// The same picture again (a template picked twice, a photo added
+			// twice) is the one already here, not another copy toward the limit.
+			const same = await alreadyHeld(held, bytes);
+			if (same) return { ref: same };
 			if (held.length >= MAX_IMAGES) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: `An event holds up to ${MAX_IMAGES} images. Remove one you aren't using first.`,
@@ -177,7 +198,6 @@ export const designsRouter = {
 			}
 			const type = input.file.type as (typeof IMAGE_TYPES)[number];
 			const key = `${prefix}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
-			const bytes = await (input.file as unknown as Blob).arrayBuffer();
 			await context.env.MEDIA.put(key, bytes, {
 				httpMetadata: { contentType: type },
 				customMetadata: { eventId: row.id, uploadedBy: context.me.id },
@@ -222,9 +242,16 @@ export const designsRouter = {
 			if (!row.coverKey) return { ref: null };
 			const cover = await context.env.MEDIA.get(row.coverKey);
 			if (!cover) return { ref: null };
+			const prefix = designPrefix(row.id);
+			const bytes = await cover.arrayBuffer();
+			const held = (await listPrefix(context.env, prefix)).filter(
+				(o) => !isCard(o.key, prefix),
+			);
+			const same = await alreadyHeld(held, bytes);
+			if (same) return { ref: same };
 			const ext = row.coverKey.split(".").pop() ?? "jpg";
-			const key = `${designPrefix(row.id)}${crypto.randomUUID()}.${ext}`;
-			await context.env.MEDIA.put(key, await cover.arrayBuffer(), {
+			const key = `${prefix}${crypto.randomUUID()}.${ext}`;
+			await context.env.MEDIA.put(key, bytes, {
 				httpMetadata: cover.httpMetadata,
 				customMetadata: { eventId: row.id, uploadedBy: context.me.id },
 			});
