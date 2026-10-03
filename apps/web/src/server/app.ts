@@ -1,5 +1,6 @@
-import { onError } from "@orpc/server";
+import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
+import { SimpleCsrfProtectionHandlerPlugin } from "@orpc/server/plugins";
 import { createContext } from "@rsvp-site/api/context";
 import { appRouter } from "@rsvp-site/api/routers/index";
 import { createAuth } from "@rsvp-site/auth";
@@ -11,8 +12,14 @@ import { brevoWebhook } from "./brevo-webhook";
 import { unsubscribe } from "./unsubscribe";
 
 const rpcHandler = new RPCHandler(appRouter, {
+	// Cookies are SameSite=Lax, and every other botch.com site is the same
+	// site, so a form posted from one would arrive signed in. The client
+	// sends a header no cross-origin form can.
+	plugins: [new SimpleCsrfProtectionHandlerPlugin()],
 	interceptors: [
 		onError((error) => {
+			// NOT_FOUND, FORBIDDEN and the like are answers, not faults.
+			if (error instanceof ORPCError && error.status < 500) return;
 			console.error(error);
 		}),
 	],

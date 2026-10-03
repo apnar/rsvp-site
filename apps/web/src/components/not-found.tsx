@@ -45,10 +45,16 @@ export function RouteError({ error: raw }: ErrorComponentProps) {
 			/>
 		);
 	}
+	// The API's own refusals are written for people; a fault is masked on
+	// the server as "Internal server error", which says nothing useful here.
+	const fault =
+		code === "INTERNAL_SERVER_ERROR" ||
+		!error.message ||
+		error.message === "Internal server error";
 	return (
 		<NotFound
 			title="That went sideways."
-			body={error.message || "Something broke. Try again in a moment."}
+			body={fault ? "Something broke. Try again in a moment." : error.message}
 		/>
 	);
 }
