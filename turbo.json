@@ -4,7 +4,7 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", ".dev.vars", "wrangler.jsonc"],
+			"inputs": ["$TURBO_DEFAULT$", "wrangler.jsonc"],
 			"outputs": ["dist/**"]
 		},
 		"check-types": {
@@ -31,8 +31,6 @@
 			"cache": false,
 			"interactive": true
 		},
-		"test": {
-			"dependsOn": ["^build"]
-		}
+		"test": {}
 	}
 }
