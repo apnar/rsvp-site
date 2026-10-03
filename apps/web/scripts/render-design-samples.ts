@@ -29,12 +29,11 @@ const COVER_REF =
 	"designs/00000000-0000-0000-0000-000000000000/00000000-0000-0000-0000-000000000001.png";
 const coverBytes = coverFile ? readFileSync(coverFile) : null;
 // A PNG's width and height sit at bytes 16 and 20 of its header.
-const cover = coverBytes
-	? {
-			ref: COVER_REF,
-			iw: coverBytes.readUInt32BE(16),
-			ih: coverBytes.readUInt32BE(20),
-		}
+const header = coverBytes
+	? new DataView(coverBytes.buffer, coverBytes.byteOffset)
+	: null;
+const cover = header
+	? { ref: COVER_REF, iw: header.getUint32(16), ih: header.getUint32(20) }
 	: null;
 const images = new Map<string, ArrayBuffer>(
 	coverBytes
