@@ -13,8 +13,24 @@ describe("warningsOf", async () => {
 	const faces = await loadFaces(facesOf(base));
 	const opts = { paper: true, shareLink: false, faces, values: SAMPLE_VALUES };
 
-	it("has nothing to say about the After Dark template", () => {
-		expect(warningsOf(base, opts)).toEqual([]);
+	it("has nothing to say about any template as it comes", async () => {
+		const cover = {
+			ref: "designs/0b4f7a52-6a3e-4d4b-9a51-2f5e8f1c9d10/5d1c6e0a-3b7f-4c2e-8f9a-1b2c3d4e5f60.jpg",
+			iw: 1600,
+			ih: 1000,
+		};
+		for (const t of TEMPLATES) {
+			for (const paper of [true, false]) {
+				for (const c of [null, cover]) {
+					const d = fromTemplate(t, { cover: c, paper });
+					const all = await loadFaces(facesOf(d));
+					expect(
+						warningsOf(d, { ...opts, paper, faces: all }),
+						`${t.id} ${paper} ${!!c}`,
+					).toEqual([]);
+				}
+			}
+		}
 	});
 
 	it("blocks a paper card without a QR code", () => {

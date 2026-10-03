@@ -1,0 +1,165 @@
+import type { ElementInput } from "../schema";
+import { qrBlock } from "./parts";
+import type { Template } from "./types";
+
+const CREAM = "#fff3e0";
+const ORANGE = "#ffb347";
+const HOT = "#ff5ea8";
+
+/** Landscape, a purple glow, a disco ball and a title with a drop shadow. */
+export const disco: Template = {
+	id: "disco",
+	label: "Disco night",
+	build: ({ cover, paper }) => {
+		const art: ElementInput[] = cover
+			? [
+					{
+						id: "photo",
+						type: "image",
+						x: 640,
+						y: 120,
+						w: 300,
+						h: 300,
+						ref: cover.ref,
+						iw: cover.iw,
+						ih: cover.ih,
+						mask: "circle",
+						border: { color: ORANGE, width: 10 },
+					},
+				]
+			: [
+					{
+						id: "ball",
+						type: "sticker",
+						x: 680,
+						y: 60,
+						w: 260,
+						h: 260,
+						sticker: "disco-ball",
+						color: CREAM,
+					},
+					{
+						id: "s1",
+						type: "sticker",
+						x: 630,
+						y: 300,
+						w: 80,
+						h: 80,
+						sticker: "sparkle",
+						color: ORANGE,
+					},
+					{
+						id: "s2",
+						type: "sticker",
+						x: 900,
+						y: 320,
+						w: 60,
+						h: 60,
+						sticker: "star-four",
+						color: HOT,
+					},
+				];
+		return {
+			v: 1,
+			format: "5x7l",
+			background: {
+				kind: "radial",
+				cx: 0.8,
+				cy: 0.25,
+				r: 0.9,
+				stops: [
+					{ at: 0, color: "#6a2c91" },
+					{ at: 0.55, color: "#2a1446" },
+					{ at: 1, color: "#140a24" },
+				],
+			},
+			theme: {
+				bg: "#1a0f2e",
+				panel: "#2a1a45",
+				text: CREAM,
+				accent: ORANGE,
+				accent2: HOT,
+				headingFont: "shrikhand",
+				bodyFont: "righteous",
+			},
+			elements: [
+				...art,
+				{
+					id: "intro",
+					type: "text",
+					x: 60,
+					y: 60,
+					w: 560,
+					h: 40,
+					text: "Get down with us at",
+					font: "righteous",
+					size: 30,
+					tracking: 0.05,
+					upper: true,
+					color: ORANGE,
+				},
+				{
+					id: "title",
+					type: "text",
+					x: 60,
+					y: 110,
+					w: 580,
+					h: 280,
+					text: "{title}",
+					font: "shrikhand",
+					size: 96,
+					lineHeight: 1,
+					valign: "middle",
+					fit: "shrink",
+					color: CREAM,
+					shadow: { color: HOT, dx: 6, dy: 6 },
+				},
+				{
+					id: "when",
+					type: "text",
+					x: 60,
+					y: 410,
+					w: paper ? 600 : 880,
+					h: 90,
+					text: paper ? "{date}\n{time}" : "{date} · {time}",
+					font: "righteous",
+					size: 32,
+					lineHeight: 1.25,
+					fit: "shrink",
+					color: CREAM,
+				},
+				{
+					id: "where",
+					type: "text",
+					x: 60,
+					y: paper ? 515 : 470,
+					w: paper ? 600 : 880,
+					h: paper ? 70 : 100,
+					text: "{location}",
+					font: "righteous",
+					size: 30,
+					lineHeight: 1.2,
+					fit: "shrink",
+					color: CREAM,
+				},
+				{
+					id: "rsvp",
+					type: "text",
+					x: 60,
+					y: 600,
+					w: paper ? 560 : 880,
+					h: 40,
+					text: "RSVP by {rsvp by} · Hosted by {host}",
+					font: "righteous",
+					size: 24,
+					color: ORANGE,
+				},
+				...qrBlock(
+					paper,
+					{ x: 740, y: 440, size: 180 },
+					{ font: "righteous", color: ORANGE },
+				),
+			],
+		};
+	},
+};

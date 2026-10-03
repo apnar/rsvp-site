@@ -2,10 +2,10 @@
  * Renders every template at every print layout to PDFs, from Node, to
  * look at the paper side of designs without a browser:
  *
- *   pnpm --filter web exec tsx scripts/render-design-samples.ts <out dir>
+ *   pnpm --filter web exec tsx scripts/render-design-samples.ts <out dir> [cover.png]
  *
  * Also renders the classic (undesigned) card, so both layouts are checked
- * the same way. Images are left out: templates are drawn without a cover.
+ * the same way. Given a PNG, templates are drawn with it as the cover too.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -22,7 +22,33 @@ import { layoutPaperInvites } from "../src/lib/paper-pdf-core";
 import { layoutsFor } from "../src/lib/paper-sizes";
 
 const out = process.argv[2];
-if (!out) throw new Error("Usage: render-design-samples.ts <out dir>");
+if (!out)
+	throw new Error("Usage: render-design-samples.ts <out dir> [cover.png]");
+const coverFile = process.argv[3];
+const COVER_REF =
+	"designs/00000000-0000-0000-0000-000000000000/00000000-0000-0000-0000-000000000001.png";
+const coverBytes = coverFile ? readFileSync(coverFile) : null;
+// A PNG's width and height sit at bytes 16 and 20 of its header.
+const cover = coverBytes
+	? {
+			ref: COVER_REF,
+			iw: coverBytes.readUInt32BE(16),
+			ih: coverBytes.readUInt32BE(20),
+		}
+	: null;
+const images = new Map<string, ArrayBuffer>(
+	coverBytes
+		? [
+				[
+					COVER_REF,
+					coverBytes.buffer.slice(
+						coverBytes.byteOffset,
+						coverBytes.byteOffset + coverBytes.byteLength,
+					) as ArrayBuffer,
+				],
+			]
+		: [],
+);
 mkdirSync(out, { recursive: true });
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -63,8 +89,14 @@ const guests = [
 	},
 ];
 
-for (const t of TEMPLATES) {
-	const design = fromTemplate(t, { cover: null, paper: true });
+for (const [t, withCover] of TEMPLATES.flatMap((t) => [
+	[t, false] as const,
+	...(cover ? [[t, true] as const] : []),
+])) {
+	const design = fromTemplate(t, {
+		cover: withCover ? cover : null,
+		paper: true,
+	});
 	const keys = facesOf(design);
 	const faces = await loadFaces(keys);
 	const fonts = new Map(keys.map((k) => [k, woff(k)]));
@@ -75,10 +107,13 @@ for (const t of TEMPLATES) {
 				values: SAMPLE_VALUES,
 				guests,
 				layout,
-				assets: { faces, fonts, images: new Map() },
+				assets: { faces, fonts, images },
 				title: SAMPLE_VALUES.title,
 			});
-			const file = join(out, `${t.id}-${layout}${bleed ? "-bleed" : ""}.pdf`);
+			const file = join(
+				out,
+				`${t.id}${withCover ? "-cover" : ""}-${layout}${bleed ? "-bleed" : ""}.pdf`,
+			);
 			writeFileSync(file, pdf);
 			console.log(file, `${Math.round(pdf.length / 1024)} KB`);
 		}
