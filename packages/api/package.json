@@ -15,9 +15,7 @@
 	},
 	"dependencies": {
 		"@orpc/client": "catalog:",
-		"@orpc/openapi": "catalog:",
 		"@orpc/server": "catalog:",
-		"@orpc/zod": "catalog:",
 		"@rsvp-site/auth": "workspace:*",
 		"@rsvp-site/db": "workspace:*",
 		"@rsvp-site/design": "workspace:*",

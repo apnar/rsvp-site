@@ -1,8 +1,5 @@
-import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
-import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { createContext } from "@rsvp-site/api/context";
 import { appRouter } from "@rsvp-site/api/routers/index";
 import { createAuth } from "@rsvp-site/auth";
@@ -14,19 +11,6 @@ import { brevoWebhook } from "./brevo-webhook";
 import { unsubscribe } from "./unsubscribe";
 
 const rpcHandler = new RPCHandler(appRouter, {
-	interceptors: [
-		onError((error) => {
-			console.error(error);
-		}),
-	],
-});
-
-const openApiHandler = new OpenAPIHandler(appRouter, {
-	plugins: [
-		new OpenAPIReferencePlugin({
-			schemaConverters: [new ZodToJsonSchemaConverter()],
-		}),
-	],
 	interceptors: [
 		onError((error) => {
 			console.error(error);
@@ -48,17 +32,6 @@ app.on(["GET", "POST"], "/auth/*", (c) => createAuth().handler(c.req.raw));
 app.all("/rpc/*", async (c, next) => {
 	const result = await rpcHandler.handle(c.req.raw, {
 		prefix: "/api/rpc",
-		context: await createContext({ req: c.req.raw }),
-	});
-	if (result.matched) {
-		return c.newResponse(result.response.body, result.response);
-	}
-	await next();
-});
-
-app.all("/reference/*", async (c, next) => {
-	const result = await openApiHandler.handle(c.req.raw, {
-		prefix: "/api/reference",
 		context: await createContext({ req: c.req.raw }),
 	});
 	if (result.matched) {

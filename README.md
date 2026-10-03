@@ -42,7 +42,6 @@ The whole site runs as a single Cloudflare Worker on the free plan:
 - The Hono API lives inside the same Worker at `/api/*` (`apps/web/src/server/app.ts`, mounted by `apps/web/src/routes/api/$.ts`). Same origin means no CORS and ordinary same-site cookies.
   - `/api/auth/*` - Better Auth
   - `/api/rpc` - oRPC (the web app calls this from the browser and calls the router directly during SSR)
-  - `/api/reference` - OpenAPI reference
   - `/api/unsubscribe/:token` - one-click unsubscribe pages for list emails
   - `/api/brevo/webhook` - Brevo tells the app who unsubscribed, bounced or complained
   - `/api/health` - health check
