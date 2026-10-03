@@ -17,8 +17,7 @@
 	"dependencies": {
 		"@rsvp-site/design": "workspace:*",
 		"@rsvp-site/env": "workspace:*",
-		"drizzle-orm": "^0.45.2",
-		"zod": "catalog:"
+		"drizzle-orm": "catalog:"
 	},
 	"devDependencies": {
 		"@rsvp-site/config": "workspace:*",

@@ -14,14 +14,13 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@orpc/client": "catalog:",
 		"@orpc/server": "catalog:",
 		"@rsvp-site/auth": "workspace:*",
 		"@rsvp-site/db": "workspace:*",
 		"@rsvp-site/design": "workspace:*",
 		"@rsvp-site/email": "workspace:*",
 		"@rsvp-site/env": "workspace:*",
-		"drizzle-orm": "^0.45.2",
+		"drizzle-orm": "catalog:",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

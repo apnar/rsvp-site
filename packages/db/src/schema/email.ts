@@ -28,11 +28,11 @@ export const EMAIL_KINDS = [
 export type EmailKind = (typeof EMAIL_KINDS)[number];
 
 /**
- * Who a send went to. `guests` is some or all of one event's list; `everyone`
- * is every active person who has not unsubscribed. `active` is the old name
- * for `everyone`, kept because the column's default and old rows use it.
+ * Who a send went to. `guests` is some or all of one event's list, `hosts`
+ * its hosts (reply alerts and digests), and `everyone` every active person
+ * who has not unsubscribed.
  */
-export const EMAIL_AUDIENCES = ["guests", "everyone", "active"] as const;
+export const EMAIL_AUDIENCES = ["guests", "hosts", "everyone"] as const;
 export type EmailAudience = (typeof EMAIL_AUDIENCES)[number];
 
 /** One row per list send (not per recipient), for the admin log and debugging. */

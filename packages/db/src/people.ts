@@ -21,19 +21,13 @@ export function normalizeEmail(raw: string): string {
 	return raw.trim().toLowerCase();
 }
 
+const ADDRESS = /[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/g;
+
 /**
  * Pull addresses out of whatever a host pasted: commas, semicolons, new
  * lines, "Name <a@b.c>". Lower-cased and deduplicated, in the order given.
  * Anything without an @ and a dot after it is dropped rather than guessed at.
- */
-export function parseEmails(raw: string): string[] {
-	return parseAddresses(raw).map((a) => a.email);
-}
-
-const ADDRESS = /[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/g;
-
-/**
- * The same, keeping the name a mail client puts in front of an address --
+ * The name a mail client puts in front of an address is kept --
  * `"Linh Nguyen" <linh@x.com>` or `Linh Nguyen <linh@x.com>` -- so a pasted
  * list makes accounts with real names rather than the part before the @.
  */

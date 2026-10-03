@@ -8,23 +8,9 @@ host.
 
 It started as a copy of [pickup-bball](https://github.com/apnar/pickup-bball), the app behind a weekly basketball run, and the bones are the same: one Cloudflare Worker, D1, R2, Better Auth with emailed sign-in links, and Brevo for the mail. The model on top is its own: per-event guest lists, three roles, and emails scheduled from each event's own dates.
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Hono, ORPC, and more.
+## Stack
 
-## Features
-
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Start** - SSR framework with TanStack Router
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives and the After Dark design tokens live in `packages/ui`
-- **Hono** - API routes, served from inside the TanStack Start Worker
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
-- **Cloudflare Workers** - Hosting for the whole site, single Worker
-- **Drizzle** - TypeScript-first ORM
-- **Cloudflare D1** - SQLite database
-- **Authentication** - Better-Auth
-- **Email** - Brevo transactional API, called with plain `fetch` from `packages/email`
-- **Turborepo** - Optimized monorepo build system
-- **Biome** - Linting and formatting
+TanStack Start (React, SSR) and a Hono API in one Cloudflare Worker, with oRPC between them; D1 through Drizzle; R2 for pictures; Better Auth with this site's own emailed sign-in links; Brevo for mail; Tailwind with the After Dark tokens in `packages/ui`; Turborepo, Biome and Vitest. The scaffold came from [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack).
 
 ## Getting Started
 
@@ -243,7 +229,7 @@ rsvp-site/
 - `pnpm run build`: Build the Worker and static assets
 - `pnpm run check-types`: Check TypeScript types across the workspace
 - `pnpm run check`: Run Biome formatting and linting
-- `pnpm run test`: Run the unit tests (email templates, Brevo client, address parsing, roles, headcount, and the schedule's timezone maths)
+- `pnpm run test`: Run the unit tests (email templates, Brevo client, address parsing, roles, headcount, the schedule's timezone maths, event rules, and the invitation designs: validation, text layout, the scene, the editor)
 - `pnpm run db:generate`: Generate a D1 migration from the Drizzle schema
 - `pnpm run db:migrate:local`: Apply migrations to the local D1 database
 - `pnpm run db:migrate:remote`: Apply migrations to the production D1 database

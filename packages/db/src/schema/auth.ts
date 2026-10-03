@@ -8,19 +8,12 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 /**
- * How somebody first landed on the list. `host` is an address a host typed
+ * How somebody first landed on the list. `admin` is an address an admin
+ * added (or the first admin, inserted by hand); `host` is one a host typed
  * into an event or a contact group; `guest` is a friend a guest invited;
- * `link` is somebody who came in through an event's share link. The rest
- * predate events.
+ * `link` is somebody who came in through an event's share link.
  */
-export const PERSON_SOURCES = [
-	"admin",
-	"host",
-	"guest",
-	"link",
-	"site",
-	"signup",
-] as const;
+export const PERSON_SOURCES = ["admin", "host", "guest", "link"] as const;
 export type PersonSource = (typeof PERSON_SOURCES)[number];
 
 /**
@@ -43,8 +36,8 @@ export type Role = (typeof ROLES)[number];
 export const PERSON_STATUSES = ["active", "deactivated"] as const;
 export type PersonStatus = (typeof PERSON_STATUSES)[number];
 
-/** Who last moved somebody between statuses. Only an admin does now. */
-export const STATUS_ACTORS = ["self", "admin", "mail"] as const;
+/** Who last moved somebody between statuses: only ever an admin. */
+export const STATUS_ACTORS = ["admin"] as const;
 export type StatusActor = (typeof STATUS_ACTORS)[number];
 
 /**

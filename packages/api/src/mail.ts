@@ -41,6 +41,9 @@ export function hostTotals(guests: readonly GuestCounts[]) {
 	return { ...t, expecting: headcount(t) };
 }
 
+/** Sends that go to an event's hosts rather than its guests. */
+const HOST_KINDS = new Set<EmailKind>(["host_alert", "host_digest"]);
+
 export type ListSendResult = ListResult & { sendId: string };
 
 export function unsubscribeUrl(token: string): string {
@@ -131,7 +134,11 @@ export async function sendToList(
 		kind: opts.kind,
 		eventId: opts.eventId ?? null,
 		subject: opts.rendered.subject,
-		audience: opts.onlyPersonIds ? "guests" : "everyone",
+		audience: HOST_KINDS.has(opts.kind)
+			? "hosts"
+			: opts.onlyPersonIds
+				? "guests"
+				: "everyone",
 		recipientCount: result.attempted,
 		failedCount: result.attempted - result.sent,
 		messageIds: JSON.stringify(result.messageIds),

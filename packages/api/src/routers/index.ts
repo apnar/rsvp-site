@@ -1,6 +1,3 @@
-import type { RouterClient } from "@orpc/server";
-
-import { publicProcedure } from "../index";
 import { accountRouter } from "./account";
 import { contactsRouter } from "./contacts";
 import { designsRouter } from "./designs";
@@ -10,9 +7,6 @@ import { mailRouter } from "./mail";
 import { peopleRouter } from "./people";
 
 export const appRouter = {
-	healthCheck: publicProcedure.handler(() => {
-		return "OK";
-	}),
 	account: accountRouter,
 	events: eventsRouter,
 	designs: designsRouter,
@@ -22,4 +16,3 @@ export const appRouter = {
 	mail: mailRouter,
 };
 export type AppRouter = typeof appRouter;
-export type AppRouterClient = RouterClient<typeof appRouter>;

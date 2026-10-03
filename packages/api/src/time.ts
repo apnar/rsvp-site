@@ -20,19 +20,6 @@ export function todayOnSite(now: Date = new Date()): string {
 	return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-/** Current wall-clock time on the site's clock as HH:MM (24-hour). */
-export function timeOnSite(now: Date = new Date()): string {
-	const parts = new Intl.DateTimeFormat("en-US", {
-		timeZone: SITE_TIMEZONE,
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-	}).formatToParts(now);
-	const get = (type: Intl.DateTimeFormatPartTypes) =>
-		parts.find((p) => p.type === type)?.value ?? "00";
-	return `${get("hour")}:${get("minute")}`;
-}
-
 /**
  * How far the site's wall clock is ahead of UTC at a given instant, in ms.
  * Reading the zone's own rendering of the instant is the only way to ask

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAddresses, parseEmails, parseGuestLines } from "./people";
+import { parseAddresses, parseGuestLines } from "./people";
+
+const parseEmails = (raw: string) => parseAddresses(raw).map((a) => a.email);
+
 import { canHost, isAdmin, roleOf } from "./roles";
 
 describe("parseEmails", () => {

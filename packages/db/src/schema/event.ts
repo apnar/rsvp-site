@@ -110,11 +110,6 @@ export const event = sqliteTable(
 			.notNull()
 			.default(false),
 		/**
-		 * Whether guests the host invited may invite others, and how many
-		 * each. People a guest adds can never add anyone themselves; that
-		 * one level is what keeps a party from inviting itself to strangers.
-		 */
-		/**
 		 * Paper invitations: the host prints a card per guest with a QR code,
 		 * and no guest email goes out until `emails_released_at` is set by the
 		 * host's "Start emails" -- so the card arrives first. Chosen while the
@@ -122,6 +117,11 @@ export const event = sqliteTable(
 		 */
 		paper: integer("paper", { mode: "boolean" }).notNull().default(false),
 		emailsReleasedAt: integer("emails_released_at", { mode: "timestamp_ms" }),
+		/**
+		 * Whether guests the host invited may invite others, and how many
+		 * each. People a guest adds can never add anyone themselves; that
+		 * one level is what keeps a party from inviting itself to strangers.
+		 */
 		guestInvites: integer("guest_invites", { mode: "boolean" })
 			.notNull()
 			.default(false),
