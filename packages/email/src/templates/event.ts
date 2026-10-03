@@ -18,6 +18,7 @@ import {
 } from "../links";
 import {
 	buttons,
+	COLORS,
 	type EmailLook,
 	escapeHtml,
 	type Fact,
@@ -26,7 +27,12 @@ import {
 	listFooter,
 	listFooterText,
 	muted,
+	type Palette,
+	paletteOf,
+	para,
 	paragraphs,
+	paraHtml,
+	pasteLink,
 } from "../render";
 
 export type EventFacts = {
@@ -48,33 +54,31 @@ export type EventFacts = {
 	look?: EmailLook | null;
 };
 
-const P = "margin:0 0 14px; font-size:16px; line-height:1.5;";
-
-function para(text: string): string {
-	return `<p style="${P}">${escapeHtml(text)}</p>`;
-}
-
-const ANSWER_LABEL: Record<RsvpAnswer, string> = {
-	yes: "Yes!",
+const ANSWER_WORD: Record<RsvpAnswer, string> = {
+	yes: "Yes",
 	maybe: "Maybe",
 	no: "Can't",
 };
 
+/** The one-tap button and link wording: the word, with a cheer on yes. */
+const answerLabel = (a: RsvpAnswer) => (a === "yes" ? "Yes!" : ANSWER_WORD[a]);
+
 const ANSWERS: readonly RsvpAnswer[] = ["yes", "maybe", "no"];
 
-function answerButtons(facts: EventFacts): string {
+function answerButtons(facts: EventFacts, pal: Palette): string {
 	return buttons(
 		ANSWERS.map((a) => ({
-			label: ANSWER_LABEL[a],
+			label: answerLabel(a),
 			href: rsvpLink(facts.siteUrl, facts.eventId, a),
 			tone: a === "yes" ? "lime" : "outline",
 		})),
+		pal,
 	);
 }
 
 function answerLines(facts: EventFacts): string[] {
 	return ANSWERS.map(
-		(a) => `${ANSWER_LABEL[a]}: ${rsvpLink(facts.siteUrl, facts.eventId, a)}`,
+		(a) => `${answerLabel(a)}: ${rsvpLink(facts.siteUrl, facts.eventId, a)}`,
 	);
 }
 
@@ -113,6 +117,7 @@ type Parts = {
 
 function render(facts: EventFacts, parts: Parts): Rendered {
 	const open = eventLink(facts.siteUrl, facts.eventId);
+	const pal = paletteOf(facts.look);
 	const html = layout({
 		title: parts.subject,
 		kicker: parts.kicker,
@@ -121,16 +126,16 @@ function render(facts: EventFacts, parts: Parts): Rendered {
 		look: facts.look,
 		bodyHtml: [
 			para(parts.lead),
-			parts.facts.length > 0 ? factsTable(parts.facts) : "",
+			parts.facts.length > 0 ? factsTable(parts.facts, pal) : "",
 			parts.bodyExtra ?? "",
 			parts.answers
-				? answerButtons(facts)
-				: buttons([{ label: "Open the invite", href: open }]),
-			parts.tail ? muted(escapeHtml(parts.tail)) : "",
+				? answerButtons(facts, pal)
+				: buttons([{ label: "Open the invite", href: open }], pal),
+			parts.tail ? muted(escapeHtml(parts.tail), pal) : "",
 		]
 			.filter(Boolean)
 			.join("\n"),
-		footerHtml: listFooter(),
+		footerHtml: listFooter(pal),
 	});
 	const text = [
 		parts.heading,
@@ -235,9 +240,10 @@ export function updateEmail(
 	changes: { label: string; was: string; now: string }[],
 ): Rendered {
 	const html = changes
-		.map(
-			(c) =>
-				`<p style="${P}"><strong>${escapeHtml(c.label)}:</strong> ${escapeHtml(c.now)} <span style="color:#5E5577; text-decoration:line-through;">${escapeHtml(c.was)}</span></p>`,
+		.map((c) =>
+			paraHtml(
+				`<strong>${escapeHtml(c.label)}:</strong> ${escapeHtml(c.now)} <span style="color:${COLORS.muted}; text-decoration:line-through;">${escapeHtml(c.was)}</span>`,
+			),
 		)
 		.join("\n");
 	return render(facts, {
@@ -246,7 +252,7 @@ export function updateEmail(
 		heading: facts.title,
 		lead: "The hosts changed some details.",
 		facts: [],
-		bodyExtra: `${html}\n${factsTable(eventFacts(facts, false))}`,
+		bodyExtra: `${html}\n${factsTable(eventFacts(facts, false), paletteOf(facts.look))}`,
 		textExtra: [
 			...changes.map((c) => `${c.label}: ${c.now} (was ${c.was})`),
 			"",
@@ -287,27 +293,21 @@ export type Totals = {
 	maybe: number;
 	no: number;
 	waiting: number;
-	adults: number;
-	kids: number;
-};
-
-const RESPONSE_WORD: Record<RsvpAnswer, string> = {
-	yes: "Yes",
-	maybe: "Maybe",
-	no: "Can't",
+	/** People coming, counted by the caller (packages/api headcount). */
+	expecting: number;
 };
 
 function partyLine(r: ReplyLine): string {
-	if (r.response === "no") return RESPONSE_WORD.no;
+	if (r.response === "no") return ANSWER_WORD.no;
 	const people = [
 		`${r.adults} ${r.adults === 1 ? "adult" : "adults"}`,
 		...(r.kids > 0 ? [`${r.kids} ${r.kids === 1 ? "kid" : "kids"}`] : []),
 	];
-	return `${RESPONSE_WORD[r.response]} · ${people.join(", ")}`;
+	return `${ANSWER_WORD[r.response]} · ${people.join(", ")}`;
 }
 
 function totalsLine(t: Totals): string {
-	return `${t.yes} yes · ${t.maybe} maybe · ${t.no} can't · ${t.waiting} waiting · expecting ${t.adults + t.kids}`;
+	return `${t.yes} yes · ${t.maybe} maybe · ${t.no} can't · ${t.waiting} waiting · expecting ${t.expecting}`;
 }
 
 function guestListLink(facts: EventFacts): string {
@@ -325,7 +325,7 @@ function hostRender(
 	const rows = replies
 		.map(
 			(r) =>
-				`<tr><td style="padding:6px 14px 6px 0; font-weight:700; vertical-align:top;">${escapeHtml(r.name)}</td><td style="padding:6px 0; vertical-align:top;">${escapeHtml(partyLine(r))}${r.note.trim() ? `<br><span style="color:#5E5577;">"${escapeHtml(r.note.trim())}"</span>` : ""}</td></tr>`,
+				`<tr><td style="padding:6px 14px 6px 0; font-weight:700; vertical-align:top;">${escapeHtml(r.name)}</td><td style="padding:6px 0; vertical-align:top;">${escapeHtml(partyLine(r))}${r.note.trim() ? `<br><span style="color:${COLORS.muted};">"${escapeHtml(r.note.trim())}"</span>` : ""}</td></tr>`,
 		)
 		.join("");
 	const html = layout({
@@ -334,7 +334,7 @@ function hostRender(
 		heading,
 		bodyHtml: [
 			`<table role="presentation" style="margin:0 0 18px; border-collapse:collapse; font-size:16px; line-height:1.4;">${rows}</table>`,
-			`<p style="${P}">${escapeHtml(totalsLine(totals))}</p>`,
+			para(totalsLine(totals)),
 			buttons([{ label: "Guest list", href: list }]),
 		].join("\n"),
 		footerHtml: listFooter(),
@@ -364,7 +364,7 @@ export function hostAlertEmail(
 ): Rendered {
 	return hostRender(
 		facts,
-		`${reply.name}: ${RESPONSE_WORD[reply.response]} · ${facts.title}`,
+		`${reply.name}: ${ANSWER_WORD[reply.response]} · ${facts.title}`,
 		`${reply.name} answered.`,
 		[reply],
 		totals,
@@ -398,6 +398,7 @@ export function joinLinkEmail(input: {
 	look?: EmailLook | null;
 }): Rendered {
 	const subject = `Your invite: ${input.title}`;
+	const pal = paletteOf(input.look);
 	const html = layout({
 		title: subject,
 		kicker: "Here's your link",
@@ -408,11 +409,9 @@ export function joinLinkEmail(input: {
 			para(
 				"Tap below to see the details and answer. The link signs you in, so keep it to yourself.",
 			),
-			buttons([{ label: "Open the invite", href: input.url }]),
-			muted(
-				`Or paste this into a browser:<br><a href="${escapeHtml(input.url)}" style="color:#B0236C; word-break:break-all;">${escapeHtml(input.url)}</a>`,
-			),
-			muted("Didn't ask for this? Ignore it and nothing happens."),
+			buttons([{ label: "Open the invite", href: input.url }], pal),
+			pasteLink(input.url, pal),
+			muted("Didn't ask for this? Ignore it and nothing happens.", pal),
 		].join("\n"),
 	});
 	const text = [

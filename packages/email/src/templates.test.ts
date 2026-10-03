@@ -38,8 +38,7 @@ const totals: Totals = {
 	maybe: 1,
 	no: 1,
 	waiting: 4,
-	adults: 6,
-	kids: 2,
+	expecting: 8,
 };
 
 describe("the event emails", () => {

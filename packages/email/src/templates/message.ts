@@ -6,6 +6,7 @@ import {
 	listFooter,
 	listFooterText,
 	paragraphs,
+	SITE_LABEL,
 } from "../render";
 
 export type MessageInput = {
@@ -19,7 +20,7 @@ export function messageEmail(input: MessageInput): Rendered {
 	const siteLink = emailLink(input.siteUrl, "/");
 	const html = layout({
 		title: input.subject,
-		kicker: "From Botch RSVP",
+		kicker: `From ${SITE_LABEL}`,
 		heading: input.subject,
 		bodyHtml: [paragraphs(input.body), button("Open the site", siteLink)].join(
 			"\n",

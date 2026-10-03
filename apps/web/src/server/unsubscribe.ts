@@ -4,12 +4,18 @@ import {
 	resubscribe,
 	unsubscribe as unsubscribePerson,
 } from "@rsvp-site/db/people";
-import { COLORS, escapeHtml, layout } from "@rsvp-site/email";
+import {
+	COLORS,
+	escapeHtml,
+	layout,
+	muted,
+	paraHtml,
+	SITE_LABEL,
+} from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { Hono } from "hono";
 
 const CTA = `display:inline-block; padding:13px 22px; border-radius:999px; background:${COLORS.lime}; color:${COLORS.night}; border:0; font-weight:800; font-size:15px; cursor:pointer;`;
-const P = "margin:0 0 14px; font-size:16px; line-height:1.5;";
 
 function page(input: {
 	heading: string;
@@ -21,7 +27,7 @@ function page(input: {
 		title: input.heading,
 		kicker: "Your email",
 		heading: input.heading,
-		bodyHtml: `<p style="${P}">${input.body}</p>${input.formHtml ?? ""}<p style="${P} color:${COLORS.muted}; font-size:14px;"><a href="${escapeHtml(input.home)}" style="color:${COLORS.pinkText};">Back to the site</a></p>`,
+		bodyHtml: `${paraHtml(input.body)}${input.formHtml ?? ""}${muted(`<a href="${escapeHtml(input.home)}" style="color:${COLORS.pinkText};">Back to the site</a>`)}`,
 	});
 }
 
@@ -69,7 +75,7 @@ unsubscribe.get("/:token", async (c) => {
 		return html(
 			page({
 				heading: "You're already unsubscribed.",
-				body: `${escapeHtml(person.email)} gets no email from Botch RSVP. Want invitations by email again?`,
+				body: `${escapeHtml(person.email)} gets no email from ${SITE_LABEL}. Want invitations by email again?`,
 				formHtml: button(`${base}/back`, "Email me again"),
 				home,
 			}),
@@ -106,7 +112,7 @@ unsubscribe.post("/:token", async (c) => {
 	return html(
 		page({
 			heading: "Unsubscribed.",
-			body: `${escapeHtml(person.email)} won't get email from Botch RSVP. Changed your mind? One tap undoes it.`,
+			body: `${escapeHtml(person.email)} won't get email from ${SITE_LABEL}. Changed your mind? One tap undoes it.`,
 			formHtml: button(`/api/unsubscribe/${token}/back`, "Email me again"),
 			home,
 		}),

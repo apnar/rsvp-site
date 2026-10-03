@@ -1,5 +1,8 @@
 import type { Rendered } from "../brevo";
-import { button, escapeHtml, layout, muted } from "../render";
+import { button, layout, muted, para, pasteLink, SITE_LABEL } from "../render";
+
+const INTRO =
+	"When a host invites you, the invitation lands here with one-tap answers, and every invite you have is on the site.";
 
 export type WelcomeInput = { name: string | null; url: string };
 
@@ -10,15 +13,13 @@ export type WelcomeInput = { name: string | null; url: string };
 export function welcomeEmail(input: WelcomeInput): Rendered {
 	const greeting = input.name ? `${input.name}, you` : "You";
 	const html = layout({
-		title: "Welcome to Botch RSVP",
+		title: `Welcome to ${SITE_LABEL}`,
 		kicker: "Welcome",
 		heading: "Your way in.",
 		bodyHtml: [
-			`<p style="margin:0 0 14px; font-size:16px; line-height:1.5;">${escapeHtml(greeting)} have an account on Botch RSVP. When a host invites you, the invitation lands here with one-tap answers, and every invite you have is on the site.</p>`,
+			para(`${greeting} have an account on ${SITE_LABEL}. ${INTRO}`),
 			button("Open the site", input.url),
-			muted(
-				`Or paste this into a browser:<br><a href="${escapeHtml(input.url)}" style="color:#B0236C; word-break:break-all;">${escapeHtml(input.url)}</a>`,
-			),
+			pasteLink(input.url),
 			muted(
 				"That link is your key: it signs you in, every time, no password. Which also means don't forward it unless you want somebody else answering as you.",
 			),
@@ -28,7 +29,7 @@ export function welcomeEmail(input: WelcomeInput): Rendered {
 		].join("\n"),
 	});
 	const text = [
-		`${greeting} have an account on Botch RSVP. When a host invites you, the invitation lands here with one-tap answers, and every invite you have is on the site.`,
+		`${greeting} have an account on ${SITE_LABEL}. ${INTRO}`,
 		"",
 		input.url,
 		"",
@@ -36,5 +37,5 @@ export function welcomeEmail(input: WelcomeInput): Rendered {
 		"",
 		"Want a password instead? Set one on your account page. The links keep working either way.",
 	].join("\n");
-	return { subject: "Your Botch RSVP link", html, text };
+	return { subject: `Your ${SITE_LABEL} link`, html, text };
 }

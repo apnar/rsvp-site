@@ -114,7 +114,6 @@ describe("createMailer", () => {
 		expect(bodies[0].messageVersions[1]).toEqual({
 			to: [{ email: "p1@example.com", name: "Guest 1" }],
 			params: {
-				name: "Guest 1",
 				unsubscribeUrl: "https://rsvp.botch.com/api/unsubscribe/t1",
 				key: "k1",
 			},

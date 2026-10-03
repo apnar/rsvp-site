@@ -67,7 +67,6 @@ function versionsFor(recipients: ListRecipient[]): MessageVersion[] {
 	return recipients.map((r) => ({
 		to: [{ email: r.email, name: r.name }],
 		params: {
-			name: r.name ?? "",
 			unsubscribeUrl: r.unsubscribeUrl,
 			key: r.linkToken ?? "",
 		},
