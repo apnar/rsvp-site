@@ -19,6 +19,8 @@ import {
 	type PaperGuest,
 } from "./paper-pdf-core";
 import type { PaperSize } from "./paper-sizes";
+import { saveFile } from "./save-file";
+import { scaleImage } from "./shrink-image";
 
 export async function bytes(url: string): Promise<ArrayBuffer> {
 	const res = await fetch(url);
@@ -32,19 +34,15 @@ export async function bytes(url: string): Promise<ArrayBuffer> {
  */
 async function coverJpeg(coverKey: string): Promise<ArrayBuffer | null> {
 	try {
-		const blob = await (await fetch(`/api/${coverKey}`)).blob();
-		const bitmap = await createImageBitmap(blob);
-		const canvas = document.createElement("canvas");
-		const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
-		canvas.width = Math.round(bitmap.width * scale);
-		canvas.height = Math.round(bitmap.height * scale);
-		canvas
-			.getContext("2d")
-			?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-		const jpeg = await new Promise<Blob | null>((resolve) =>
-			canvas.toBlob(resolve, "image/jpeg", 0.88),
+		const { blob } = await scaleImage(
+			await (await fetch(`/api/${coverKey}`)).blob(),
+			{
+				max: 1800,
+				type: "image/jpeg",
+				quality: 0.88,
+			},
 		);
-		return jpeg ? jpeg.arrayBuffer() : null;
+		return blob.arrayBuffer();
 	} catch {
 		return null;
 	}
@@ -70,15 +68,10 @@ export async function buildPaperInvites(input: {
 	});
 }
 
-/** Hand the browser a file to save. */
+/** Hand the browser a PDF to save. */
 export function download(data: Uint8Array, fileName: string) {
-	const url = URL.createObjectURL(
+	saveFile(
 		new Blob([data as Uint8Array<ArrayBuffer>], { type: "application/pdf" }),
+		fileName.replace(/[\\/:*?"<>|]+/g, "").trim() || "invites.pdf",
 	);
-	const link = document.createElement("a");
-	link.href = url;
-	link.download =
-		fileName.replace(/[\\/:*?"<>|]+/g, "").trim() || "invites.pdf";
-	link.click();
-	setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

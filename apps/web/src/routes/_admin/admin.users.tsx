@@ -11,7 +11,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Avatar } from "@/components/brand";
+import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
+import { NativeSelect } from "@/components/native-select";
 import { Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import type { Outputs } from "@/lib/api-types";
@@ -33,9 +35,6 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 	{ value: "host", label: "Host" },
 	{ value: "admin", label: "Admin" },
 ];
-
-const SELECT =
-	"min-h-10 cursor-pointer rounded-full border border-line-strong bg-night px-3 py-2 text-[14px] text-ink hover:border-haze focus-visible:border-lime";
 
 /** Everybody on the site: add them, set what they may do, or shut them out. */
 function AdminPeoplePage() {
@@ -160,18 +159,18 @@ function AddPerson({ onAdded }: { onAdded: () => void }) {
 					/>
 				</Field>
 				<Field label="Role" htmlFor="new-role">
-					<select
+					<NativeSelect
 						id="new-role"
 						value={role}
 						onChange={(e) => setRole(e.target.value as Role)}
-						className={cn(SELECT, "min-h-12 rounded-[14px] px-4")}
+						className="min-h-12 rounded-[14px] px-4"
 					>
 						{ROLE_OPTIONS.map((o) => (
 							<option key={o.value} value={o.value}>
 								{o.label}
 							</option>
 						))}
-					</select>
+					</NativeSelect>
 				</Field>
 			</div>
 			<Button type="submit" className="self-start" disabled={add.isPending}>
@@ -190,7 +189,6 @@ function PersonRow({
 	isYou: boolean;
 	onChange: () => void;
 }) {
-	const [confirm, setConfirm] = useState(false);
 	const onError = (error: Error) => toast.error(error.message);
 	const setRole = useMutation(
 		orpc.people.setRole.mutationOptions({
@@ -215,7 +213,6 @@ function PersonRow({
 	const deactivate = useMutation(
 		orpc.people.deactivate.mutationOptions({
 			onSuccess: () => {
-				setConfirm(false);
 				onChange();
 			},
 			onError,
@@ -259,21 +256,20 @@ function PersonRow({
 			<label htmlFor={`role-${p.id}`} className="sr-only">
 				Role for {p.name}
 			</label>
-			<select
+			<NativeSelect
 				id={`role-${p.id}`}
 				value={p.role}
 				disabled={isYou || off || setRole.isPending}
 				onChange={(e) =>
 					setRole.mutate({ userId: p.id, role: e.target.value as Role })
 				}
-				className={SELECT}
 			>
 				{ROLE_OPTIONS.map((o) => (
 					<option key={o.value} value={o.value}>
 						{o.label}
 					</option>
 				))}
-			</select>
+			</NativeSelect>
 			<span className="flex flex-wrap gap-1.5">
 				{off ? (
 					<Button
@@ -294,32 +290,19 @@ function PersonRow({
 						>
 							Send link
 						</Button>
-						{isYou ? null : confirm ? (
-							<>
-								<Button
-									variant="destructive"
-									size="sm"
-									disabled={deactivate.isPending}
-									onClick={() => deactivate.mutate({ userId: p.id })}
-								>
-									Shut them out
-								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => setConfirm(false)}
-								>
-									Keep
-								</Button>
-							</>
-						) : (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setConfirm(true)}
-							>
-								Deactivate
-							</Button>
+						{isYou ? null : (
+							<ConfirmAction
+								confirm="Shut them out"
+								pending={deactivate.isPending}
+								onConfirm={(close) =>
+									deactivate.mutate({ userId: p.id }, { onSuccess: close })
+								}
+								trigger={{
+									variant: "ghost",
+									size: "sm",
+									children: "Deactivate",
+								}}
+							/>
 						)}
 					</>
 				)}

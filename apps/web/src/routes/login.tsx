@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { Notice } from "@/components/notice";
 import SignInForm from "@/components/sign-in-form";
 import { orpc } from "@/utils/orpc";
 
@@ -105,13 +106,5 @@ function RouteComponent() {
 			<RequestLink />
 			<SignInForm />
 		</div>
-	);
-}
-
-function Notice({ children }: { children: React.ReactNode }) {
-	return (
-		<p className="m-0 rounded-[18px] border border-pink bg-pink/14 px-4 py-3 text-[14px] text-ink">
-			{children}
-		</p>
 	);
 }

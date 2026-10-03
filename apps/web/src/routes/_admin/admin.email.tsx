@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { Field } from "@/components/controls";
 import { PreviewPanel, reportSend } from "@/components/email-preview";
+import { Notice } from "@/components/notice";
 import { Panel } from "@/components/page";
 import { orpc } from "@/utils/orpc";
 
@@ -75,9 +76,9 @@ function AdminEmailPage() {
 	return (
 		<div className="flex flex-col gap-7">
 			{status.data?.dryRun ? (
-				<p className="m-0 rounded-[18px] border border-pink bg-pink/14 px-4 py-3">
+				<Notice>
 					No Brevo key: email is printed to the server log, not sent.
-				</p>
+				</Notice>
 			) : null}
 			<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-5">
 				<Panel as="form" onSubmit={(e) => e.preventDefault()}>

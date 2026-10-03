@@ -6,7 +6,13 @@
 
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { Minus, Plus } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import {
+	cloneElement,
+	isValidElement,
+	type ReactElement,
+	type ReactNode,
+	useId,
+} from "react";
 
 export type Answer = "yes" | "maybe" | "no";
 
@@ -169,7 +175,11 @@ export function SettingRow({
 	);
 }
 
-/** A labelled field: the small grey label over whatever input. */
+/**
+ * A labelled field: the small grey label over whatever input. A hint is
+ * tied to a lone input child with aria-describedby, so a screen reader
+ * reads it with the field rather than as stray text after it.
+ */
 export function Field({
 	label,
 	htmlFor,
@@ -183,13 +193,25 @@ export function Field({
 	className?: string;
 	hint?: ReactNode;
 }) {
+	const hintId = useId();
 	return (
 		<div className={cn("flex flex-col gap-1.5", className)}>
 			<label htmlFor={htmlFor} className="text-[13px] text-haze">
 				{label}
 			</label>
-			{children}
-			{hint ? <span className="text-[13px] text-haze">{hint}</span> : null}
+			{hint && isValidElement(children)
+				? cloneElement(
+						children as ReactElement<{ "aria-describedby"?: string }>,
+						{
+							"aria-describedby": hintId,
+						},
+					)
+				: children}
+			{hint ? (
+				<span id={hintId} className="text-[13px] text-haze">
+					{hint}
+				</span>
+			) : null}
 		</div>
 	);
 }

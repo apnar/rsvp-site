@@ -4,12 +4,13 @@ import { cn } from "@rsvp-site/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { designSrc, inDays } from "@/lib/format";
+import { designSrc } from "@/lib/design-src";
+import { inDays } from "@/lib/format";
 
 import { Cover } from "./cover";
 import { ResponseBar, ResponseCounts } from "./response-bar";
 
-export type CardEvent = {
+type CardEvent = {
 	id: string;
 	title: string;
 	status: "draft" | "published" | "canceled";
@@ -23,7 +24,7 @@ export type CardEvent = {
 };
 
 /** "Sat, Oct 24 · 5:00 PM" -- the start only, as the design shows it. */
-export function whenShort(e: Pick<CardEvent, "dateLabel" | "timeLabel">) {
+function whenShort(e: Pick<CardEvent, "dateLabel" | "timeLabel">) {
 	const start = e.timeLabel?.split(" - ")[0];
 	return [e.dateLabel, start].filter(Boolean).join(" · ") || "No date yet";
 }

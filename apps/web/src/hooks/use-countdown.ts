@@ -55,35 +55,3 @@ export function useClock(serverNowIso: string, targetIso: string | null) {
 
 	return now;
 }
-
-/** "4h 12m", "42:07", "3d 5h". Tabular by the time it reaches the page. */
-export function formatRemaining(ms: number): string {
-	if (ms <= 0) return "0:00";
-	const total = Math.floor(ms / 1000);
-	const days = Math.floor(total / 86400);
-	const hours = Math.floor((total % 86400) / 3600);
-	const minutes = Math.floor((total % 3600) / 60);
-	const seconds = total % 60;
-	if (days > 0) return `${days}d ${hours}h`;
-	if (total >= 3600) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
-	return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-/**
- * What a screen reader hears. Bucketed on purpose: a live region that speaks
- * every second is a torture device, so this changes at most five times all
- * evening.
- */
-export function announceRemaining(ms: number, what: string): string {
-	if (ms <= 0) return `${what} has passed.`;
-	const minutes = Math.floor(ms / 60_000);
-	if (minutes >= 60) {
-		const hours = Math.round(minutes / 60);
-		return `${hours} hour${hours === 1 ? "" : "s"} to ${what}.`;
-	}
-	if (minutes >= 30) return `Thirty minutes to ${what}.`;
-	if (minutes >= 15) return `Fifteen minutes to ${what}.`;
-	if (minutes >= 5) return `Five minutes to ${what}.`;
-	if (minutes >= 1) return `One minute to ${what}.`;
-	return `Less than a minute to ${what}.`;
-}

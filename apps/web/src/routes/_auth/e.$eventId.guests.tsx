@@ -1,5 +1,5 @@
 import { formatDate } from "@rsvp-site/api/time";
-import { Button, buttonVariants } from "@rsvp-site/ui/components/button";
+import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import {
@@ -14,12 +14,16 @@ import { toast } from "sonner";
 
 import { AddGuests } from "@/components/add-guests";
 import { Avatar } from "@/components/brand";
+import { ConfirmAction } from "@/components/confirm-action";
 import { Stepper } from "@/components/controls";
-import { Page, PageHead } from "@/components/page";
+import { NativeSelect } from "@/components/native-select";
+import { Notice } from "@/components/notice";
+import { Page, PageHead, Panel } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import type { Outputs } from "@/lib/api-types";
 import { refreshCard } from "@/lib/design-card";
+import { messageOf } from "@/lib/errors";
 import { ago, initials, plural, shortDate } from "@/lib/format";
 import {
 	type CardFormat,
@@ -28,6 +32,7 @@ import {
 	type PaperSize,
 	type PrintLayout,
 } from "@/lib/paper-sizes";
+import { saveFile } from "@/lib/save-file";
 import { client, orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/guests")({
@@ -112,16 +117,9 @@ function GuestListPage() {
 	const exportCsv = async () => {
 		try {
 			const { csv, fileName } = await client.events.exportCsv({ eventId });
-			const url = URL.createObjectURL(
-				new Blob([csv], { type: "text/csv;charset=utf-8" }),
-			);
-			const link = document.createElement("a");
-			link.href = url;
-			link.download = fileName;
-			link.click();
-			URL.revokeObjectURL(url);
+			saveFile(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName);
 		} catch (error) {
-			toast.error((error as Error).message);
+			toast.error(messageOf(error));
 		}
 	};
 
@@ -207,13 +205,13 @@ function GuestListPage() {
 			) : null}
 
 			{e.status === "draft" ? (
-				<p className="m-0 rounded-[18px] border border-pink bg-pink/14 px-4 py-3">
+				<Notice>
 					This is a draft. Nobody has been invited yet.{" "}
 					<Link to="/e/$eventId/edit" params={{ eventId }}>
 						Finish it and send
 					</Link>
 					.
-				</p>
+				</Notice>
 			) : null}
 
 			<section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3.5">
@@ -317,6 +315,7 @@ function GuestListPage() {
 							nudging={nudge.isPending}
 							onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
 							onRemove={() => remove.mutate({ eventId, guestId: g.id })}
+							removing={remove.isPending}
 						/>
 					))}
 				</div>
@@ -364,6 +363,7 @@ function GuestRow({
 	nudging,
 	onNudge,
 	onRemove,
+	removing,
 }: {
 	guest: Guest;
 	isYou: boolean;
@@ -376,8 +376,8 @@ function GuestRow({
 	nudging: boolean;
 	onNudge: () => void;
 	onRemove: () => void;
+	removing: boolean;
 }) {
-	const [confirming, setConfirming] = useState(false);
 	const [editing, setEditing] = useState(false);
 	const waiting = g.response === null;
 	const out = g.response === "no";
@@ -492,34 +492,21 @@ function GuestRow({
 						Send a nudge
 					</Button>
 				) : null}
-				{confirming ? (
-					<>
-						<Button variant="destructive" size="xs" onClick={onRemove}>
-							Remove
-						</Button>
-						<Button
-							variant="ghost"
-							size="xs"
-							onClick={() => setConfirming(false)}
-						>
-							Keep
-						</Button>
-					</>
-				) : (
-					<button
-						type="button"
-						aria-label={`Remove ${g.name}`}
-						onClick={() => setConfirming(true)}
-						className={cn(
-							buttonVariants({ variant: "ghost", size: "icon-xs" }),
-							// In the corner on a phone, so it does not take a line of
-							// its own; in its column otherwise.
-							"text-haze max-md:absolute max-md:top-3 max-md:right-3",
-						)}
-					>
-						×
-					</button>
-				)}
+				<ConfirmAction
+					size="xs"
+					confirm="Remove"
+					pending={removing}
+					onConfirm={() => onRemove()}
+					trigger={{
+						variant: "ghost",
+						size: "icon-xs",
+						"aria-label": `Remove ${g.name}`,
+						// In the corner on a phone, so it does not take a line of
+						// its own; in its column otherwise.
+						className: "text-haze max-md:absolute max-md:top-3 max-md:right-3",
+						children: "×",
+					}}
+				/>
 			</span>
 			{editing ? (
 				<AnswerEditor
@@ -560,20 +547,18 @@ function PaperPanel({
 	onChange: () => void;
 }) {
 	const [busy, setBusy] = useState(false);
-	const [sure, setSure] = useState(false);
 	const release = useMutation(
 		orpc.events.releaseEmails.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(
 					`Emails started. Sent ${plural(r.sent, "invitation")}.${r.dryRun ? " (Logged, not sent: no mail key.)" : ""}`,
 				);
-				setSure(false);
 				onChange();
 			},
 		}),
 	);
 	return (
-		<section className="flex flex-col gap-3.5 rounded-[26px] border border-lime/60 bg-panel p-[clamp(18px,3vw,28px)]">
+		<Panel className="gap-3.5 border border-lime/60">
 			<div className="flex flex-wrap items-baseline justify-between gap-2">
 				<h2 className="m-0 text-[20px]">Paper invitations</h2>
 				<span className="text-[13px] text-haze">
@@ -606,24 +591,17 @@ function PaperPanel({
 					{busy ? "Making the PDF..." : "Download all (PDF)"}
 				</Button>
 				{published && held ? (
-					sure ? (
-						<>
-							<Button
-								variant="send"
-								disabled={release.isPending}
-								onClick={() => release.mutate({ eventId })}
-							>
-								Yes, email {plural(emailable, "guest")}
-							</Button>
-							<Button variant="ghost" onClick={() => setSure(false)}>
-								Not yet
-							</Button>
-						</>
-					) : (
-						<Button variant="send" onClick={() => setSure(true)}>
-							Start emails
-						</Button>
-					)
+					<ConfirmAction
+						size="default"
+						confirmVariant="send"
+						confirm={`Yes, email ${plural(emailable, "guest")}`}
+						cancel="Not yet"
+						pending={release.isPending}
+						onConfirm={(close) =>
+							release.mutate({ eventId }, { onSuccess: close })
+						}
+						trigger={{ variant: "send", children: "Start emails" }}
+					/>
 				) : null}
 			</div>
 			{published && held ? (
@@ -634,7 +612,7 @@ function PaperPanel({
 					card.
 				</span>
 			) : null}
-		</section>
+		</Panel>
 	);
 }
 
@@ -692,7 +670,7 @@ function PrintSelect({
 			<label htmlFor="paper-size" className="sr-only">
 				Paper size
 			</label>
-			<select
+			<NativeSelect
 				id="paper-size"
 				value={value}
 				onChange={(ev) =>
@@ -700,14 +678,14 @@ function PrintSelect({
 						options.find((o) => o.value === ev.target.value)?.value ?? value,
 					)
 				}
-				className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 py-2 text-[14px] text-ink hover:border-haze focus-visible:border-lime"
+				className="min-h-11 px-4"
 			>
 				{options.map((o) => (
 					<option key={o.value} value={o.value}>
 						{o.label}
 					</option>
 				))}
-			</select>
+			</NativeSelect>
 		</>
 	);
 }
@@ -762,7 +740,7 @@ async function downloadCards(
 			guest ? `${title} - ${guest.name}.pdf` : `${title} - invitations.pdf`,
 		);
 	} catch (error) {
-		toast.error((error as Error).message || "The PDF didn't build.");
+		toast.error(messageOf(error) || "The PDF didn't build.");
 	}
 }
 

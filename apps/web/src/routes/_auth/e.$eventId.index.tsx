@@ -20,13 +20,12 @@ import {
 	Stepper,
 } from "@/components/controls";
 import { CountdownTiles } from "@/components/countdown";
-import { Cover } from "@/components/cover";
 import { CardSvg } from "@/components/design/card-svg";
-import { DesignTheme } from "@/components/design/design-theme";
+import { EventHero } from "@/components/event-hero";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import UserMenu from "@/components/user-menu";
 import type { Outputs } from "@/lib/api-types";
-import { plural } from "@/lib/format";
+import { firstName, plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/")({
@@ -71,10 +70,6 @@ function Paragraphs({ text }: { text: string }) {
 		));
 }
 
-function firstName(name: string) {
-	return name.trim().split(/\s+/)[0] ?? name;
-}
-
 /** "The Nguyens, Priya S., the Okafors, Coach Dana and 38 more" */
 function crowdLine(names: string[], shown = 4): string {
 	if (names.length === 0) return "";
@@ -114,52 +109,22 @@ function InvitePage() {
 			<UserMenu />
 		</header>
 	);
-	const status = (align: string) => (
-		<span
-			className={cn(
-				align,
-				"rounded-full px-3.5 py-1.5 font-bold text-[13px] uppercase tracking-[0.08em]",
-				canceled
-					? "bg-ink text-night"
-					: data.me
-						? "bg-lime text-on-lime"
-						: "bg-pink text-on-pink",
-			)}
-		>
-			{canceled
-				? "Canceled"
-				: data.me
-					? "You're on the list"
-					: e.status === "draft"
-						? "Draft · only hosts see this"
-						: "You're hosting"}
-		</span>
-	);
-	const facts = (align?: string) => (
-		<div
-			className={cn(
-				"flex flex-wrap gap-x-7 gap-y-2 font-medium text-[17px]",
-				align,
-			)}
-		>
-			{e.dateLabel ? <span>{e.dateLabel}</span> : null}
-			{e.timeLabel ? (
-				<span className="text-lime-ink">{e.timeLabel}</span>
-			) : null}
-			{e.location ? <span>{e.location}</span> : null}
-			{e.hostLine ? (
-				<span className="text-haze">Hosted by {e.hostLine}</span>
-			) : null}
-		</div>
-	);
+	const statusLabel = canceled
+		? "Canceled"
+		: data.me
+			? "You're on the list"
+			: e.status === "draft"
+				? "Draft · only hosts see this"
+				: "You're hosting";
 
 	return (
 		<div>
-			{data.design ? (
-				<section className="relative flex flex-col">
-					<DesignTheme theme={data.design.theme} />
-					{header}
-					<div className="mx-auto flex w-full max-w-[1180px] flex-col items-center gap-5 px-[clamp(16px,4vw,40px)] pt-2 pb-9 text-center">
+			<EventHero
+				header={header}
+				coverKey={e.coverKey}
+				theme={data.design?.theme}
+				card={
+					data.design ? (
 						<CardSvg
 							scene={data.design.scene}
 							className={cn(
@@ -169,27 +134,18 @@ function InvitePage() {
 									: "max-w-[560px]",
 							)}
 						/>
-						<h1 className="sr-only">{e.title}</h1>
-						{status("self-center")}
-						{facts("justify-center")}
-					</div>
-				</section>
-			) : (
-				<section className="relative flex min-h-[min(86vh,760px)] flex-col overflow-hidden">
-					<div className="absolute inset-0">
-						<Cover coverKey={e.coverKey} />
-					</div>
-					<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-night)_55%,transparent)_0%,color-mix(in_oklab,var(--color-night)_20%,transparent)_40%,var(--color-night)_100%)]" />
-					{header}
-					<div className="relative mx-auto mt-auto flex w-full max-w-[1180px] flex-col gap-[18px] px-[clamp(16px,4vw,40px)] pb-9">
-						{status("self-start")}
-						<h1 className="m-0 max-w-[14ch] font-black text-[clamp(40px,7.4vw,96px)] leading-[0.95] tracking-[-0.04em]">
-							{e.title}
-						</h1>
-						{facts()}
-					</div>
-				</section>
-			)}
+					) : null
+				}
+				centered
+				size="page"
+				tone={canceled ? "ink" : data.me ? "lime" : "pink"}
+				status={statusLabel}
+				title={e.title}
+				dateLabel={e.dateLabel}
+				timeLabel={e.timeLabel}
+				location={e.location}
+				hostLine={e.hostLine}
+			/>
 
 			<div className="mx-auto flex max-w-[1180px] flex-col gap-[clamp(40px,6vw,72px)] px-[clamp(16px,4vw,40px)] pt-4 pb-20">
 				{canceled ? null : (

@@ -13,7 +13,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Avatar } from "@/components/brand";
+import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
+import { NativeSelect } from "@/components/native-select";
 import { Page, PageHead, Panel } from "@/components/page";
 import type { Outputs } from "@/lib/api-types";
 import { initials, plural } from "@/lib/format";
@@ -98,11 +100,11 @@ function AddressBook({ book }: { book: Book }) {
 						<label htmlFor="book-group" className="sr-only">
 							Show a group
 						</label>
-						<select
+						<NativeSelect
 							id="book-group"
 							value={group}
 							onChange={(e) => setGroup(e.target.value)}
-							className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 text-[14px] text-ink"
+							className="min-h-11 px-4"
 						>
 							<option value="all">Everybody</option>
 							{book.groups.map((g) => (
@@ -110,7 +112,7 @@ function AddressBook({ book }: { book: Book }) {
 									{g.name}
 								</option>
 							))}
-						</select>
+						</NativeSelect>
 					</>
 				) : null}
 			</div>
@@ -132,7 +134,6 @@ function AddressBook({ book }: { book: Book }) {
 /** One person, with a chip per group to put them in or take them out. */
 function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 	const refresh = useRefresh();
-	const [sure, setSure] = useState(false);
 	const setMember = useMutation(
 		orpc.contacts.setMember.mutationOptions({ onSuccess: refresh, onError }),
 	);
@@ -154,29 +155,19 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 							: `${p.email}${p.unsubscribed ? " · no email" : ""}`}
 					</span>
 				</span>
-				{sure ? (
-					<span className="flex gap-1">
-						<Button
-							variant="destructive"
-							size="xs"
-							onClick={() => remove.mutate({ userId: p.userId })}
-						>
-							Remove
-						</Button>
-						<Button variant="ghost" size="xs" onClick={() => setSure(false)}>
-							Keep
-						</Button>
-					</span>
-				) : (
-					<button
-						type="button"
-						aria-label={`Remove ${p.name} from your address book`}
-						onClick={() => setSure(true)}
-						className="cursor-pointer border-0 bg-transparent px-1 text-haze hover:text-ink"
-					>
-						×
-					</button>
-				)}
+				<ConfirmAction
+					size="xs"
+					confirm="Remove"
+					pending={remove.isPending}
+					onConfirm={() => remove.mutate({ userId: p.userId })}
+					trigger={{
+						variant: "ghost",
+						size: "icon-xs",
+						"aria-label": `Remove ${p.name} from your address book`,
+						className: "text-haze",
+						children: "×",
+					}}
+				/>
 			</div>
 			{groups.length > 0 ? (
 				<div className="flex flex-wrap gap-1.5 pl-12">
@@ -317,7 +308,6 @@ function Groups({ groups }: { groups: Group[] }) {
 function GroupRow({ group }: { group: Group }) {
 	const refresh = useRefresh();
 	const [name, setName] = useState(group.name);
-	const [sure, setSure] = useState(false);
 	const rename = useMutation(
 		orpc.contacts.rename.mutationOptions({ onSuccess: refresh, onError }),
 	);
@@ -342,29 +332,19 @@ function GroupRow({ group }: { group: Group }) {
 				className="min-h-9 flex-1 border-transparent bg-transparent px-0 font-bold hover:border-transparent focus-visible:border-line-strong focus-visible:px-3"
 			/>
 			<span className="text-[13px] text-haze">{group.count}</span>
-			{sure ? (
-				<span className="flex gap-1">
-					<Button
-						variant="destructive"
-						size="xs"
-						onClick={() => remove.mutate({ groupId: group.id })}
-					>
-						Delete
-					</Button>
-					<Button variant="ghost" size="xs" onClick={() => setSure(false)}>
-						Keep
-					</Button>
-				</span>
-			) : (
-				<button
-					type="button"
-					aria-label={`Delete the group ${group.name}`}
-					onClick={() => setSure(true)}
-					className="cursor-pointer border-0 bg-transparent px-1 text-haze hover:text-ink"
-				>
-					×
-				</button>
-			)}
+			<ConfirmAction
+				size="xs"
+				confirm="Delete"
+				pending={remove.isPending}
+				onConfirm={() => remove.mutate({ groupId: group.id })}
+				trigger={{
+					variant: "ghost",
+					size: "icon-xs",
+					"aria-label": `Delete the group ${group.name}`,
+					className: "text-haze",
+					children: "×",
+				}}
+			/>
 		</li>
 	);
 }
