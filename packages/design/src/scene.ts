@@ -21,7 +21,7 @@ import {
 	type Stop,
 } from "./schema";
 import { STICKERS } from "./stickers";
-import { type Line, layoutText } from "./text";
+import { type Line, layoutText, type TextLayout } from "./text";
 
 /**
  * Who the card is drawn for. "web" is the guest page, "paper" the printed
@@ -127,7 +127,16 @@ export type SceneOptions = {
 	faces: Faces;
 	/** Paper only: lay out the bleed (the printing side decides). */
 	bleed?: boolean;
+	/**
+	 * Lets a caller that lays the same card out again and again (the
+	 * designer, on every drag step) reuse a text's line breaks while nothing
+	 * that decides them has changed.
+	 */
+	textCache?: TextCache;
 };
+
+/** One remembered layout per element: moving or recolouring it still hits. */
+export type TextCache = Map<string, { key: string; laid: TextLayout }>;
 
 export function shows(el: Element, mode: Mode): boolean {
 	if (el.type === "qr") return mode === "paper";
@@ -330,7 +339,7 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 			const face = opts.faces.get(key);
 			if (!face) throw new Error(`Font metrics for ${key} were not loaded`);
 			const content = textContent(el, opts.values);
-			const laid = layoutText({
+			const box = {
 				text: content,
 				face,
 				size: el.size,
@@ -341,7 +350,27 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 				w: el.w,
 				h: el.h,
 				fit: el.fit,
-			});
+			};
+			// Every input of layoutText, the face by its key (a cache lives
+			// with one font set), so a hit is exactly the answer a miss gives.
+			const cacheKey = JSON.stringify([
+				key,
+				content,
+				el.size,
+				el.tracking,
+				el.lineHeight,
+				el.align,
+				el.valign,
+				el.w,
+				el.h,
+				el.fit,
+			]);
+			let hit = opts.textCache?.get(el.id);
+			if (hit?.key !== cacheKey) {
+				hit = { key: cacheKey, laid: layoutText(box) };
+				opts.textCache?.set(el.id, hit);
+			}
+			const laid = hit.laid;
 			return {
 				...common,
 				dynamic: opts.mode === "paper" && usesPlaceholder(el.text, "guest"),

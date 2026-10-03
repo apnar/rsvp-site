@@ -333,13 +333,9 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 		}
 		case "text": {
 			const { lines, passes } = glyphsOf(n);
-			body = (
-				<>
-					{passes.map((pass, i) => (
-						<Glyphs key={i} node={n} lines={lines} pass={pass} opacity={o} />
-					))}
-				</>
-			);
+			body = passes.map((pass, i) => (
+				<Glyphs key={i} node={n} lines={lines} pass={pass} opacity={o} />
+			));
 			break;
 		}
 		case "qr": {

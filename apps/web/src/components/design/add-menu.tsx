@@ -9,22 +9,20 @@ import {
 	Square,
 	Type,
 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
+import { useDesigner } from "./designer-context";
 import { newImage, newQr, newShape, newSticker, newText } from "./editor-state";
-import { ImagePicker, type ImageTray, StickerGrid } from "./inspector";
+import { ImagePicker, StickerGrid } from "./image-picker";
 
 /** Things to put on the card. */
-export function AddMenu({
+export const AddMenu = memo(function AddMenu({
 	doc,
-	paper,
-	tray,
 	onAdd,
 }: {
 	doc: Design;
-	paper: boolean;
-	tray: ImageTray;
 	onAdd: (el: Element) => void;
 }) {
+	const { paper, tray } = useDesigner();
 	const [open, setOpen] = useState<"sticker" | "image" | null>(null);
 	const hasQr = doc.elements.some((e) => e.type === "qr");
 	return (
@@ -98,4 +96,4 @@ export function AddMenu({
 			) : null}
 		</div>
 	);
-}
+});

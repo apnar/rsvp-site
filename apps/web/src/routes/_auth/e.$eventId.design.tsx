@@ -1,22 +1,17 @@
 import { allFaces, type Faces, loadFaces } from "@rsvp-site/design/faces";
 import { SAMPLE_VALUES, type Values } from "@rsvp-site/design/placeholders";
-import { layoutCard } from "@rsvp-site/design/scene";
-import { type Design, parseDesign, refsOf } from "@rsvp-site/design/schema";
-import {
-	fromTemplate,
-	type Placed,
-	type Template,
-	type TemplateContext,
-} from "@rsvp-site/design/templates/index";
+import { layoutCard, type TextCache } from "@rsvp-site/design/scene";
+import { type Design, parseDesign } from "@rsvp-site/design/schema";
+import type { Placed } from "@rsvp-site/design/templates/index";
 import { warningsOf } from "@rsvp-site/design/warnings";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
-import { ArrowLeft, Redo2, Undo2 } from "lucide-react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { Redo2, Undo2 } from "lucide-react";
 import {
-	type Dispatch,
 	useCallback,
+	useDeferredValue,
 	useEffect,
 	useMemo,
 	useReducer,
@@ -27,32 +22,21 @@ import { toast } from "sonner";
 import { Switch } from "@/components/controls";
 import { AddMenu } from "@/components/design/add-menu";
 import { DesignCanvas } from "@/components/design/canvas";
-import {
-	addEl,
-	cloneEls,
-	duplicateEls,
-	type EditorAction,
-	type EditorState,
-	initialState,
-	reducer,
-	removeEls,
-	restack,
-	updateEls,
-} from "@/components/design/editor-state";
-import {
-	CardPanel,
-	ElementPanel,
-	type ImageTray,
-	MultiPanel,
-} from "@/components/design/inspector";
+import { DesignerContext } from "@/components/design/designer-context";
+import { addEl, initialState, reducer } from "@/components/design/editor-state";
+import { Inspector } from "@/components/design/inspector";
 import { Layers } from "@/components/design/layers";
-import { TemplatePicker } from "@/components/design/template-picker";
-import { refreshCard } from "@/lib/design-card";
+import { PickTemplate } from "@/components/design/pick-template";
+import { TopBar } from "@/components/design/top-bar";
+import { UnsavedBar } from "@/components/design/unsaved-bar";
+import { useDesignSave } from "@/components/design/use-design-save";
+import { useImageTray } from "@/components/design/use-image-tray";
+import { useKeys } from "@/components/design/use-keys";
+import { pageTitle } from "@/content/site";
 import { fontFaceCss } from "@/lib/design-font-css";
-import { designSrc } from "@/lib/design-src";
+import { messageOf } from "@/lib/errors";
 import { layoutsFor } from "@/lib/paper-sizes";
-import { naturalSize, shrinkForDesign } from "@/lib/shrink-image";
-import { client, orpc } from "@/utils/orpc";
+import { orpc } from "@/utils/orpc";
 
 /**
  * The designer. Rendered in the browser only: it measures the screen,
@@ -61,6 +45,7 @@ import { client, orpc } from "@/utils/orpc";
  */
 export const Route = createFileRoute("/_auth/e/$eventId/design")({
 	ssr: false,
+	staticData: { ownHeader: true },
 	// Never show a remembered load while a fresh one runs: the designer
 	// decides from it whether there is a design to open or a template to
 	// pick, and an earlier visit's "nothing saved yet" would send a host
@@ -81,9 +66,9 @@ export const Route = createFileRoute("/_auth/e/$eventId/design")({
 	head: ({ loaderData }) => ({
 		meta: [
 			{
-				title: loaderData
-					? `Design · ${loaderData.event.event.title} · Botch RSVP`
-					: "Botch RSVP",
+				title: pageTitle(
+					loaderData ? `Design · ${loaderData.event.event.title}` : null,
+				),
 			},
 		],
 	}),
@@ -207,251 +192,6 @@ function Designer() {
 	);
 }
 
-function TopBar({
-	eventId,
-	title,
-	children,
-}: {
-	eventId: string;
-	title: string;
-	children?: React.ReactNode;
-}) {
-	return (
-		<header className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-line border-b bg-night/95 px-[clamp(12px,3vw,24px)] py-2.5 backdrop-blur">
-			<Link
-				to="/e/$eventId/edit"
-				params={{ eventId }}
-				className="flex items-center gap-1.5 font-bold text-[14px] no-underline"
-			>
-				<ArrowLeft className="size-4" /> Event
-			</Link>
-			<span className="mr-auto min-w-0 truncate pl-2 font-heading text-[15px]">
-				{title}
-			</span>
-			{children}
-		</header>
-	);
-}
-
-function PickTemplate({
-	eventId,
-	title,
-	coverKey,
-	paper,
-	faces,
-	values,
-	canCancel,
-	onCancel,
-	onPick,
-	copied,
-}: {
-	eventId: string;
-	title: string;
-	coverKey: string | null;
-	paper: boolean;
-	faces: Faces;
-	values: Values;
-	canCancel: boolean;
-	onCancel: () => void;
-	onPick: (d: Design) => void;
-	/**
-	 * A template's pictures, once copied into this event, by
-	 * "<template>/<name>": picking it again in the same visit reuses them
-	 * (and the server would hand back the same ones anyway).
-	 */
-	copied: Map<string, Placed>;
-}) {
-	const [ctx, setCtx] = useState<TemplateContext | null>(
-		coverKey ? null : { cover: null, paper },
-	);
-	const [preparing, setPreparing] = useState<string | null>(null);
-	const pick = async (t: Template) => {
-		if (!ctx) return;
-		if (!t.assets) {
-			onPick(fromTemplate(t, ctx));
-			return;
-		}
-		setPreparing(t.id);
-		try {
-			const assets: Record<string, Placed> = {};
-			for (const [name, a] of Object.entries(t.assets)) {
-				const key = `${t.id}/${name}`;
-				let placed = copied.get(key);
-				if (!placed) {
-					// The template's own pictures become this event's, like any
-					// upload, so the design names only images the event holds.
-					const blob = await (
-						await fetch(`/templates/${t.id}/${a.file}`)
-					).blob();
-					const file = new File([blob], a.file, { type: blob.type });
-					const { ref } = await client.designs.uploadImage({ eventId, file });
-					placed = { ref, iw: a.iw, ih: a.ih };
-					copied.set(key, placed);
-				}
-				assets[name] = placed;
-			}
-			onPick(fromTemplate(t, { ...ctx, assets }));
-		} catch (error) {
-			toast.error(
-				(error as Error).message || "That template's pictures didn't load.",
-			);
-		} finally {
-			setPreparing(null);
-		}
-	};
-	useEffect(() => {
-		if (!coverKey) return;
-		let live = true;
-		// The cover is copied into the design's own images, so templates can
-		// show it and replacing the cover later can't pull it out of the card.
-		client.designs
-			.copyCover({ eventId })
-			.then(async ({ ref }) => {
-				if (!ref) return null;
-				const { width, height } = await naturalSize(designSrc(ref));
-				return { ref, iw: width, ih: height };
-			})
-			.catch(() => null)
-			.then((cover) => {
-				if (live) setCtx({ cover, paper });
-			});
-		return () => {
-			live = false;
-		};
-	}, [coverKey, eventId, paper]);
-	return (
-		<>
-			<TopBar eventId={eventId} title={title}>
-				{canCancel ? (
-					<Button variant="ghost" size="sm" onClick={onCancel}>
-						Back to my design
-					</Button>
-				) : null}
-			</TopBar>
-			<div className="mx-auto flex w-full max-w-[1180px] flex-col gap-5 px-[clamp(16px,4vw,40px)] py-8">
-				<div>
-					<h1 className="m-0 text-[clamp(26px,4vw,40px)]">
-						Pick a starting point
-					</h1>
-					<p className="m-0 mt-1 text-soft">
-						Everything on it can be changed. The words in braces fill in from
-						your event.
-					</p>
-				</div>
-				{preparing ? (
-					<p className="m-0 text-haze">Bringing in the template's pictures…</p>
-				) : null}
-				{ctx ? (
-					<TemplatePicker
-						ctx={ctx}
-						faces={faces}
-						values={values}
-						onPick={(t) => {
-							if (!preparing) void pick(t);
-						}}
-					/>
-				) : (
-					<p className="text-haze">Fetching your cover photo…</p>
-				)}
-			</div>
-		</>
-	);
-}
-
-function isTyping(target: EventTarget | null): boolean {
-	const el = target as HTMLElement | null;
-	if (!el) return false;
-	if (
-		el.isContentEditable ||
-		el.tagName === "TEXTAREA" ||
-		el.tagName === "SELECT"
-	) {
-		return true;
-	}
-	// A focused slider, checkbox or swatch shouldn't swallow the shortcuts.
-	return (
-		el.tagName === "INPUT" &&
-		!["range", "checkbox", "color", "button", "file"].includes(
-			(el as HTMLInputElement).type,
-		)
-	);
-}
-
-function useKeys(state: EditorState, dispatch: Dispatch<EditorAction>) {
-	const clip = useRef<Design["elements"]>([]);
-	const latest = useRef(state);
-	latest.current = state;
-	useEffect(() => {
-		const onKey = (ev: KeyboardEvent) => {
-			if (isTyping(ev.target)) return;
-			const { doc, selected } = latest.current;
-			const mod = ev.metaKey || ev.ctrlKey;
-			const set = (d: Design, key?: string) =>
-				dispatch({ t: "set", doc: d, key, at: Date.now() });
-			const movable = doc.elements
-				.filter((x) => selected.includes(x.id) && !x.locked)
-				.map((x) => x.id);
-			if (mod && ev.key.toLowerCase() === "z") {
-				dispatch({ t: ev.shiftKey ? "redo" : "undo" });
-			} else if (mod && ev.key.toLowerCase() === "y") {
-				dispatch({ t: "redo" });
-			} else if (mod && ev.key.toLowerCase() === "d" && selected.length) {
-				const r = duplicateEls(doc, selected);
-				set(r.doc);
-				dispatch({ t: "select", ids: r.ids });
-			} else if (mod && ev.key.toLowerCase() === "c" && selected.length) {
-				clip.current = doc.elements.filter((x) => selected.includes(x.id));
-				return;
-			} else if (mod && ev.key.toLowerCase() === "v" && clip.current.length) {
-				const r = cloneEls(doc, clip.current);
-				set(r.doc);
-				dispatch({ t: "select", ids: r.ids });
-			} else if (
-				(ev.key === "Delete" || ev.key === "Backspace") &&
-				movable.length
-			) {
-				set(removeEls(doc, movable));
-			} else if (ev.key.startsWith("Arrow") && movable.length) {
-				const step = ev.shiftKey ? 10 : 1;
-				const dx =
-					ev.key === "ArrowLeft" ? -step : ev.key === "ArrowRight" ? step : 0;
-				const dy =
-					ev.key === "ArrowUp" ? -step : ev.key === "ArrowDown" ? step : 0;
-				set(
-					updateEls(doc, movable, (x) => ({ ...x, x: x.x + dx, y: x.y + dy })),
-					"nudge",
-				);
-			} else if (
-				(ev.code === "BracketRight" || ev.code === "BracketLeft") &&
-				selected.length === 1 &&
-				selected[0]
-			) {
-				// `code`, not `key`: Shift turns "]" into "}" and "[" into "{".
-				set(
-					restack(
-						doc,
-						selected[0],
-						ev.code === "BracketRight"
-							? ev.shiftKey
-								? "top"
-								: "up"
-							: ev.shiftKey
-								? "bottom"
-								: "down",
-					),
-				);
-			} else if (ev.key === "Escape") {
-				dispatch({ t: "select", ids: [] });
-			} else {
-				return;
-			}
-			ev.preventDefault();
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [dispatch]);
-}
-
 function Editor({
 	eventId,
 	title,
@@ -460,7 +200,7 @@ function Editor({
 	faces,
 	values,
 	initial,
-	version: startVersion,
+	version,
 	designOn: startOn,
 	images: startImages,
 	unsaved,
@@ -481,31 +221,34 @@ function Editor({
 	onStartOver: () => void;
 	onSaved: (version: number) => void;
 }) {
-	const queryClient = useQueryClient();
 	const [state, dispatch] = useReducer(reducer, initial, initialState);
 	const { doc, selected } = state;
-	const [savedDoc, setSavedDoc] = useState<Design | null>(
-		unsaved ? null : initial,
-	);
-	const [version, setVersion] = useState(startVersion);
-	const [designOn, setDesignOn] = useState(startOn);
-	const [savedOn, setSavedOn] = useState(unsaved ? !startOn : startOn);
-	const [saving, setSaving] = useState(false);
 	const [raw, setRaw] = useState(false);
-	// A template's own pictures were just uploaded, so they join the tray.
-	const [images, setImages] = useState(() => [
-		...new Set([...refsOf(initial), ...startImages]),
-	]);
-	const [uploading, setUploading] = useState(false);
-	const sizes = useRef(new Map<string, { iw: number; ih: number }>());
 	const textRef = useRef<HTMLTextAreaElement>(null);
+	const tray = useImageTray(eventId, initial, startImages);
 	useKeys(state, dispatch);
 
-	const dirty = doc !== savedDoc || designOn !== savedOn;
-	const blocker = useBlocker({
-		shouldBlockFn: () => dirty,
-		enableBeforeUnload: () => dirty,
-		withResolver: true,
+	const warn = useCallback(
+		(d: Design) => warningsOf(d, { paper, shareLink, faces, values }),
+		[paper, shareLink, faces, values],
+	);
+	const {
+		designOn,
+		setDesignOn,
+		dirty,
+		saving,
+		blocker,
+		saveFromButton,
+		saveAndLeave,
+	} = useDesignSave({
+		eventId,
+		doc,
+		initial,
+		version,
+		designOn: startOn,
+		unsaved,
+		blockingMessage: (d) => warn(d).find((w) => w.level === "block")?.message,
+		onSaved,
 	});
 
 	const set = useCallback(
@@ -513,12 +256,27 @@ function Editor({
 			dispatch({ t: "set", doc: d, key, at: Date.now() }),
 		[],
 	);
-	const select = (ids: string[], add: boolean) =>
+	// Handlers the side panels hold on to read the newest state from here, so
+	// they stay the same function while the document changes under a drag.
+	const latest = useRef(state);
+	latest.current = state;
+	const select = useCallback((ids: string[], add: boolean) => {
 		dispatch({
 			t: "select",
-			ids: add ? [...new Set([...selected, ...ids])] : ids,
+			ids: add ? [...new Set([...latest.current.selected, ...ids])] : ids,
 		});
+	}, []);
+	const add = useCallback(
+		(el: Design["elements"][number]) => {
+			set(addEl(latest.current.doc, el));
+			dispatch({ t: "select", ids: [el.id] });
+		},
+		[set],
+	);
+	const context = useMemo(() => ({ set, paper, tray }), [set, paper, tray]);
 
+	// A drag moves one box: every other text keeps its line breaks.
+	const textCache = useRef<TextCache>(new Map());
 	const shown = raw ? RAW_VALUES : values;
 	const scene = useMemo(
 		() =>
@@ -527,110 +285,16 @@ function Editor({
 				mode: paper ? "paper" : "web",
 				faces,
 				bleed: paper && doc.bleed,
+				textCache: textCache.current,
 			}),
 		[doc, shown, paper, faces],
 	);
-	const warnings = useMemo(
-		() => warningsOf(doc, { paper, shareLink, faces, values }),
-		[doc, paper, shareLink, faces, values],
-	);
-	const blocking = warnings.filter((w) => w.level === "block");
-
-	const tray: ImageTray = {
-		images,
-		busy: uploading,
-		sizeOf: async (ref) => {
-			const known = sizes.current.get(ref);
-			if (known) return known;
-			const { width, height } = await naturalSize(designSrc(ref));
-			const size = { iw: width, ih: height };
-			sizes.current.set(ref, size);
-			return size;
-		},
-		upload: async (file) => {
-			setUploading(true);
-			try {
-				const shrunk = await shrinkForDesign(file);
-				const { ref } = await client.designs.uploadImage({
-					eventId,
-					file: shrunk.file,
-				});
-				const size = { iw: shrunk.width, ih: shrunk.height };
-				sizes.current.set(ref, size);
-				setImages((list) => [ref, ...list.filter((r) => r !== ref)]);
-				return { ref, ...size };
-			} catch (error) {
-				toast.error((error as Error).message);
-				return null;
-			} finally {
-				setUploading(false);
-			}
-		},
-	};
-
-	/** Save; true when it went through. */
-	const save = async (): Promise<boolean> => {
-		const parsed = parseDesign(doc);
-		if (!parsed.ok) {
-			toast.error(parsed.message);
-			return false;
-		}
-		if (designOn && blocking[0]) {
-			toast.error(blocking[0].message);
-			return false;
-		}
-		setSaving(true);
-		try {
-			const r = await client.designs.save({
-				eventId,
-				doc: parsed.design,
-				version,
-				designOn,
-			});
-			setVersion(r.version);
-			onSaved(r.version);
-			setSavedDoc(doc);
-			setSavedOn(designOn);
-			// What was saved is now what the server has; keep the cached copy
-			// in step at once, not after a refetch that could lose a race.
-			queryClient.setQueryData(
-				orpc.designs.get.queryKey({ input: { eventId } }),
-				(old) =>
-					old
-						? { ...old, doc: parsed.design, version: r.version, designOn }
-						: old,
-			);
-			// The picture emails and link previews show, from what was saved.
-			refreshCard(eventId).catch(() =>
-				toast.error(
-					"The card picture for emails didn't update. Save again to retry.",
-				),
-			);
-			toast.success(
-				designOn
-					? "Saved. Guests see this card."
-					: "Saved. Guests still see the plain invitation.",
-			);
-			await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
-			return true;
-		} catch (error) {
-			const conflict = (error as { code?: string }).code === "CONFLICT";
-			toast.error(
-				(error as Error).message,
-				conflict
-					? {
-							action: {
-								label: "Reload",
-								onClick: () => window.location.reload(),
-							},
-						}
-					: undefined,
-			);
-			return false;
-		} finally {
-			setSaving(false);
-		}
-	};
+	// The warnings trail a drag by a frame: they are heavy and nobody reads
+	// them mid-gesture. The side panels must not: they build their edits
+	// from the document they were given, and a stale one would undo the
+	// drag that just finished.
+	const lagging = useDeferredValue(doc);
+	const warnings = useMemo(() => warn(lagging), [warn, lagging]);
 
 	const previewPdf = async () => {
 		try {
@@ -655,18 +319,14 @@ function Editor({
 			window.open(url, "_blank", "noopener");
 			setTimeout(() => URL.revokeObjectURL(url), 60_000);
 		} catch (error) {
-			toast.error((error as Error).message || "The PDF didn't build.");
+			toast.error(messageOf(error) || "The PDF didn't build.");
 		}
 	};
 
-	const one =
-		selected.length === 1
-			? doc.elements.find((x) => x.id === selected[0])
-			: undefined;
 	const landscape = scene.w > scene.h;
 
 	return (
-		<>
+		<DesignerContext.Provider value={context}>
 			<TopBar eventId={eventId} title={title}>
 				<Button
 					variant="ghost"
@@ -701,56 +361,24 @@ function Editor({
 						Preview PDF
 					</Button>
 				) : null}
-				<Button
-					size="sm"
-					disabled={saving || !dirty}
-					onClick={async () => {
-						// Saved while being asked about leaving: there is nothing left
-						// to warn about, and staying is what the host chose.
-						if ((await save()) && blocker.status === "blocked")
-							blocker.reset?.();
-					}}
-				>
+				<Button size="sm" disabled={saving || !dirty} onClick={saveFromButton}>
 					{saving ? "Saving…" : dirty ? "Save" : "Saved"}
 				</Button>
 			</TopBar>
-			{blocker.status === "blocked" ? (
-				<div className="flex flex-wrap items-center gap-3 border-pink border-b bg-pink/14 px-4 py-2.5 text-[14px]">
-					<span className="mr-auto">You have changes that aren't saved.</span>
-					<Button size="sm" variant="ghost" onClick={blocker.proceed}>
-						Leave without saving
-					</Button>
-					<Button size="sm" variant="light" onClick={blocker.reset}>
-						Stay
-					</Button>
-					<Button
-						size="sm"
-						disabled={saving}
-						onClick={async () => {
-							if (await save()) blocker.proceed?.();
-						}}
-					>
-						Save and leave
-					</Button>
-				</div>
-			) : null}
+			<UnsavedBar
+				blocker={blocker}
+				saving={saving}
+				onSaveAndLeave={saveAndLeave}
+			/>
 			<div className="grid gap-5 px-[clamp(12px,3vw,24px)] py-5 lg:grid-cols-[250px_minmax(0,1fr)_330px]">
 				<aside className="order-3 flex flex-col gap-5 lg:order-1">
 					<section className="flex flex-col gap-2.5">
 						<h2 className="kicker m-0 text-haze">Add</h2>
-						<AddMenu
-							doc={doc}
-							paper={paper}
-							tray={tray}
-							onAdd={(el) => {
-								set(addEl(doc, el));
-								dispatch({ t: "select", ids: [el.id] });
-							}}
-						/>
+						<AddMenu doc={doc} onAdd={add} />
 					</section>
 					<section className="flex flex-col gap-2.5">
 						<h2 className="kicker m-0 text-haze">Layers</h2>
-						<Layers doc={doc} selected={selected} onSelect={select} set={set} />
+						<Layers doc={doc} selected={selected} onSelect={select} />
 					</section>
 					<Button
 						variant="ghost"
@@ -817,23 +445,10 @@ function Editor({
 						</ul>
 					) : null}
 					<div className="rounded-[20px] bg-panel p-4">
-						{one ? (
-							<ElementPanel
-								el={one}
-								doc={doc}
-								set={set}
-								paper={paper}
-								tray={tray}
-								textRef={textRef}
-							/>
-						) : selected.length > 1 ? (
-							<MultiPanel doc={doc} ids={selected} set={set} />
-						) : (
-							<CardPanel doc={doc} set={set} paper={paper} tray={tray} />
-						)}
+						<Inspector doc={doc} selected={selected} textRef={textRef} />
 					</div>
 				</aside>
 			</div>
-		</>
+		</DesignerContext.Provider>
 	);
 }

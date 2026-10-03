@@ -9,6 +9,24 @@ import { type ReactNode, useEffect, useId, useState } from "react";
 const box =
 	"min-h-9 w-full min-w-0 rounded-[10px] border border-line-strong bg-night px-2.5 py-1.5 text-[14px] text-ink outline-none hover:border-haze focus-visible:border-lime";
 
+/** A titled group of fields in the inspector. */
+export function Section({
+	title,
+	children,
+}: {
+	title: string;
+	children: ReactNode;
+}) {
+	return (
+		<section className="flex flex-col gap-3 border-line border-t pt-4 first:border-t-0 first:pt-0">
+			<h3 className="kicker m-0 text-haze">{title}</h3>
+			{children}
+		</section>
+	);
+}
+
+export const pct = (v: number) => `${Math.round(v * 100)}%`;
+
 export function Row({
 	children,
 	className,

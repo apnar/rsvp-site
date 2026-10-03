@@ -165,3 +165,41 @@ describe("dashOf", () => {
 		expect(dashOf({ dash: false, sw: 4 })).toBeNull();
 	});
 });
+
+describe("layoutCard with a text cache", async () => {
+	const faces = await loadFaces(facesOf(design));
+	const opts = { values: SAMPLE_VALUES, mode: "paper", faces } as const;
+
+	it("draws exactly what it draws without one, however the card is edited", () => {
+		const textCache = new Map();
+		const moved = {
+			...design,
+			elements: design.elements.map((el, i) =>
+				i % 2 ? { ...el, x: el.x + 7, rot: 3 } : { ...el, w: el.w + 20 },
+			),
+		};
+		for (const d of [design, moved, design]) {
+			expect(layoutCard(d, { ...opts, textCache })).toEqual(
+				layoutCard(d, opts),
+			);
+		}
+	});
+
+	it("reuses a text's lines while only its place changes", () => {
+		const textCache = new Map();
+		const first = layoutCard(design, { ...opts, textCache });
+		const text = design.elements.find((el) => el.type === "text");
+		if (!text) throw new Error("no text");
+		const shifted = {
+			...design,
+			elements: design.elements.map((el) =>
+				el.id === text.id ? { ...el, x: el.x + 5, y: el.y + 5 } : el,
+			),
+		};
+		const second = layoutCard(shifted, { ...opts, textCache });
+		const a = first.nodes.find((n) => n.id === text.id);
+		const b = second.nodes.find((n) => n.id === text.id);
+		if (a?.k !== "text" || b?.k !== "text") throw new Error("not text");
+		expect(b.lines).toBe(a.lines);
+	});
+});

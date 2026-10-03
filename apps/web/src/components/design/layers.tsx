@@ -9,21 +9,21 @@ import {
 	Lock,
 	LockOpen,
 } from "lucide-react";
+import { memo } from "react";
+import { useDesigner } from "./designer-context";
 import { elementLabel, patchEl, restack } from "./editor-state";
-import type { SetDoc } from "./inspector";
 
 /** The stack, top first: pick, reorder, lock and hide. */
-export function Layers({
+export const Layers = memo(function Layers({
 	doc,
 	selected,
 	onSelect,
-	set,
 }: {
 	doc: Design;
 	selected: string[];
 	onSelect: (ids: string[], add: boolean) => void;
-	set: SetDoc;
 }) {
+	const { set } = useDesigner();
 	const top = doc.elements.length - 1;
 	return (
 		<ol className="m-0 flex list-none flex-col gap-0.5 p-0">
@@ -87,4 +87,4 @@ export function Layers({
 			})}
 		</ol>
 	);
-}
+});

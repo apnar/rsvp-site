@@ -1,4 +1,4 @@
-import { templateAssetUrl } from "@rsvp-site/design/templates/index";
+import { templateAssetUrl } from "@rsvp-site/design/templates/preview-refs";
 
 /**
  * The public address of a design image or card (designs/<id>/<name>), or,
