@@ -1,5 +1,6 @@
 import type { ElementInput } from "../schema";
 import { AFTER_DARK_THEME } from "../theme";
+import { coverImage, qrBlock, text } from "./parts";
 import type { Template } from "./types";
 
 /**
@@ -21,17 +22,7 @@ export const afterDark: Template = {
 	build: ({ cover, paper }) => {
 		const band: ElementInput[] = cover
 			? [
-					{
-						id: "cover",
-						type: "image",
-						x: 0,
-						y: 0,
-						w: 1000,
-						h: BAND,
-						ref: cover.ref,
-						iw: cover.iw,
-						ih: cover.ih,
-					},
+					coverImage(cover, { x: 0, y: 0, w: 1000, h: BAND }, { id: "cover" }),
 					{
 						id: "wash",
 						type: "rect",
@@ -111,33 +102,14 @@ export const afterDark: Template = {
 		];
 		const print: ElementInput[] = paper
 			? [
-					{
-						id: "qr",
-						type: "qr",
-						x: 611,
-						y: 972,
-						w: 328,
-						h: 328,
-						show: "paper",
-					},
-					{
-						id: "scan",
-						type: "text",
-						x: 611,
-						y: 1306,
-						w: 328,
-						h: 30,
-						text: "Scan to RSVP",
-						font: "unbounded",
-						weight: 700,
-						size: 22,
-						align: "center",
-						color: PINK_TEXT,
-						show: "paper",
-					},
-					{
+					...qrBlock(
+						paper,
+						{ x: 611, y: 972, size: 328 },
+						{ font: "unbounded", color: PINK_TEXT },
+						{ caption: { x: 611, w: 328, h: 30, size: 22 } },
+					),
+					text({
 						id: "point",
-						type: "text",
 						x: PAD,
 						y: 1250,
 						w: 500,
@@ -149,7 +121,7 @@ export const afterDark: Template = {
 						lineHeight: 1.3,
 						color: MUTED,
 						show: "paper",
-					},
+					}),
 				]
 			: [];
 		return {

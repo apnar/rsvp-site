@@ -16,12 +16,15 @@
  */
 
 import fontkit from "@pdf-lib/fontkit";
+import { turnAbout } from "@rsvp-site/design/edit";
 import type { Faces } from "@rsvp-site/design/faces";
 import type { FaceKey } from "@rsvp-site/design/fonts";
 import { type PatternShape, tiled } from "@rsvp-site/design/patterns";
 import type { Values } from "@rsvp-site/design/placeholders";
 import {
 	type Box,
+	dashOf,
+	glyphsOf,
 	layoutCard,
 	type Scene,
 	type SceneBackground,
@@ -85,50 +88,72 @@ type Slot = { ox: number; oyTop: number; s: number };
 
 const KAPPA = 0.5522847498;
 
-function roundedRectOps(w: number, h: number, r: number) {
-	if (r <= 0) return [rectangle(0, 0, w, h)];
-	const k = r * KAPPA;
-	return [
-		moveTo(r, 0),
-		lineTo(w - r, 0),
-		appendBezierCurve(w - r + k, 0, w, r - k, w, r),
-		lineTo(w, h - r),
-		appendBezierCurve(w, h - r + k, w - r + k, h, w - r, h),
-		lineTo(r, h),
-		appendBezierCurve(r - k, h, 0, h - r + k, 0, h - r),
-		lineTo(0, r),
-		appendBezierCurve(0, r - k, r - k, 0, r, 0),
-		closePath(),
-	];
-}
+/**
+ * A box's outline, y down from its top, once for both uses: painted as an
+ * SVG path (pdf-lib strokes and fills those) and as operators to clip to
+ * (it can't clip with a path).
+ */
+type Seg =
+	| ["M" | "L", number, number]
+	| ["C", number, number, number, number, number, number]
+	| ["Z"];
 
-function ellipseOps(w: number, h: number) {
+function outline(
+	shape: "rect" | "ellipse",
+	w: number,
+	h: number,
+	r: number,
+): Seg[] {
+	if (shape === "rect" && r <= 0) {
+		return [["M", 0, 0], ["L", w, 0], ["L", w, h], ["L", 0, h], ["Z"]];
+	}
+	if (shape === "rect") {
+		const k = r * KAPPA;
+		return [
+			["M", r, 0],
+			["L", w - r, 0],
+			["C", w - r + k, 0, w, r - k, w, r],
+			["L", w, h - r],
+			["C", w, h - r + k, w - r + k, h, w - r, h],
+			["L", r, h],
+			["C", r - k, h, 0, h - r + k, 0, h - r],
+			["L", 0, r],
+			["C", 0, r - k, r - k, 0, r, 0],
+			["Z"],
+		];
+	}
 	const rx = w / 2;
 	const ry = h / 2;
 	const kx = rx * KAPPA;
 	const ky = ry * KAPPA;
 	return [
-		moveTo(0, ry),
-		appendBezierCurve(0, ry + ky, rx - kx, h, rx, h),
-		appendBezierCurve(rx + kx, h, w, ry + ky, w, ry),
-		appendBezierCurve(w, ry - ky, rx + kx, 0, rx, 0),
-		appendBezierCurve(rx - kx, 0, 0, ry - ky, 0, ry),
-		closePath(),
+		["M", 0, ry],
+		["C", 0, ry - ky, rx - kx, 0, rx, 0],
+		["C", rx + kx, 0, w, ry - ky, w, ry],
+		["C", w, ry + ky, rx + kx, h, rx, h],
+		["C", rx - kx, h, 0, ry + ky, 0, ry],
+		["Z"],
 	];
 }
 
-/** The same outlines as SVG paths, y running down from the box's top. */
-function rectPath(w: number, h: number, r: number): string {
-	if (r <= 0) return `M0,0 H${w} V${h} H0 Z`;
-	return `M${r},0 H${w - r} A${r},${r} 0 0 1 ${w},${r} V${h - r} A${r},${r} 0 0 1 ${w - r},${h} H${r} A${r},${r} 0 0 1 0,${h - r} V${r} A${r},${r} 0 0 1 ${r},0 Z`;
+function outlinePath(segs: readonly Seg[]): string {
+	return segs.map((s) => s.join(s.length > 2 ? " " : "")).join(" ");
 }
 
-function ellipsePath(w: number, h: number): string {
-	return `M0,${h / 2} A${w / 2},${h / 2} 0 1 1 ${w},${h / 2} A${w / 2},${h / 2} 0 1 1 0,${h / 2} Z`;
+/** The outline as operators in the box's y-up frame, for clipping. */
+function outlineOps(segs: readonly Seg[], h: number) {
+	return segs.map((s) => {
+		if (s[0] === "M") return moveTo(s[1], h - s[2]);
+		if (s[0] === "L") return lineTo(s[1], h - s[2]);
+		if (s[0] === "C") {
+			return appendBezierCurve(s[1], h - s[2], s[3], h - s[4], s[5], h - s[6]);
+		}
+		return closePath();
+	});
 }
 
-function dashOf(dash: boolean, sw: number): number[] | undefined {
-	return dash ? [sw * 3, sw * 2] : undefined;
+function shapeOutline(circle: boolean, w: number, h: number, r: number) {
+	return outline(circle ? "ellipse" : "rect", w, h, r);
 }
 
 /**
@@ -167,7 +192,7 @@ function svgPaint(
 	fill: string | null,
 	stroke: string | null,
 	sw: number,
-	dash: boolean,
+	dash: number[] | null,
 	opacity: number,
 ): PDFPageDrawSVGOptions {
 	const o: PDFPageDrawSVGOptions = {};
@@ -179,7 +204,7 @@ function svgPaint(
 		o.borderColor = hexColor(stroke);
 		o.borderWidth = sw;
 		o.borderOpacity = opacity;
-		o.borderDashArray = dashOf(dash, sw);
+		o.borderDashArray = dash ?? undefined;
 	}
 	return o;
 }
@@ -191,10 +216,14 @@ function drawNode(ctx: Ctx, n: SceneNode, guestUrl: string) {
 		switch (n.k) {
 			case "rect":
 			case "ellipse": {
-				const paint = svgPaint(n.fill, n.stroke, n.sw, n.dash, n.opacity);
+				const paint = svgPaint(n.fill, n.stroke, n.sw, dashOf(n), n.opacity);
 				if (!paint.color && !paint.borderColor) return;
 				page.drawSvgPath(
-					n.k === "rect" ? rectPath(w, h, n.r) : ellipsePath(w, h),
+					outlinePath(
+						n.k === "rect"
+							? outline("rect", w, h, n.r)
+							: outline("ellipse", w, h, 0),
+					),
 					{
 						x: 0,
 						y: h,
@@ -210,7 +239,7 @@ function drawNode(ctx: Ctx, n: SceneNode, guestUrl: string) {
 					thickness: n.sw,
 					color: hexColor(n.stroke),
 					opacity: n.opacity,
-					dashArray: dashOf(n.dash, n.sw),
+					dashArray: dashOf(n) ?? undefined,
 				});
 				return;
 			case "path":
@@ -231,9 +260,7 @@ function drawNode(ctx: Ctx, n: SceneNode, guestUrl: string) {
 				if (image) {
 					page.pushOperators(
 						pushGraphicsState(),
-						...(n.mask === "circle"
-							? ellipseOps(w, h)
-							: roundedRectOps(w, h, n.r)),
+						...outlineOps(shapeOutline(n.mask === "circle", w, h, n.r), h),
 						clip(),
 						endPath(),
 					);
@@ -248,7 +275,7 @@ function drawNode(ctx: Ctx, n: SceneNode, guestUrl: string) {
 				}
 				if (n.border) {
 					page.drawSvgPath(
-						n.mask === "circle" ? ellipsePath(w, h) : rectPath(w, h, n.r),
+						outlinePath(shapeOutline(n.mask === "circle", w, h, n.r)),
 						{
 							x: 0,
 							y: h,
@@ -256,7 +283,7 @@ function drawNode(ctx: Ctx, n: SceneNode, guestUrl: string) {
 								null,
 								n.border.color,
 								n.border.width,
-								false,
+								null,
 								n.opacity,
 							),
 						},
@@ -267,23 +294,21 @@ function drawNode(ctx: Ctx, n: SceneNode, guestUrl: string) {
 			case "text": {
 				const font = ctx.fonts.get(n.face);
 				if (!font) return;
-				const glyphs = (dx: number, dy: number, color: string) => {
-					for (const line of n.lines) {
-						line.chars.forEach((c, i) => {
-							if (c === " ") return;
-							page.drawText(c, {
-								x: (line.xs[i] ?? 0) + dx,
-								y: h - line.y - dy,
+				const { lines, passes } = glyphsOf(n);
+				for (const pass of passes) {
+					for (const line of lines) {
+						for (const g of line) {
+							page.drawText(g.c, {
+								x: g.x + pass.dx,
+								y: h - g.y - pass.dy,
 								size: n.size,
 								font,
-								color: hexColor(color),
+								color: hexColor(pass.color),
 								opacity: n.opacity,
 							});
-						});
+						}
 					}
-				};
-				if (n.shadow) glyphs(n.shadow.dx, n.shadow.dy, n.shadow.color);
-				glyphs(0, 0, n.color);
+				}
 				return;
 			}
 			case "qr":
@@ -373,23 +398,6 @@ function paintShading(
 	);
 }
 
-function rotateAbout(
-	x: number,
-	y: number,
-	cx: number,
-	cy: number,
-	deg: number,
-) {
-	if (!deg) return { x, y };
-	const a = (deg * Math.PI) / 180;
-	const dx = x - cx;
-	const dy = y - cy;
-	return {
-		x: cx + dx * Math.cos(a) - dy * Math.sin(a),
-		y: cy + dx * Math.sin(a) + dy * Math.cos(a),
-	};
-}
-
 /**
  * Pattern shapes as one SVG path per colour, in the area's coordinates
  * (y down from its top-left), turned by the pattern's angle about the
@@ -401,14 +409,13 @@ function patternPaths(
 	scene: Scene,
 ): Map<string, string> {
 	const { area } = scene;
-	const cx = scene.w / 2;
-	const cy = scene.h / 2;
+	const centre = { x: scene.w / 2, y: scene.h / 2 };
 	const paths = new Map<string, string[]>();
 	const f = (n: number) => Math.round(n * 100) / 100;
 	for (const s of shapes) {
 		let d: string;
 		if (s.k === "circle") {
-			const c = rotateAbout(s.x, s.y, cx, cy, angle);
+			const c = turnAbout({ x: s.x, y: s.y }, centre, angle);
 			const x = c.x - area.x;
 			const y = c.y - area.y;
 			d = `M${f(x - s.r)},${f(y)} a${f(s.r)},${f(s.r)} 0 1,0 ${f(2 * s.r)},0 a${f(s.r)},${f(s.r)} 0 1,0 ${f(-2 * s.r)},0 Z`;
@@ -421,8 +428,8 @@ function patternPaths(
 				[s.x + s.w, s.y + s.h],
 				[s.x, s.y + s.h],
 			].map(([x = 0, y = 0]) => {
-				const own = rotateAbout(x, y, mx, my, s.rot);
-				const p = rotateAbout(own.x, own.y, cx, cy, angle);
+				const own = turnAbout({ x, y }, { x: mx, y: my }, s.rot);
+				const p = turnAbout(own, centre, angle);
 				return `${f(p.x - area.x)},${f(p.y - area.y)}`;
 			});
 			d = `M${corners.join(" L")} Z`;

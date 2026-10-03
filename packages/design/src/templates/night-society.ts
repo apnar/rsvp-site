@@ -1,5 +1,5 @@
 import type { ElementInput } from "../schema";
-import { qrBlock } from "./parts";
+import { qrBlock, type TextInput, text } from "./parts";
 import type { Template } from "./types";
 
 /**
@@ -94,17 +94,16 @@ export const nightSociety: Template = {
 			id: string,
 			y: number,
 			h: number,
-			text: string,
-			extra: Partial<ElementInput> = {},
+			content: string,
+			extra: Partial<Omit<TextInput, "type" | "id" | "text">> = {},
 		): ElementInput =>
-			({
+			text({
 				id,
-				type: "text",
 				x: 93,
 				y,
 				w: 800,
 				h,
-				text,
+				text: content,
 				font: "merriweather",
 				weight: 400,
 				size: 23.1,
@@ -114,7 +113,7 @@ export const nightSociety: Template = {
 				fit: "shrink",
 				color: TEXT,
 				...extra,
-			}) as ElementInput;
+			});
 		const bg = assets.paper;
 		return {
 			v: 1,
@@ -193,17 +192,17 @@ export const nightSociety: Template = {
 					true,
 					{ x: 700, y: 975, size: 150 },
 					{ font: "merriweather", color: GOLD },
-				).map((el) =>
-					el.type === "qr"
-						? { ...el, fg: "#17140f", bg: GOLD }
-						: {
-								...el,
-								y: el.y + 12,
-								text: "Scan to reply",
-								size: 17,
-								tracking: 0.08,
-								italic: true,
-							},
+					{
+						fg: "#17140f",
+						bg: GOLD,
+						caption: {
+							y: 975 + 150 + 6 + 12,
+							text: "Scan to reply",
+							size: 17,
+							tracking: 0.08,
+							italic: true,
+						},
+					},
 				),
 			],
 		};

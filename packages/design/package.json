@@ -2,9 +2,6 @@
 	"name": "@rsvp-site/design",
 	"type": "module",
 	"exports": {
-		".": {
-			"default": "./src/index.ts"
-		},
 		"./*": {
 			"default": "./src/*.ts"
 		}

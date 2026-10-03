@@ -3,17 +3,14 @@ import {
 	bounds,
 	boxPoint,
 	HANDLES,
+	type HandleName,
 	resize,
 	rotation,
 	snap,
 	snapTargets,
 } from "./edit";
 
-const H = (name: string) => {
-	const h = HANDLES[name];
-	if (!h) throw new Error(name);
-	return h;
-};
+const H = (name: HandleName) => HANDLES[name];
 const box = { x: 100, y: 100, w: 200, h: 100, rot: 0 };
 const close = (a: Record<string, number>, b: Record<string, number>) => {
 	for (const k of Object.keys(b)) expect(a[k]).toBeCloseTo(b[k] ?? 0, 6);

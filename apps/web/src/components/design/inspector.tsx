@@ -3,18 +3,18 @@
  * with nothing selected, the card's (its shape, background) and the page
  * theme the guest page takes from it.
  */
-import { bounds } from "@rsvp-site/design/edit";
 import {
 	FONTS,
 	type FontId,
 	type FontInfo,
+	fontStack,
 	hasItalic,
 	nearestWeight,
 } from "@rsvp-site/design/fonts";
 import { PLACEHOLDERS } from "@rsvp-site/design/placeholders";
 import {
 	type Background,
-	cardHeight,
+	BOUNDS,
 	type Design,
 	type DesignTheme,
 	type Element,
@@ -35,8 +35,16 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { AlignCenter, AlignLeft, AlignRight, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
-import { designSrc } from "@/lib/format";
-import { patchEl, removeEls, updateEls } from "./editor-state";
+import { designSrc } from "@/lib/design-src";
+import {
+	type Align,
+	alignEls,
+	patchEl,
+	removeEls,
+	removeUnlocked,
+	reshape,
+	switchBackground,
+} from "./editor-state";
 import {
 	Check,
 	ColorField,
@@ -125,8 +133,8 @@ export function ElementPanel({
 							<NumberField
 								label="Outline width"
 								value={el.strokeWidth}
-								min={0}
-								max={120}
+								min={BOUNDS.strokeWidth.min}
+								max={BOUNDS.strokeWidth.max}
 								onChange={(strokeWidth) => patch({ strokeWidth }, "sw")}
 							/>
 						) : null}
@@ -134,8 +142,8 @@ export function ElementPanel({
 							<NumberField
 								label="Corner radius"
 								value={el.radius}
-								min={0}
-								max={2000}
+								min={BOUNDS.rectRadius.min}
+								max={BOUNDS.rectRadius.max}
 								onChange={(radius) => patch({ radius }, "radius")}
 							/>
 						) : null}
@@ -160,8 +168,8 @@ export function ElementPanel({
 						<NumberField
 							label="Thickness"
 							value={el.strokeWidth}
-							min={0.5}
-							max={120}
+							min={BOUNDS.lineWidth.min}
+							max={BOUNDS.lineWidth.max}
 							onChange={(strokeWidth) => patch({ strokeWidth }, "sw")}
 						/>
 					</Row>
@@ -222,13 +230,13 @@ export function ElementPanel({
 					<NumberField
 						label="Width"
 						value={el.w}
-						min={1}
+						min={BOUNDS.size.min}
 						onChange={(w) => patch(el.type === "qr" ? { w, h: w } : { w }, "w")}
 					/>
 					<NumberField
 						label="Height"
 						value={el.h}
-						min={1}
+						min={BOUNDS.size.min}
 						onChange={(h) => patch(el.type === "qr" ? { w: h, h } : { h }, "h")}
 					/>
 				</Row>
@@ -236,15 +244,15 @@ export function ElementPanel({
 					<NumberField
 						label="Turn (°)"
 						value={el.rot}
-						min={-180}
-						max={180}
+						min={BOUNDS.rot.min}
+						max={BOUNDS.rot.max}
 						onChange={(rot) => patch({ rot }, "rot")}
 					/>
 					<Slider
 						label="Opacity"
 						value={el.opacity}
-						min={0}
-						max={1}
+						min={BOUNDS.unit.min}
+						max={BOUNDS.unit.max}
 						step={0.05}
 						format={pct}
 						onChange={(opacity) => patch({ opacity }, "opacity")}
@@ -316,7 +324,7 @@ function TextFields({
 				<textarea
 					ref={textRef}
 					value={el.text}
-					maxLength={500}
+					maxLength={BOUNDS.text.max}
 					rows={3}
 					onChange={(e) => patch({ text: e.target.value }, "text")}
 					className="min-h-20 w-full rounded-[10px] border border-line-strong bg-night px-2.5 py-2 text-[15px] text-ink outline-none focus-visible:border-lime"
@@ -366,8 +374,8 @@ function TextFields({
 					<NumberField
 						label="Size"
 						value={el.size}
-						min={4}
-						max={800}
+						min={BOUNDS.textSize.min}
+						max={BOUNDS.textSize.max}
 						onChange={(size) => patch({ size }, "size")}
 					/>
 					<ColorField
@@ -414,16 +422,16 @@ function TextFields({
 					<NumberField
 						label="Line height"
 						value={el.lineHeight}
-						min={0.6}
-						max={3}
+						min={BOUNDS.lineHeight.min}
+						max={BOUNDS.lineHeight.max}
 						step={0.05}
 						onChange={(lineHeight) => patch({ lineHeight }, "lh")}
 					/>
 					<NumberField
 						label="Letter spacing"
 						value={el.tracking}
-						min={-0.2}
-						max={1}
+						min={BOUNDS.tracking.min}
+						max={BOUNDS.tracking.max}
 						step={0.01}
 						onChange={(tracking) => patch({ tracking }, "tracking")}
 					/>
@@ -475,8 +483,8 @@ function TextFields({
 						<NumberField
 							label="Across"
 							value={el.shadow.dx}
-							min={-60}
-							max={60}
+							min={BOUNDS.shadowOffset.min}
+							max={BOUNDS.shadowOffset.max}
 							onChange={(dx) =>
 								el.shadow && patch({ shadow: { ...el.shadow, dx } }, "shadow")
 							}
@@ -484,8 +492,8 @@ function TextFields({
 						<NumberField
 							label="Down"
 							value={el.shadow.dy}
-							min={-60}
-							max={60}
+							min={BOUNDS.shadowOffset.min}
+							max={BOUNDS.shadowOffset.max}
 							onChange={(dy) =>
 								el.shadow && patch({ shadow: { ...el.shadow, dy } }, "shadow")
 							}
@@ -544,8 +552,8 @@ function ImageFields({
 				<NumberField
 					label="Corner radius"
 					value={el.radius}
-					min={0}
-					max={500}
+					min={BOUNDS.imageRadius.min}
+					max={BOUNDS.imageRadius.max}
 					onChange={(radius) => patch({ radius }, "radius")}
 				/>
 			) : null}
@@ -571,8 +579,8 @@ function ImageFields({
 					<NumberField
 						label="Width"
 						value={el.border.width}
-						min={0}
-						max={80}
+						min={BOUNDS.borderWidth.min}
+						max={BOUNDS.borderWidth.max}
 						onChange={(width) =>
 							el.border && patch({ border: { ...el.border, width } }, "border")
 						}
@@ -603,8 +611,8 @@ function CropFields({
 			<Slider
 				label="Zoom"
 				value={value.zoom}
-				min={1}
-				max={5}
+				min={BOUNDS.zoom.min}
+				max={BOUNDS.zoom.max}
 				step={0.05}
 				format={(v) => `${v.toFixed(2)}×`}
 				onChange={(zoom) => onChange({ zoom })}
@@ -613,8 +621,8 @@ function CropFields({
 				<Slider
 					label="Across"
 					value={value.fx}
-					min={0}
-					max={1}
+					min={BOUNDS.unit.min}
+					max={BOUNDS.unit.max}
 					step={0.01}
 					format={pct}
 					onChange={(fx) => onChange({ fx })}
@@ -622,8 +630,8 @@ function CropFields({
 				<Slider
 					label="Up and down"
 					value={value.fy}
-					min={0}
-					max={1}
+					min={BOUNDS.unit.min}
+					max={BOUNDS.unit.max}
 					step={0.01}
 					format={pct}
 					onChange={(fy) => onChange({ fy })}
@@ -733,30 +741,13 @@ export function MultiPanel({
 	ids: string[];
 	set: SetDoc;
 }) {
-	const els = doc.elements.filter((e) => ids.includes(e.id) && !e.locked);
-	const boxes = els.map((e) => ({ id: e.id, b: bounds(e) }));
-	const left = Math.min(...boxes.map((x) => x.b.x));
-	const right = Math.max(...boxes.map((x) => x.b.x + x.b.w));
-	const top = Math.min(...boxes.map((x) => x.b.y));
-	const bottom = Math.max(...boxes.map((x) => x.b.y + x.b.h));
-	const align = (
-		fn: (b: { x: number; y: number; w: number; h: number }) => {
-			dx: number;
-			dy: number;
-		},
-	) =>
-		set(
-			updateEls(
-				doc,
-				els.map((e) => e.id),
-				(e) => {
-					const { dx, dy } = fn(bounds(e));
-					return { ...e, x: e.x + dx, y: e.y + dy };
-				},
-			),
-		);
-	const btn = (label: string, fn: Parameters<typeof align>[0]) => (
-		<Button variant="outline" size="sm" onClick={() => align(fn)}>
+	const free = doc.elements.filter((e) => ids.includes(e.id) && !e.locked);
+	const btn = (label: string, to: Align) => (
+		<Button
+			variant="outline"
+			size="sm"
+			onClick={() => set(alignEls(doc, ids, to))}
+		>
 			{label}
 		</Button>
 	);
@@ -764,27 +755,22 @@ export function MultiPanel({
 		<div className="flex flex-col gap-4">
 			<Section title={`${ids.length} selected`}>
 				<div className="flex flex-wrap gap-1.5">
-					{btn("Left", (b) => ({ dx: left - b.x, dy: 0 }))}
-					{btn("Centre", (b) => ({
-						dx: (left + right) / 2 - (b.x + b.w / 2),
-						dy: 0,
-					}))}
-					{btn("Right", (b) => ({ dx: right - (b.x + b.w), dy: 0 }))}
-					{btn("Top", (b) => ({ dx: 0, dy: top - b.y }))}
-					{btn("Middle", (b) => ({
-						dx: 0,
-						dy: (top + bottom) / 2 - (b.y + b.h / 2),
-					}))}
-					{btn("Bottom", (b) => ({ dx: 0, dy: bottom - (b.y + b.h) }))}
+					{btn("Left", "left")}
+					{btn("Centre", "centre")}
+					{btn("Right", "right")}
+					{btn("Top", "top")}
+					{btn("Middle", "middle")}
+					{btn("Bottom", "bottom")}
 				</div>
 			</Section>
 			<Button
 				variant="destructive"
 				size="sm"
 				className="self-start"
-				onClick={() => set(removeEls(doc, ids))}
+				disabled={free.length === 0}
+				onClick={() => set(removeUnlocked(doc, ids))}
 			>
-				<Trash2 /> Delete all {ids.length}
+				<Trash2 /> Delete all {free.length}
 			</Button>
 		</div>
 	);
@@ -828,23 +814,6 @@ export function CardPanel({
 	);
 }
 
-/**
- * A new shape keeps everything's position relative to the card's height,
- * so a design doesn't fall off the bottom of a landscape card.
- */
-function reshape(doc: Design, format: Format): Design {
-	const k = cardHeight(format) / cardHeight(doc.format);
-	if (k === 1) return doc;
-	return {
-		...doc,
-		format,
-		elements: doc.elements.map((e) => ({
-			...e,
-			y: (e.y + e.h / 2) * k - e.h / 2,
-		})),
-	};
-}
-
 const BG_KINDS = [
 	{ value: "solid", label: "Colour" },
 	{ value: "linear", label: "Fade" },
@@ -852,56 +821,6 @@ const BG_KINDS = [
 	{ value: "image", label: "Photo" },
 	{ value: "pattern", label: "Pattern" },
 ] as const;
-
-function switchBackground(
-	doc: Design,
-	kind: Background["kind"],
-): Background | null {
-	const from = doc.background;
-	const base =
-		from.kind === "solid" || from.kind === "pattern"
-			? from.color
-			: from.kind === "image"
-				? doc.theme.bg
-				: (from.stops[0]?.color ?? doc.theme.bg);
-	switch (kind) {
-		case "solid":
-			return { kind, color: base };
-		case "linear":
-			return {
-				kind,
-				angle: 180,
-				stops: [
-					{ at: 0, color: base },
-					{ at: 1, color: doc.theme.accent2 },
-				],
-			};
-		case "radial":
-			return {
-				kind,
-				cx: 0.5,
-				cy: 0.35,
-				r: 0.8,
-				stops: [
-					{ at: 0, color: doc.theme.accent2 },
-					{ at: 1, color: base },
-				],
-			};
-		case "pattern":
-			return {
-				kind,
-				pattern: "dots",
-				color: base,
-				colors: [doc.theme.accent, doc.theme.accent2],
-				scale: 1,
-				angle: 0,
-				seed: 1,
-			};
-		case "image":
-			// Needs a photo picked first; see BackgroundFields.
-			return null;
-	}
-}
 
 function BackgroundFields({
 	doc,
@@ -964,8 +883,8 @@ function BackgroundFields({
 									<Slider
 										label="Strength"
 										value={bg.tint.opacity}
-										min={0}
-										max={0.95}
+										min={BOUNDS.tint.min}
+										max={BOUNDS.tint.max}
 										step={0.05}
 										format={pct}
 										onChange={(opacity) =>
@@ -1008,8 +927,8 @@ function BackgroundFields({
 					<Slider
 						label="Direction"
 						value={bg.angle}
-						min={0}
-						max={360}
+						min={BOUNDS.angle.min}
+						max={BOUNDS.angle.max}
 						step={5}
 						format={(v) => `${v}°`}
 						onChange={(angle) => put({ ...bg, angle }, "angle")}
@@ -1026,8 +945,8 @@ function BackgroundFields({
 						<Slider
 							label="Across"
 							value={bg.cx}
-							min={0}
-							max={1}
+							min={BOUNDS.unit.min}
+							max={BOUNDS.unit.max}
 							step={0.01}
 							format={pct}
 							onChange={(cx) => put({ ...bg, cx }, "cx")}
@@ -1035,8 +954,8 @@ function BackgroundFields({
 						<Slider
 							label="Down"
 							value={bg.cy}
-							min={0}
-							max={1}
+							min={BOUNDS.unit.min}
+							max={BOUNDS.unit.max}
 							step={0.01}
 							format={pct}
 							onChange={(cy) => put({ ...bg, cy }, "cy")}
@@ -1045,8 +964,8 @@ function BackgroundFields({
 					<Slider
 						label="Reach"
 						value={bg.r}
-						min={0.05}
-						max={2}
+						min={BOUNDS.radialRadius.min}
+						max={BOUNDS.radialRadius.max}
 						step={0.05}
 						format={pct}
 						onChange={(r) => put({ ...bg, r }, "r")}
@@ -1084,8 +1003,8 @@ function BackgroundFields({
 						<Slider
 							label="Size"
 							value={bg.scale}
-							min={0.3}
-							max={4}
+							min={BOUNDS.patternScale.min}
+							max={BOUNDS.patternScale.max}
 							step={0.1}
 							format={(v) => `${v.toFixed(1)}×`}
 							onChange={(scale) => put({ ...bg, scale }, "pscale")}
@@ -1106,8 +1025,8 @@ function BackgroundFields({
 							<Slider
 								label="Angle"
 								value={bg.angle}
-								min={0}
-								max={180}
+								min={BOUNDS.patternAngle.min}
+								max={BOUNDS.patternAngle.max}
 								step={5}
 								format={(v) => `${v}°`}
 								onChange={(angle) => put({ ...bg, angle }, "pangle")}
@@ -1141,8 +1060,8 @@ function StopsField({
 					<Slider
 						label="At"
 						value={s.at}
-						min={0}
-						max={1}
+						min={BOUNDS.unit.min}
+						max={BOUNDS.unit.max}
 						step={0.01}
 						format={pct}
 						onChange={(at) =>
@@ -1279,11 +1198,11 @@ function ThemeFields({ doc, set }: { doc: Design; set: SetDoc }) {
 				style={{
 					background: t.bg,
 					color: t.text,
-					fontFamily: `"rsvpd-${t.bodyFont}"`,
+					fontFamily: fontStack(t.bodyFont),
 				}}
 			>
 				<div className="rounded-[10px] p-3" style={{ background: t.panel }}>
-					<b style={{ fontFamily: `"rsvpd-${t.headingFont}"` }}>You coming?</b>
+					<b style={{ fontFamily: fontStack(t.headingFont) }}>You coming?</b>
 					<div className="mt-2 flex gap-1.5 text-[13px]">
 						<span
 							className="rounded-full px-3 py-1"

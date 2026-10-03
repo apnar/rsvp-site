@@ -1,5 +1,5 @@
 import type { ElementInput } from "../schema";
-import { qrBlock } from "./parts";
+import { coverImage, qrBlock } from "./parts";
 import type { Template } from "./types";
 
 const TEAL = "#4fd1c5";
@@ -12,17 +12,7 @@ export const poster: Template = {
 	build: ({ cover, paper }) => {
 		const ground: ElementInput[] = cover
 			? [
-					{
-						id: "photo",
-						type: "image",
-						x: 0,
-						y: 0,
-						w: 1000,
-						h: 1400,
-						ref: cover.ref,
-						iw: cover.iw,
-						ih: cover.ih,
-					},
+					coverImage(cover, { x: 0, y: 0, w: 1000, h: 1400 }),
 					{
 						id: "fade",
 						type: "rect",

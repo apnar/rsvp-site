@@ -7,17 +7,10 @@
  * clock, the DOM or a font file, so the server and the browser agree too.
  */
 import type { Faces } from "./faces";
-import {
-	type FaceKey,
-	type FontId,
-	faceKey,
-	family,
-	hasItalic,
-	nearestWeight,
-} from "./fonts";
+import { type FaceKey, type FontId, faceFor, family } from "./fonts";
 import { type LinearEnds, linearEnds, sortedStops } from "./paint";
 import { confetti, type PatternShape, type Tile, tileOf } from "./patterns";
-import { fill, usesPlaceholder, type Values } from "./placeholders";
+import { textContent, usesPlaceholder, type Values } from "./placeholders";
 import {
 	bleedUnits,
 	CARD_W,
@@ -134,8 +127,6 @@ export type SceneOptions = {
 	faces: Faces;
 	/** Paper only: lay out the bleed (the printing side decides). */
 	bleed?: boolean;
-	/** The designer draws hidden elements' boxes itself; renderers skip them. */
-	keepHidden?: boolean;
 };
 
 export function shows(el: Element, mode: Mode): boolean {
@@ -182,7 +173,7 @@ export function layoutCard(design: Design, opts: SceneOptions): Scene {
 	const area = { x: b ? -b : 0, y: b ? -b : 0, w: w + 2 * b, h: h + 2 * b };
 	const nodes: SceneNode[] = [];
 	for (const el of design.elements) {
-		if (el.hidden && !opts.keepHidden) continue;
+		if (el.hidden) continue;
 		if (!shows(el, opts.mode)) continue;
 		const node = nodeOf(b ? bleedOut(el, b, w, h) : el, opts);
 		if (node) nodes.push(node);
@@ -335,13 +326,10 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 		case "qr":
 			return { ...common, dynamic: true, k: "qr", fg: el.fg, bg: el.bg };
 		case "text": {
-			const italic = el.italic && hasItalic(el.font);
-			const weight = nearestWeight(el.font, el.weight, italic);
-			const key = faceKey(el.font, weight, italic);
+			const { key, weight, italic } = faceFor(el.font, el.weight, el.italic);
 			const face = opts.faces.get(key);
 			if (!face) throw new Error(`Font metrics for ${key} were not loaded`);
-			let content = fill(el.text, opts.values);
-			if (el.upper) content = content.toUpperCase();
+			const content = textContent(el, opts.values);
 			const laid = layoutText({
 				text: content,
 				face,
@@ -373,7 +361,39 @@ function nodeOf(el: Element, opts: SceneOptions): SceneNode | null {
 	}
 }
 
-/** The SVG/canvas transform of a box: rotate about its centre. */
-export function boxCenter(box: Box): { cx: number; cy: number } {
-	return { cx: box.x + box.w / 2, cy: box.y + box.h / 2 };
+/**
+ * The dash pattern every renderer strokes a dashed shape with, in card
+ * units; null for a solid one. Proportional to the stroke so a thick
+ * dashed line doesn't turn into dots.
+ */
+export function dashOf(n: { dash: boolean; sw: number }): number[] | null {
+	return n.dash ? [n.sw * 3, n.sw * 2] : null;
+}
+
+export type Glyph = { c: string; x: number; y: number };
+
+/** One drawing of the text: the shadow is the first pass, the text the last. */
+export type TextPass = { dx: number; dy: number; color: string };
+
+/**
+ * What a renderer draws for a text node: each line's glyphs, with x and
+ * baseline in the box's own frame, and the passes to draw them in. Spaces
+ * are left out (SVG would collapse them and shift every x after them, and
+ * the others have nothing to paint), and so are lines with nothing left.
+ */
+export function glyphsOf(n: TextNode): {
+	lines: Glyph[][];
+	passes: TextPass[];
+} {
+	const lines = n.lines
+		.map((line) =>
+			line.chars.flatMap((c, i) =>
+				c === " " ? [] : [{ c, x: line.xs[i] ?? 0, y: line.y }],
+			),
+		)
+		.filter((g) => g.length > 0);
+	const passes: TextPass[] = [];
+	if (n.shadow) passes.push(n.shadow);
+	passes.push({ dx: 0, dy: 0, color: n.color });
+	return { lines, passes };
 }

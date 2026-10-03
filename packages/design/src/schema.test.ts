@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDesign, refsBelongTo } from "./schema";
+import { BOUNDS, parseDesign, refsBelongTo } from "./schema";
 import { fromTemplate, TEMPLATES } from "./templates/index";
 
 const EVENT = "0b4f7a52-6a3e-4d4b-9a51-2f5e8f1c9d10";
@@ -180,5 +180,47 @@ describe("template pictures", () => {
 		const ref = placed[first[0]]?.ref ?? "";
 		expect(templateAssetUrl(ref)).toBe(`/templates/${t.id}/${first[1].file}`);
 		expect(templateAssetUrl(IMG)).toBeNull();
+	});
+});
+
+describe("parseDesign errors", () => {
+	it("name the element rather than its position", () => {
+		const r = parseDesign(
+			doc([text(), text({ id: "t2", name: "Headline", w: 9999 })]),
+		);
+		if (r.ok) throw new Error("accepted");
+		expect(r.message).toMatch(/^Headline: w: /);
+	});
+
+	it("name an unnamed text by what it says", () => {
+		const r = parseDesign(doc([text({ text: "Join us", size: 5000 })]));
+		if (r.ok) throw new Error("accepted");
+		expect(r.message).toMatch(/^Join us: size: /);
+	});
+
+	it("keep a plain path for what isn't an element", () => {
+		const r = parseDesign(doc([], { format: "tabloid" }));
+		if (r.ok) throw new Error("accepted");
+		expect(r.message).toMatch(/^format: /);
+	});
+
+	it("never trust a non-string name in the label", () => {
+		const r = parseDesign(doc([text({ name: { x: 1 }, w: 9999 })]));
+		if (r.ok) throw new Error("accepted");
+		expect(r.message).toMatch(/^Hello: w: /);
+	});
+});
+
+describe("BOUNDS", () => {
+	it("are what the schema enforces, at the edge", () => {
+		const size = (n: number) => parseDesign(doc([text({ size: n })])).ok;
+		expect(size(BOUNDS.textSize.min)).toBe(true);
+		expect(size(BOUNDS.textSize.max)).toBe(true);
+		expect(size(BOUNDS.textSize.min - 1)).toBe(false);
+		expect(size(BOUNDS.textSize.max + 1)).toBe(false);
+		const words = (n: number) =>
+			parseDesign(doc([text({ text: "x".repeat(n) })])).ok;
+		expect(words(BOUNDS.text.max)).toBe(true);
+		expect(words(BOUNDS.text.max + 1)).toBe(false);
 	});
 });

@@ -83,6 +83,15 @@ export function fill(text: string, values: Values): string {
 	});
 }
 
+/** What a text element says once filled in, capitals applied. */
+export function textContent(
+	el: { text: string; upper?: boolean },
+	values: Values,
+): string {
+	const content = fill(el.text, values);
+	return el.upper ? content.toUpperCase() : content;
+}
+
 /** Whether a text reads that value ({guest's} counts as {guest}). */
 export function usesPlaceholder(text: string, name: Placeholder): boolean {
 	for (const m of text.matchAll(PATTERN)) {
@@ -102,15 +111,4 @@ export const SAMPLE_VALUES: Values = {
 	details:
 		"Bring a blanket and a camp chair. Popcorn bar, then the movie under the stars.",
 	guest: "The Nguyens",
-};
-
-export const BLANK_VALUES: Values = {
-	title: "",
-	date: "",
-	time: "",
-	location: "",
-	host: "",
-	rsvpBy: "",
-	details: "",
-	guest: "",
 };

@@ -1,5 +1,5 @@
 import type { ElementInput } from "../schema";
-import { qrBlock } from "./parts";
+import { coverImage, qrBlock } from "./parts";
 import type { Template } from "./types";
 
 const CREAM = "#fff3e0";
@@ -13,19 +13,11 @@ export const disco: Template = {
 	build: ({ cover, paper }) => {
 		const art: ElementInput[] = cover
 			? [
-					{
-						id: "photo",
-						type: "image",
-						x: 640,
-						y: 120,
-						w: 300,
-						h: 300,
-						ref: cover.ref,
-						iw: cover.iw,
-						ih: cover.ih,
-						mask: "circle",
-						border: { color: ORANGE, width: 10 },
-					},
+					coverImage(
+						cover,
+						{ x: 640, y: 120, w: 300, h: 300 },
+						{ mask: "circle", border: { color: ORANGE, width: 10 } },
+					),
 				]
 			: [
 					{

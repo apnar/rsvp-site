@@ -1,14 +1,18 @@
 import type { FaceKey } from "@rsvp-site/design/fonts";
 import type { tiled } from "@rsvp-site/design/patterns";
-import type {
-	Scene,
-	SceneBackground,
-	SceneNode,
-	TextNode,
+import {
+	dashOf,
+	type Glyph,
+	glyphsOf,
+	type Scene,
+	type SceneBackground,
+	type SceneNode,
+	type TextNode,
+	type TextPass,
 } from "@rsvp-site/design/scene";
 import { type ReactNode, useId } from "react";
 import { fontFaceCss } from "@/lib/design-font-css";
-import { designSrc } from "@/lib/format";
+import { designSrc } from "@/lib/design-src";
 
 /**
  * A laid-out design as inline SVG: the card on the guest page, in the
@@ -202,8 +206,8 @@ function Piece({ shape: p }: { shape: ReturnType<typeof tiled>[number] }) {
 	);
 }
 
-function dashOf(dash: boolean, sw: number): string | undefined {
-	return dash ? `${sw * 3} ${sw * 2}` : undefined;
+function dashArray(n: { dash: boolean; sw: number }): string | undefined {
+	return dashOf(n)?.join(" ");
 }
 
 export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
@@ -230,7 +234,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 					stroke={n.stroke ?? undefined}
 					strokeOpacity={o}
 					strokeWidth={n.stroke ? n.sw : undefined}
-					strokeDasharray={n.stroke ? dashOf(n.dash, n.sw) : undefined}
+					strokeDasharray={n.stroke ? dashArray(n) : undefined}
 				/>
 			);
 			break;
@@ -246,7 +250,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 					stroke={n.stroke ?? undefined}
 					strokeOpacity={o}
 					strokeWidth={n.stroke ? n.sw : undefined}
-					strokeDasharray={n.stroke ? dashOf(n.dash, n.sw) : undefined}
+					strokeDasharray={n.stroke ? dashArray(n) : undefined}
 				/>
 			);
 			break;
@@ -260,7 +264,7 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 					stroke={n.stroke}
 					strokeOpacity={o}
 					strokeWidth={n.sw}
-					strokeDasharray={dashOf(n.dash, n.sw)}
+					strokeDasharray={dashArray(n)}
 				/>
 			);
 			break;
@@ -327,22 +331,17 @@ export function Node({ node: n, uid }: { node: SceneNode; uid: string }) {
 			);
 			break;
 		}
-		case "text":
+		case "text": {
+			const { lines, passes } = glyphsOf(n);
 			body = (
 				<>
-					{n.shadow ? (
-						<Glyphs
-							node={n}
-							dx={n.shadow.dx}
-							dy={n.shadow.dy}
-							color={n.shadow.color}
-							opacity={o}
-						/>
-					) : null}
-					<Glyphs node={n} dx={0} dy={0} color={n.color} opacity={o} />
+					{passes.map((pass, i) => (
+						<Glyphs key={i} node={n} lines={lines} pass={pass} opacity={o} />
+					))}
 				</>
 			);
 			break;
+		}
 		case "qr": {
 			// The code differs per guest and is only ever printed; the designer
 			// shows where it goes, with the three corner squares of a real one.
@@ -410,21 +409,16 @@ const TEXT_STYLE = {
 	fontFeatureSettings: '"liga" 0, "calt" 0, "kern" 0',
 } as const;
 
-/**
- * One <text> per line with an x for every glyph. Spaces are left out:
- * SVG collapses them, which would shift every x after them by one.
- */
+/** One <text> per line with an x for every glyph. */
 function Glyphs({
 	node: n,
-	dx,
-	dy,
-	color,
+	lines,
+	pass,
 	opacity,
 }: {
 	node: TextNode;
-	dx: number;
-	dy: number;
-	color: string;
+	lines: Glyph[][];
+	pass: TextPass;
 	opacity: number | undefined;
 }) {
 	return (
@@ -433,26 +427,20 @@ function Glyphs({
 			fontWeight={n.weight}
 			fontStyle={n.italic ? "italic" : undefined}
 			fontSize={n.size}
-			fill={color}
+			fill={pass.color}
 			fillOpacity={opacity}
 			style={TEXT_STYLE}
 			aria-hidden
 		>
-			{n.lines.map((line, i) => {
-				const xs: number[] = [];
-				let chars = "";
-				line.chars.forEach((c, j) => {
-					if (c === " ") return;
-					chars += c;
-					xs.push(n.box.x + (line.xs[j] ?? 0) + dx);
-				});
-				if (!chars) return null;
-				return (
-					<tspan key={i} x={xs.join(" ")} y={n.box.y + line.y + dy}>
-						{chars}
-					</tspan>
-				);
-			})}
+			{lines.map((line, i) => (
+				<tspan
+					key={i}
+					x={line.map((g) => n.box.x + g.x + pass.dx).join(" ")}
+					y={n.box.y + (line[0]?.y ?? 0) + pass.dy}
+				>
+					{line.map((g) => g.c).join("")}
+				</tspan>
+			))}
 		</text>
 	);
 }

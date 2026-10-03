@@ -11,6 +11,8 @@ import { family } from "@rsvp-site/design/fonts";
 import { tiled } from "@rsvp-site/design/patterns";
 import type { Values } from "@rsvp-site/design/placeholders";
 import {
+	dashOf,
+	glyphsOf,
 	layoutCard,
 	type Scene,
 	type SceneBackground,
@@ -18,7 +20,7 @@ import {
 } from "@rsvp-site/design/scene";
 import { type Design, refsOf } from "@rsvp-site/design/schema";
 import { FONT_FILES } from "./design-fonts.gen";
-import { designSrc } from "./format";
+import { designSrc } from "./design-src";
 
 const WIDTH = 1200;
 
@@ -141,7 +143,7 @@ function paint(
 	fill: string | null,
 	stroke: string | null,
 	sw: number,
-	dash: boolean,
+	dash: number[] | null,
 ) {
 	if (fill) {
 		ctx.fillStyle = fill;
@@ -150,7 +152,7 @@ function paint(
 	if (stroke && sw > 0) {
 		ctx.strokeStyle = stroke;
 		ctx.lineWidth = sw;
-		ctx.setLineDash(dash ? [sw * 3, sw * 2] : []);
+		ctx.setLineDash(dash ?? []);
 		ctx.stroke();
 		ctx.setLineDash([]);
 	}
@@ -172,17 +174,17 @@ function drawNode(
 	switch (n.k) {
 		case "rect":
 			shapePath(ctx, n, false, n.r);
-			paint(ctx, n.fill, n.stroke, n.sw, n.dash);
+			paint(ctx, n.fill, n.stroke, n.sw, dashOf(n));
 			break;
 		case "ellipse":
 			shapePath(ctx, n, true, 0);
-			paint(ctx, n.fill, n.stroke, n.sw, n.dash);
+			paint(ctx, n.fill, n.stroke, n.sw, dashOf(n));
 			break;
 		case "line":
 			ctx.beginPath();
 			ctx.moveTo(x, y + h / 2);
 			ctx.lineTo(x + w, y + h / 2);
-			paint(ctx, null, n.stroke, n.sw, n.dash);
+			paint(ctx, null, n.stroke, n.sw, dashOf(n));
 			break;
 		case "path":
 			ctx.translate(x, y);
@@ -199,7 +201,7 @@ function drawNode(
 			ctx.restore();
 			if (n.border) {
 				shapePath(ctx, n, n.mask === "circle", n.r);
-				paint(ctx, null, n.border.color, n.border.width, false);
+				paint(ctx, null, n.border.color, n.border.width, null);
 			}
 			break;
 		}
@@ -207,17 +209,13 @@ function drawNode(
 			ctx.font = `${n.italic ? "italic " : ""}${n.weight} ${n.size}px "${n.family}"`;
 			ctx.textBaseline = "alphabetic";
 			ctx.fontKerning = "none";
-			const glyphs = (dx: number, dy: number, color: string) => {
-				ctx.fillStyle = color;
-				for (const line of n.lines) {
-					line.chars.forEach((c, i) => {
-						if (c !== " ")
-							ctx.fillText(c, x + (line.xs[i] ?? 0) + dx, y + line.y + dy);
-					});
-				}
-			};
-			if (n.shadow) glyphs(n.shadow.dx, n.shadow.dy, n.shadow.color);
-			glyphs(0, 0, n.color);
+			const { lines, passes } = glyphsOf(n);
+			for (const pass of passes) {
+				ctx.fillStyle = pass.color;
+				for (const line of lines)
+					for (const g of line)
+						ctx.fillText(g.c, x + g.x + pass.dx, y + g.y + pass.dy);
+			}
 			break;
 		}
 		case "qr":

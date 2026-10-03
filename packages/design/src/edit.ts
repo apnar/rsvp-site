@@ -10,7 +10,7 @@ export type Point = { x: number; y: number };
 /** -1, 0 or 1 per axis: which edges a handle moves. "nw" is (-1, -1). */
 export type Handle = { hx: -1 | 0 | 1; hy: -1 | 0 | 1 };
 
-export const HANDLES: Record<string, Handle> = {
+export const HANDLES = {
 	nw: { hx: -1, hy: -1 },
 	n: { hx: 0, hy: -1 },
 	ne: { hx: 1, hy: -1 },
@@ -19,7 +19,9 @@ export const HANDLES: Record<string, Handle> = {
 	s: { hx: 0, hy: 1 },
 	sw: { hx: -1, hy: 1 },
 	w: { hx: -1, hy: 0 },
-};
+} as const satisfies Record<string, Handle>;
+
+export type HandleName = keyof typeof HANDLES;
 
 function turn(p: Point, deg: number): Point {
 	const a = (deg * Math.PI) / 180;
@@ -29,6 +31,12 @@ function turn(p: Point, deg: number): Point {
 	};
 }
 
+/** A point turned by `deg` about another one. */
+export function turnAbout(p: Point, about: Point, deg: number): Point {
+	const t = turn({ x: p.x - about.x, y: p.y - about.y }, deg);
+	return { x: about.x + t.x, y: about.y + t.y };
+}
+
 export function centerOf(b: Box): Point {
 	return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
 }
@@ -36,8 +44,7 @@ export function centerOf(b: Box): Point {
 /** A point of the box, in its own frame relative to its centre, on the card. */
 export function boxPoint(b: Box, local: Point): Point {
 	const c = centerOf(b);
-	const t = turn(local, b.rot);
-	return { x: c.x + t.x, y: c.y + t.y };
+	return turnAbout({ x: c.x + local.x, y: c.y + local.y }, c, b.rot);
 }
 
 /** The four corners on the card, turned. */

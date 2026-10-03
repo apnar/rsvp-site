@@ -10,6 +10,7 @@ import {
 	type Guide,
 	HANDLES,
 	type Handle,
+	type HandleName,
 	type Point,
 	resize,
 	rotation,
@@ -17,7 +18,7 @@ import {
 	snapTargets,
 } from "@rsvp-site/design/edit";
 import type { Box, Scene } from "@rsvp-site/design/scene";
-import type { Design, Element } from "@rsvp-site/design/schema";
+import { BOUNDS, type Design, type Element } from "@rsvp-site/design/schema";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { type Dispatch, type PointerEvent, useRef, useState } from "react";
 import { CardSvg } from "./card-svg";
@@ -45,10 +46,10 @@ function keepsAspect(el: Element): boolean {
 	return el.type === "image" || el.type === "sticker" || el.type === "qr";
 }
 
-function handlesOf(el: Element): string[] {
+function handlesOf(el: Element): HandleName[] {
 	if (el.type === "line") return ["w", "e"];
 	if (el.type === "qr") return ["nw", "ne", "se", "sw"];
-	return Object.keys(HANDLES);
+	return Object.keys(HANDLES) as HandleName[];
 }
 
 export function DesignCanvas({
@@ -182,7 +183,10 @@ export function DesignCanvas({
 						? {
 								...el,
 								...b,
-								size: Math.max(4, Math.min(800, (el.size * b.w) / o.w)),
+								size: Math.max(
+									BOUNDS.textSize.min,
+									Math.min(BOUNDS.textSize.max, (el.size * b.w) / o.w),
+								),
 							}
 						: el.type === "qr"
 							? { ...el, ...b, h: b.w }
@@ -259,7 +263,7 @@ export function DesignCanvas({
 							width={scene.w - 2 * scene.bleed}
 							height={scene.h - 2 * scene.bleed}
 							fill="none"
-							stroke="#ff4fa3"
+							stroke="var(--color-pink)"
 							strokeOpacity={0.6}
 							strokeWidth={1}
 							strokeDasharray="2 4"
@@ -300,7 +304,6 @@ export function DesignCanvas({
 					<g>
 						{handlesOf(one).map((name) => {
 							const h = HANDLES[name];
-							if (!h) return null;
 							const c = boxPoint(one, {
 								x: (h.hx * one.w) / 2,
 								y: (h.hy * one.h) / 2,
@@ -316,7 +319,7 @@ export function DesignCanvas({
 									transform={
 										one.rot ? `rotate(${one.rot} ${c.x} ${c.y})` : undefined
 									}
-									fill="#ffffff"
+									fill="var(--color-ink)"
 									stroke={lime}
 									strokeWidth={1.5}
 									vectorEffect="non-scaling-stroke"
@@ -353,7 +356,7 @@ export function DesignCanvas({
 										cy={knob.y}
 										r={handle * 0.65}
 										fill={lime}
-										stroke="#ffffff"
+										stroke="var(--color-ink)"
 										strokeWidth={1.5}
 										vectorEffect="non-scaling-stroke"
 										className="cursor-grab"
@@ -379,7 +382,7 @@ export function DesignCanvas({
 						x2={g.axis === "x" ? g.at : scene.area.x + scene.area.w}
 						y1={g.axis === "y" ? g.at : scene.area.y}
 						y2={g.axis === "y" ? g.at : scene.area.y + scene.area.h}
-						stroke="#ff4fa3"
+						stroke="var(--color-pink)"
 						strokeWidth={1}
 						vectorEffect="non-scaling-stroke"
 						pointerEvents="none"

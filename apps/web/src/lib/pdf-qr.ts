@@ -1,9 +1,10 @@
+import { rgb as parseHex } from "@rsvp-site/design/paint";
 import { type PDFPage, type RGB, rgb } from "pdf-lib";
 import QRCode from "qrcode";
 
 export function hexColor(hex: string): RGB {
-	const n = Number.parseInt(hex.slice(1), 16);
-	return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+	const [r, g, b] = parseHex(hex);
+	return rgb(r / 255, g / 255, b / 255);
 }
 
 /**

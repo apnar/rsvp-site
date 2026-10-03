@@ -4,8 +4,9 @@
  */
 import { bounds } from "./edit";
 import type { Faces } from "./faces";
-import { FONTS, faceKey, hasItalic, nearestWeight } from "./fonts";
-import { fill, usesPlaceholder, type Values } from "./placeholders";
+import { FONTS, faceFor } from "./fonts";
+import { elementLabel } from "./label";
+import { textContent, usesPlaceholder, type Values } from "./placeholders";
 import { printableQrs } from "./qr";
 import {
 	bleedUnits,
@@ -59,18 +60,14 @@ export function warningsOf(
 			out.push({
 				id: el.id,
 				level: "warn",
-				message: `${label(el)} is off the card.`,
+				message: `“${elementLabel(el)}” is off the card.`,
 			});
 			continue;
 		}
 		if (el.type !== "text") continue;
-		const content = fill(el.text, opts.values);
-		const italic = el.italic && hasItalic(el.font);
-		const face = opts.faces.get(
-			faceKey(el.font, nearestWeight(el.font, el.weight, italic), italic),
-		);
+		const face = opts.faces.get(faceFor(el.font, el.weight, el.italic).key);
 		const missing = face
-			? unsupportedChars(face, el.upper ? content.toUpperCase() : content)
+			? unsupportedChars(face, textContent(el, opts.values))
 			: [];
 		if (missing.length > 0) {
 			out.push({
@@ -86,7 +83,7 @@ export function warningsOf(
 			out.push({
 				id: el.id,
 				level: "warn",
-				message: `${label(el)} is close enough to the edge to be trimmed.`,
+				message: `“${elementLabel(el)}” is close enough to the edge to be trimmed.`,
 			});
 		}
 		if (opts.shareLink && usesPlaceholder(el.text, "location")) {
@@ -107,20 +104,4 @@ export function warningsOf(
 		});
 	}
 	return out;
-}
-
-function label(el: Design["elements"][number]): string {
-	if (el.name) return `“${el.name}”`;
-	if (el.type === "text") {
-		const s = el.text.replace(/\s+/g, " ").trim();
-		return s ? `“${s.length > 24 ? `${s.slice(0, 24)}…` : s}”` : "A text box";
-	}
-	return {
-		image: "An image",
-		rect: "A rectangle",
-		ellipse: "An ellipse",
-		line: "A line",
-		sticker: "A sticker",
-		qr: "The QR code",
-	}[el.type];
 }

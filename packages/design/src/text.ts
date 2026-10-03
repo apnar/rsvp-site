@@ -61,7 +61,7 @@ function kernBase(c: string): string {
 	if (c.charCodeAt(0) < 0x80) return c;
 	let b = bases.get(c);
 	if (b === undefined) {
-		const stripped = c.normalize("NFD").replace(/[̀-ͯ]/g, "");
+		const stripped = c.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 		b = stripped.length === 1 ? stripped : c;
 		bases.set(c, b);
 	}

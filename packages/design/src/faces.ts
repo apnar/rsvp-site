@@ -2,14 +2,7 @@
  * Loading font metrics. Each face is its own module, imported on demand,
  * so a page pays only for the fonts its design uses.
  */
-import {
-	FACES,
-	type FaceKey,
-	type FontId,
-	faceKey,
-	hasItalic,
-	nearestWeight,
-} from "./fonts";
+import { FACES, type FaceKey, type FontId, faceFor } from "./fonts";
 import { METRICS } from "./metrics/index";
 import { type Face, prepareFace } from "./text";
 
@@ -27,14 +20,7 @@ export function facesOf(d: {
 	const keys = new Set<FaceKey>();
 	for (const el of d.elements) {
 		if (el.type === "text" && el.font) {
-			const italic = Boolean(el.italic) && hasItalic(el.font);
-			keys.add(
-				faceKey(
-					el.font,
-					nearestWeight(el.font, el.weight ?? 400, italic),
-					italic,
-				),
-			);
+			keys.add(faceFor(el.font, el.weight ?? 400, Boolean(el.italic)).key);
 		}
 	}
 	return [...keys];

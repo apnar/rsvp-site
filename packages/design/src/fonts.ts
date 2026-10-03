@@ -157,3 +157,18 @@ export function nearestWeight(
 	}
 	return best;
 }
+
+/**
+ * The face a text element draws with: italic only where the font has it,
+ * and the registry weight nearest to the one asked for. The one place
+ * this is decided, so layout, loading and warnings name the same face.
+ */
+export function faceFor(
+	font: FontId,
+	weight: number,
+	italic = false,
+): { key: FaceKey; weight: number; italic: boolean } {
+	const it = italic && hasItalic(font);
+	const w = nearestWeight(font, weight, it);
+	return { key: faceKey(font, w, it), weight: w, italic: it };
+}

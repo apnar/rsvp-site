@@ -1,5 +1,5 @@
 import type { ElementInput } from "../schema";
-import { qrBlock } from "./parts";
+import { coverImage, qrBlock } from "./parts";
 import type { Template } from "./types";
 
 const INK = "#111111";
@@ -11,19 +11,7 @@ export const minimal: Template = {
 	label: "Minimal",
 	build: ({ cover, paper }) => {
 		const photo: ElementInput[] = cover
-			? [
-					{
-						id: "photo",
-						type: "image",
-						x: 80,
-						y: 80,
-						w: 840,
-						h: 480,
-						ref: cover.ref,
-						iw: cover.iw,
-						ih: cover.ih,
-					},
-				]
+			? [coverImage(cover, { x: 80, y: 80, w: 840, h: 480 })]
 			: [];
 		const top = cover ? 620 : 160;
 		return {

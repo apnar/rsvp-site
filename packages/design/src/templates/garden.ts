@@ -1,5 +1,5 @@
 import type { ElementInput } from "../schema";
-import { qrBlock } from "./parts";
+import { coverImage, qrBlock } from "./parts";
 import type { Template } from "./types";
 
 const INK = "#2f3a2f";
@@ -13,19 +13,11 @@ export const garden: Template = {
 	build: ({ cover, paper }) => {
 		const photo: ElementInput[] = cover
 			? [
-					{
-						id: "photo",
-						type: "image",
-						x: 360,
-						y: 130,
-						w: 280,
-						h: 280,
-						ref: cover.ref,
-						iw: cover.iw,
-						ih: cover.ih,
-						mask: "circle",
-						border: { color: SAGE, width: 10 },
-					},
+					coverImage(
+						cover,
+						{ x: 360, y: 130, w: 280, h: 280 },
+						{ mask: "circle", border: { color: SAGE, width: 10 } },
+					),
 				]
 			: [
 					{

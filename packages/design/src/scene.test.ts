@@ -3,7 +3,7 @@ import { facesOf, loadFaces } from "./faces";
 import { linearEnds } from "./paint";
 import { confetti } from "./patterns";
 import { SAMPLE_VALUES } from "./placeholders";
-import { layoutCard, placeImage } from "./scene";
+import { dashOf, glyphsOf, layoutCard, placeImage } from "./scene";
 import { fromTemplate, TEMPLATES } from "./templates/index";
 
 const afterDark = TEMPLATES[0];
@@ -119,5 +119,49 @@ describe("geometry", () => {
 		expect(confetti({ ...spec, seed: 8 }, 1000, 1400)).not.toEqual(
 			confetti(spec, 1000, 1400),
 		);
+	});
+});
+
+describe("glyphsOf", async () => {
+	const faces = await loadFaces(facesOf(design));
+	const scene = layoutCard(design, {
+		values: SAMPLE_VALUES,
+		mode: "web",
+		faces,
+	});
+	const title = scene.nodes.find((n) => n.id === "title");
+	if (title?.k !== "text") throw new Error("no title");
+
+	it("leaves out spaces and keeps each glyph's own x and baseline", () => {
+		const { lines } = glyphsOf(title);
+		const drawn = lines.map((l) => l.map((g) => g.c).join(""));
+		const written = title.lines.map((l) =>
+			l.chars.join("").replaceAll(" ", ""),
+		);
+		expect(drawn).toEqual(written.filter(Boolean));
+		for (const line of lines) {
+			expect(new Set(line.map((g) => g.y)).size).toBe(1);
+			expect(line.map((g) => g.x)).toEqual(
+				[...line.map((g) => g.x)].sort((a, b) => a - b),
+			);
+		}
+	});
+
+	it("draws the shadow first, under the text", () => {
+		expect(glyphsOf(title).passes).toEqual([
+			{ dx: 0, dy: 0, color: title.color },
+		]);
+		const shadowed = { ...title, shadow: { color: "#000000", dx: 2, dy: 3 } };
+		expect(glyphsOf(shadowed).passes).toEqual([
+			{ color: "#000000", dx: 2, dy: 3 },
+			{ dx: 0, dy: 0, color: title.color },
+		]);
+	});
+});
+
+describe("dashOf", () => {
+	it("scales the pattern with the stroke, and is null when solid", () => {
+		expect(dashOf({ dash: true, sw: 4 })).toEqual([12, 8]);
+		expect(dashOf({ dash: false, sw: 4 })).toBeNull();
 	});
 });

@@ -1,5 +1,5 @@
 import type { ElementInput } from "../schema";
-import { qrBlock } from "./parts";
+import { coverImage, qrBlock } from "./parts";
 import type { Template } from "./types";
 
 const INK = "#2a2140";
@@ -14,19 +14,11 @@ export const confetti: Template = {
 	build: ({ cover, paper }) => {
 		const art: ElementInput[] = cover
 			? [
-					{
-						id: "photo",
-						type: "image",
-						x: 380,
-						y: 110,
-						w: 240,
-						h: 240,
-						ref: cover.ref,
-						iw: cover.iw,
-						ih: cover.ih,
-						mask: "circle",
-						border: { color: SUN, width: 12 },
-					},
+					coverImage(
+						cover,
+						{ x: 380, y: 110, w: 240, h: 240 },
+						{ mask: "circle", border: { color: SUN, width: 12 } },
+					),
 				]
 			: [
 					{

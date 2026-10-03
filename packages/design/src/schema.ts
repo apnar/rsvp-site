@@ -12,6 +12,7 @@
  */
 import { z } from "zod";
 import { FONT_IDS, FONTS, type FontId, type FontInfo } from "./fonts";
+import { elementLabel, type Labelled } from "./label";
 import { STICKER_IDS } from "./stickers";
 
 export const FORMATS = {
@@ -46,19 +47,51 @@ export function unitsPerInch(format: Format): number {
 export const LIMITS = {
 	elements: 80,
 	images: 12,
-	text: 500,
 	/** JSON.stringify of the whole document. */
 	bytes: 64_000,
 };
+
+type Range = { min: number; max: number };
+
+/**
+ * Every numeric limit a host can hit, once: the schema enforces these and
+ * the designer's fields and clamps read them, so a field can never offer
+ * a value that saving would then refuse.
+ */
+export const BOUNDS = {
+	pos: { min: -2000, max: 4000 },
+	size: { min: 1, max: 4000 },
+	rot: { min: -180, max: 180 },
+	opacity: { min: 0, max: 1 },
+	unit: { min: 0, max: 1 },
+	textSize: { min: 4, max: 800 },
+	lineHeight: { min: 0.6, max: 3 },
+	/** Letter spacing in em. */
+	tracking: { min: -0.2, max: 1 },
+	shadowOffset: { min: -60, max: 60 },
+	strokeWidth: { min: 0, max: 120 },
+	lineWidth: { min: 0.5, max: 120 },
+	rectRadius: { min: 0, max: 2000 },
+	imageRadius: { min: 0, max: 500 },
+	borderWidth: { min: 0, max: 80 },
+	zoom: { min: 1, max: 5 },
+	tint: { min: 0, max: 0.95 },
+	angle: { min: 0, max: 360 },
+	patternAngle: { min: 0, max: 180 },
+	radialRadius: { min: 0.05, max: 2 },
+	patternScale: { min: 0.3, max: 4 },
+	name: { max: 40 },
+	text: { max: 500 },
+} as const satisfies Record<string, Partial<Range>>;
 
 const hex = z
 	.string()
 	.regex(/^#[0-9a-fA-F]{6}$/, "Colours are #rrggbb")
 	.transform((s) => s.toLowerCase());
-const num = (min: number, max: number) => z.number().finite().min(min).max(max);
-const pos = num(-2000, 4000);
-const size = num(1, 4000);
-const unit = num(0, 1);
+const num = ({ min, max }: Range) => z.number().finite().min(min).max(max);
+const pos = num(BOUNDS.pos);
+const size = num(BOUNDS.size);
+const unit = num(BOUNDS.unit);
 const elementId = z.string().regex(/^[a-z0-9]{1,12}$/);
 /**
  * An uploaded image of this event's (assertRefs checks which event). The
@@ -77,13 +110,13 @@ const base = {
 	y: pos,
 	w: size,
 	h: size,
-	rot: num(-180, 180).default(0),
+	rot: num(BOUNDS.rot).default(0),
 	opacity: unit.default(1),
 	locked: z.boolean().default(false),
 	hidden: z.boolean().default(false),
 	/** "paper" prints but is left off the page; "screen" the reverse. */
 	show: z.enum(["all", "paper", "screen"]).default("all"),
-	name: z.string().max(40).optional(),
+	name: z.string().max(BOUNDS.name.max).optional(),
 };
 
 const crop = {
@@ -94,26 +127,30 @@ const crop = {
 	/** The point of the image kept in view as it is cropped, 0-1. */
 	fx: unit.default(0.5),
 	fy: unit.default(0.5),
-	zoom: num(1, 5).default(1),
+	zoom: num(BOUNDS.zoom).default(1),
 };
 
 export const textElement = z.object({
 	...base,
 	type: z.literal("text"),
-	text: z.string().max(LIMITS.text),
+	text: z.string().max(BOUNDS.text.max),
 	font: z.enum(FONT_IDS),
 	weight: z.number().int().min(100).max(900).default(400),
 	italic: z.boolean().default(false),
-	size: num(4, 800),
+	size: num(BOUNDS.textSize),
 	color: hex,
 	align: z.enum(["left", "center", "right"]).default("left"),
 	valign: z.enum(["top", "middle", "bottom"]).default("top"),
-	lineHeight: num(0.6, 3).default(1.2),
+	lineHeight: num(BOUNDS.lineHeight).default(1.2),
 	/** Letter spacing in em. */
-	tracking: num(-0.2, 1).default(0),
+	tracking: num(BOUNDS.tracking).default(0),
 	upper: z.boolean().default(false),
 	shadow: z
-		.object({ color: hex, dx: num(-60, 60), dy: num(-60, 60) })
+		.object({
+			color: hex,
+			dx: num(BOUNDS.shadowOffset),
+			dy: num(BOUNDS.shadowOffset),
+		})
 		.nullable()
 		.default(null),
 	/**
@@ -128,9 +165,9 @@ export const imageElement = z.object({
 	type: z.literal("image"),
 	...crop,
 	mask: z.enum(["none", "circle", "rounded"]).default("none"),
-	radius: num(0, 500).default(0),
+	radius: num(BOUNDS.imageRadius).default(0),
 	border: z
-		.object({ color: hex, width: num(0, 80) })
+		.object({ color: hex, width: num(BOUNDS.borderWidth) })
 		.nullable()
 		.default(null),
 });
@@ -138,7 +175,7 @@ export const imageElement = z.object({
 const shapeFields = {
 	fill: hex.nullable().default(null),
 	stroke: hex.nullable().default(null),
-	strokeWidth: num(0, 120).default(0),
+	strokeWidth: num(BOUNDS.strokeWidth).default(0),
 	dash: z.boolean().default(false),
 };
 
@@ -146,7 +183,7 @@ export const rectElement = z.object({
 	...base,
 	type: z.literal("rect"),
 	...shapeFields,
-	radius: num(0, 2000).default(0),
+	radius: num(BOUNDS.rectRadius).default(0),
 });
 
 export const ellipseElement = z.object({
@@ -160,7 +197,7 @@ export const lineElement = z.object({
 	...base,
 	type: z.literal("line"),
 	stroke: hex,
-	strokeWidth: num(0.5, 120).default(4),
+	strokeWidth: num(BOUNDS.lineWidth).default(4),
 	dash: z.boolean().default(false),
 });
 
@@ -197,7 +234,7 @@ export const background = z.discriminatedUnion("kind", [
 	z.object({
 		kind: z.literal("linear"),
 		/** CSS convention: 0 runs bottom to top, 90 left to right. */
-		angle: num(0, 360),
+		angle: num(BOUNDS.angle),
 		stops,
 	}),
 	z.object({
@@ -205,14 +242,14 @@ export const background = z.discriminatedUnion("kind", [
 		cx: unit,
 		cy: unit,
 		/** As a share of the card's longer side. */
-		r: num(0.05, 2),
+		r: num(BOUNDS.radialRadius),
 		stops,
 	}),
 	z.object({
 		kind: z.literal("image"),
 		...crop,
 		tint: z
-			.object({ color: hex, opacity: num(0, 0.95) })
+			.object({ color: hex, opacity: num(BOUNDS.tint) })
 			.nullable()
 			.default(null),
 	}),
@@ -221,8 +258,8 @@ export const background = z.discriminatedUnion("kind", [
 		pattern: z.enum(["dots", "stripes", "confetti"]),
 		color: hex,
 		colors: z.array(hex).min(1).max(5),
-		scale: num(0.3, 4).default(1),
-		angle: num(0, 180).default(0),
+		scale: num(BOUNDS.patternScale).default(1),
+		angle: num(BOUNDS.patternAngle).default(0),
 		seed: z
 			.number()
 			.int()
@@ -346,12 +383,36 @@ export function parseDesign(doc: unknown): ParseResult {
 	const parsed = design.safeParse(doc);
 	if (!parsed.success) {
 		const issue = parsed.error.issues[0];
+		if (!issue) return { ok: false, message: "That design isn't valid." };
 		return {
 			ok: false,
-			message: issue
-				? `${issue.path.join(".") || "design"}: ${issue.message}`
-				: "That design isn't valid.",
+			message: `${where(doc, issue.path)}: ${issue.message}`,
 		};
 	}
 	return { ok: true, design: parsed.data };
+}
+
+/**
+ * Where an issue is, in words a host knows: an element by its label ("Your
+ * words here: w") rather than "elements.3.w". The document is unparsed, so
+ * only strings are trusted for the label.
+ */
+function where(doc: unknown, path: readonly PropertyKey[]): string {
+	const [head, index, ...rest] = path;
+	if (head === "elements" && typeof index === "number") {
+		const els = (doc as { elements?: unknown } | null)?.elements;
+		const el: unknown = Array.isArray(els) ? els[index] : undefined;
+		if (el && typeof el === "object") {
+			const raw = el as Record<string, unknown>;
+			const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+			const named: Labelled = {
+				type: str(raw.type) ?? "element",
+				name: str(raw.name),
+				text: str(raw.text),
+				sticker: str(raw.sticker),
+			};
+			return [elementLabel(named), ...rest.map(String)].join(": ");
+		}
+	}
+	return path.map(String).join(".") || "design";
 }

@@ -29,11 +29,11 @@ import { AddMenu } from "@/components/design/add-menu";
 import { DesignCanvas } from "@/components/design/canvas";
 import {
 	addEl,
+	cloneEls,
 	duplicateEls,
 	type EditorAction,
 	type EditorState,
 	initialState,
-	newId,
 	reducer,
 	removeEls,
 	restack,
@@ -49,7 +49,7 @@ import { Layers } from "@/components/design/layers";
 import { TemplatePicker } from "@/components/design/template-picker";
 import { refreshCard } from "@/lib/design-card";
 import { fontFaceCss } from "@/lib/design-font-css";
-import { designSrc } from "@/lib/format";
+import { designSrc } from "@/lib/design-src";
 import { layoutsFor } from "@/lib/paper-sizes";
 import { naturalSize, shrinkForDesign } from "@/lib/shrink-image";
 import { client, orpc } from "@/utils/orpc";
@@ -387,7 +387,7 @@ function useKeys(state: EditorState, dispatch: Dispatch<EditorAction>) {
 			const { doc, selected } = latest.current;
 			const mod = ev.metaKey || ev.ctrlKey;
 			const set = (d: Design, key?: string) =>
-				dispatch({ t: "set", doc: d, key });
+				dispatch({ t: "set", doc: d, key, at: Date.now() });
 			const movable = doc.elements
 				.filter((x) => selected.includes(x.id) && !x.locked)
 				.map((x) => x.id);
@@ -403,15 +403,9 @@ function useKeys(state: EditorState, dispatch: Dispatch<EditorAction>) {
 				clip.current = doc.elements.filter((x) => selected.includes(x.id));
 				return;
 			} else if (mod && ev.key.toLowerCase() === "v" && clip.current.length) {
-				let next = doc;
-				const ids: string[] = [];
-				for (const c of clip.current) {
-					const id = newId(next);
-					next = addEl(next, { ...c, id, x: c.x + 24, y: c.y + 24 });
-					ids.push(id);
-				}
-				set(next);
-				dispatch({ t: "select", ids });
+				const r = cloneEls(doc, clip.current);
+				set(r.doc);
+				dispatch({ t: "select", ids: r.ids });
 			} else if (
 				(ev.key === "Delete" || ev.key === "Backspace") &&
 				movable.length
@@ -515,7 +509,8 @@ function Editor({
 	});
 
 	const set = useCallback(
-		(d: Design, key?: string) => dispatch({ t: "set", doc: d, key }),
+		(d: Design, key?: string) =>
+			dispatch({ t: "set", doc: d, key, at: Date.now() }),
 		[],
 	);
 	const select = (ids: string[], add: boolean) =>
