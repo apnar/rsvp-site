@@ -17,22 +17,13 @@ import {
 	rsvpLink,
 } from "../links";
 import {
-	buttons,
+	type Block,
 	COLORS,
 	type EmailLook,
+	email,
 	escapeHtml,
 	type Fact,
-	factsTable,
-	layout,
-	listFooter,
-	listFooterText,
-	muted,
-	type Palette,
-	paletteOf,
-	para,
-	paragraphs,
 	paraHtml,
-	pasteLink,
 } from "../render";
 
 export type EventFacts = {
@@ -65,21 +56,15 @@ const answerLabel = (a: RsvpAnswer) => (a === "yes" ? "Yes!" : ANSWER_WORD[a]);
 
 const ANSWERS: readonly RsvpAnswer[] = ["yes", "maybe", "no"];
 
-function answerButtons(facts: EventFacts, pal: Palette): string {
-	return buttons(
-		ANSWERS.map((a) => ({
+function answerButtons(facts: EventFacts): Block {
+	return {
+		kind: "buttons",
+		items: ANSWERS.map((a) => ({
 			label: answerLabel(a),
 			href: rsvpLink(facts.siteUrl, facts.eventId, a),
 			tone: a === "yes" ? "lime" : "outline",
 		})),
-		pal,
-	);
-}
-
-function answerLines(facts: EventFacts): string[] {
-	return ANSWERS.map(
-		(a) => `${answerLabel(a)}: ${rsvpLink(facts.siteUrl, facts.eventId, a)}`,
-	);
+	};
 }
 
 /** "Sat, Oct 24, 5:00 PM - 10:00 PM", or whichever part exists. */
@@ -103,54 +88,39 @@ function eventFacts(facts: EventFacts, withDeadline: boolean): Fact[] {
 type Parts = {
 	subject: string;
 	kicker: string;
-	heading: string;
 	lead: string;
-	facts: Fact[];
-	/** Extra HTML after the facts (already escaped). */
-	bodyExtra?: string;
-	/** The same extra, as text lines. */
-	textExtra?: string[];
+	/** What goes between the lead and the buttons. */
+	middle: Block[];
 	/** Show the three answer buttons; otherwise one "Open the invite". */
 	answers: boolean;
 	tail?: string;
 };
 
 function render(facts: EventFacts, parts: Parts): Rendered {
-	const open = eventLink(facts.siteUrl, facts.eventId);
-	const pal = paletteOf(facts.look);
-	const html = layout({
-		title: parts.subject,
+	return email({
+		subject: parts.subject,
 		kicker: parts.kicker,
-		heading: parts.heading,
+		heading: facts.title,
 		coverUrl: facts.coverKey ? coverUrl(facts.siteUrl, facts.coverKey) : null,
 		look: facts.look,
-		bodyHtml: [
-			para(parts.lead),
-			parts.facts.length > 0 ? factsTable(parts.facts, pal) : "",
-			parts.bodyExtra ?? "",
+		list: true,
+		blocks: [
+			{ kind: "text", text: parts.lead },
+			...parts.middle,
 			parts.answers
-				? answerButtons(facts, pal)
-				: buttons([{ label: "Open the invite", href: open }], pal),
-			parts.tail ? muted(escapeHtml(parts.tail), pal) : "",
-		]
-			.filter(Boolean)
-			.join("\n"),
-		footerHtml: listFooter(pal),
+				? answerButtons(facts)
+				: {
+						kind: "buttons",
+						items: [
+							{
+								label: "Open the invite",
+								href: eventLink(facts.siteUrl, facts.eventId),
+							},
+						],
+					},
+			...(parts.tail ? [{ kind: "muted", text: parts.tail } as const] : []),
+		],
 	});
-	const text = [
-		parts.heading,
-		"",
-		parts.lead,
-		"",
-		...parts.facts.map((f) => `${f.label}: ${f.value}`),
-		...(parts.textExtra ?? []),
-		"",
-		...(parts.answers ? answerLines(facts) : [`Open the invite: ${open}`]),
-		...(parts.tail ? ["", parts.tail] : []),
-		"",
-		listFooterText(),
-	].join("\n");
-	return { subject: parts.subject, html, text };
 }
 
 function hostedBy(facts: EventFacts): string {
@@ -159,14 +129,10 @@ function hostedBy(facts: EventFacts): string {
 		: "You're invited.";
 }
 
-function detailsBlock(facts: EventFacts): {
-	bodyExtra?: string;
-	textExtra?: string[];
-} {
-	const details = facts.details.trim();
-	return details
-		? { bodyExtra: paragraphs(details), textExtra: ["", details] }
-		: {};
+/** The details a host wrote, when there are any. */
+function details(facts: EventFacts): Block[] {
+	const text = facts.details.trim();
+	return text ? [{ kind: "typed", text }] : [];
 }
 
 /**
@@ -184,12 +150,13 @@ export function inviteEmail(
 			? `${invitedBy} invited you: ${facts.title}`
 			: `You're invited: ${facts.title}`,
 		kicker: "You're invited",
-		heading: facts.title,
 		lead: invitedBy
 			? `${invitedBy} is going and invited you along${host ? `. Hosted by ${host}.` : "."}`
 			: hostedBy(facts),
-		facts: eventFacts(facts, true),
-		...detailsBlock(facts),
+		middle: [
+			{ kind: "facts", facts: eventFacts(facts, true) },
+			...details(facts),
+		],
 		answers: true,
 		tail: "One tap answers. You can change it later on the invite page.",
 	});
@@ -201,9 +168,8 @@ export function deadlineReminderEmail(facts: EventFacts): Rendered {
 	return render(facts, {
 		subject: `RSVP${by}: ${facts.title}`,
 		kicker: "Still deciding?",
-		heading: facts.title,
 		lead: `The hosts are counting heads and would like an answer${by}.`,
-		facts: eventFacts(facts, true),
+		middle: [{ kind: "facts", facts: eventFacts(facts, true) }],
 		answers: true,
 	});
 }
@@ -213,9 +179,8 @@ export function nudgeEmail(facts: EventFacts): Rendered {
 	return render(facts, {
 		subject: `Coming? ${facts.title}`,
 		kicker: "A nudge from the host",
-		heading: facts.title,
 		lead: "We haven't heard from you yet. Are you coming?",
-		facts: eventFacts(facts, true),
+		middle: [{ kind: "facts", facts: eventFacts(facts, true) }],
 		answers: true,
 	});
 }
@@ -225,10 +190,11 @@ export function dayBeforeEmail(facts: EventFacts): Rendered {
 	return render(facts, {
 		subject: `Tomorrow: ${facts.title}`,
 		kicker: "See you tomorrow",
-		heading: facts.title,
 		lead: "It's tomorrow. Here's the when and where.",
-		facts: eventFacts(facts, false),
-		...detailsBlock(facts),
+		middle: [
+			{ kind: "facts", facts: eventFacts(facts, false) },
+			...details(facts),
+		],
 		answers: false,
 		tail: "Plans changed? Update your answer on the invite page so the hosts know.",
 	});
@@ -239,25 +205,22 @@ export function updateEmail(
 	facts: EventFacts,
 	changes: { label: string; was: string; now: string }[],
 ): Rendered {
-	const html = changes
-		.map((c) =>
-			paraHtml(
-				`<strong>${escapeHtml(c.label)}:</strong> ${escapeHtml(c.now)} <span style="color:${COLORS.muted}; text-decoration:line-through;">${escapeHtml(c.was)}</span>`,
-			),
-		)
-		.join("\n");
+	const moved: Block = {
+		kind: "custom",
+		html: changes
+			.map((c) =>
+				paraHtml(
+					`<strong>${escapeHtml(c.label)}:</strong> ${escapeHtml(c.now)} <span style="color:${COLORS.muted}; text-decoration:line-through;">${escapeHtml(c.was)}</span>`,
+				),
+			)
+			.join("\n"),
+		text: changes.map((c) => `${c.label}: ${c.now} (was ${c.was})`).join("\n"),
+	};
 	return render(facts, {
 		subject: `Change of plans: ${facts.title}`,
 		kicker: "Change of plans",
-		heading: facts.title,
 		lead: "The hosts changed some details.",
-		facts: [],
-		bodyExtra: `${html}\n${factsTable(eventFacts(facts, false), paletteOf(facts.look))}`,
-		textExtra: [
-			...changes.map((c) => `${c.label}: ${c.now} (was ${c.was})`),
-			"",
-			...eventFacts(facts, false).map((f) => `${f.label}: ${f.value}`),
-		],
+		middle: [moved, { kind: "facts", facts: eventFacts(facts, false) }],
 		answers: true,
 		tail: "Does it still work for you? Your answer is unchanged until you change it.",
 	});
@@ -269,12 +232,10 @@ export function cancelEmail(facts: EventFacts, note: string): Rendered {
 	return render(facts, {
 		subject: `Canceled: ${facts.title}`,
 		kicker: "Canceled",
-		heading: facts.title,
 		lead: whenLine(facts)
 			? `${facts.title} on ${facts.dateLabel ?? whenLine(facts)} is canceled.`
 			: `${facts.title} is canceled.`,
-		facts: [],
-		...(said ? { bodyExtra: paragraphs(said), textExtra: ["", said] } : {}),
+		middle: said ? [{ kind: "typed", text: said }] : [],
 		answers: false,
 		tail: "Nothing to do. Sorry to miss you.",
 	});
@@ -321,39 +282,35 @@ function hostRender(
 	replies: ReplyLine[],
 	totals: Totals,
 ): Rendered {
-	const list = guestListLink(facts);
-	const rows = replies
-		.map(
-			(r) =>
-				`<tr><td style="padding:6px 14px 6px 0; font-weight:700; vertical-align:top;">${escapeHtml(r.name)}</td><td style="padding:6px 0; vertical-align:top;">${escapeHtml(partyLine(r))}${r.note.trim() ? `<br><span style="color:${COLORS.muted};">"${escapeHtml(r.note.trim())}"</span>` : ""}</td></tr>`,
-		)
-		.join("");
-	const html = layout({
-		title: subject,
+	const note = (r: ReplyLine) => r.note.trim();
+	const rows: Block = {
+		kind: "custom",
+		html: `<table role="presentation" style="margin:0 0 18px; border-collapse:collapse; font-size:16px; line-height:1.4;">${replies
+			.map(
+				(r) =>
+					`<tr><td style="padding:6px 14px 6px 0; font-weight:700; vertical-align:top;">${escapeHtml(r.name)}</td><td style="padding:6px 0; vertical-align:top;">${escapeHtml(partyLine(r))}${note(r) ? `<br><span style="color:${COLORS.muted};">"${escapeHtml(note(r))}"</span>` : ""}</td></tr>`,
+			)
+			.join("")}</table>`,
+		text: replies
+			.map(
+				(r) => `${r.name}: ${partyLine(r)}${note(r) ? ` -- "${note(r)}"` : ""}`,
+			)
+			.join("\n"),
+	};
+	return email({
+		subject,
 		kicker: facts.title,
 		heading,
-		bodyHtml: [
-			`<table role="presentation" style="margin:0 0 18px; border-collapse:collapse; font-size:16px; line-height:1.4;">${rows}</table>`,
-			para(totalsLine(totals)),
-			buttons([{ label: "Guest list", href: list }]),
-		].join("\n"),
-		footerHtml: listFooter(),
+		list: true,
+		blocks: [
+			rows,
+			{ kind: "text", text: totalsLine(totals) },
+			{
+				kind: "buttons",
+				items: [{ label: "Guest list", href: guestListLink(facts) }],
+			},
+		],
 	});
-	const text = [
-		heading,
-		"",
-		...replies.map(
-			(r) =>
-				`${r.name}: ${partyLine(r)}${r.note.trim() ? ` -- "${r.note.trim()}"` : ""}`,
-		),
-		"",
-		totalsLine(totals),
-		"",
-		`Guest list: ${list}`,
-		"",
-		listFooterText(),
-	].join("\n");
-	return { subject, html, text };
 }
 
 /** One reply, to the hosts, as it lands. */
@@ -397,31 +354,26 @@ export function joinLinkEmail(input: {
 	coverUrl: string | null;
 	look?: EmailLook | null;
 }): Rendered {
-	const subject = `Your invite: ${input.title}`;
-	const pal = paletteOf(input.look);
-	const html = layout({
-		title: subject,
+	return email({
+		subject: `Your invite: ${input.title}`,
 		kicker: "Here's your link",
 		heading: input.title,
 		coverUrl: input.coverUrl,
 		look: input.look,
-		bodyHtml: [
-			para(
-				"Tap below to see the details and answer. The link signs you in, so keep it to yourself.",
-			),
-			buttons([{ label: "Open the invite", href: input.url }], pal),
-			pasteLink(input.url, pal),
-			muted("Didn't ask for this? Ignore it and nothing happens.", pal),
-		].join("\n"),
+		blocks: [
+			{
+				kind: "text",
+				text: "Tap below to see the details and answer. The link signs you in, so keep it to yourself.",
+			},
+			{
+				kind: "buttons",
+				items: [{ label: "Open the invite", href: input.url }],
+			},
+			{ kind: "pasteLink", url: input.url },
+			{
+				kind: "muted",
+				text: "Didn't ask for this? Ignore it and nothing happens.",
+			},
+		],
 	});
-	const text = [
-		input.title,
-		"",
-		"Tap below to see the details and answer. The link signs you in, so keep it to yourself.",
-		"",
-		input.url,
-		"",
-		"Didn't ask for this? Ignore it and nothing happens.",
-	].join("\n");
-	return { subject, html, text };
 }

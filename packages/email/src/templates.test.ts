@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { escapeHtml, PARAM } from "./render";
+import { email, escapeHtml, PARAM } from "./render";
 import {
 	cancelEmail,
 	dayBeforeEmail,
@@ -236,5 +236,54 @@ describe("an event with its own design", () => {
 		expect(inviteEmail({ ...facts, look: null }, null).html).toBe(
 			inviteEmail(facts, null).html,
 		);
+	});
+});
+
+describe("email blocks", () => {
+	const r = email({
+		subject: "S",
+		heading: "Heading <1>",
+		list: true,
+		blocks: [
+			{ kind: "text", text: "Hi <there>" },
+			{ kind: "typed", text: "One.\n\nTwo & three." },
+			{ kind: "facts", facts: [{ label: "When", value: "Sat" }] },
+			{ kind: "facts", facts: [] },
+			{
+				kind: "buttons",
+				items: [{ label: "Go", href: "https://x/a?b=1&c=2" }],
+			},
+			{ kind: "pasteLink", url: "https://x/a" },
+			{ kind: "muted", text: "Quiet." },
+			{ kind: "custom", html: "<hr>", text: "---" },
+		],
+	});
+
+	it("puts every block in both parts, escaped only in the HTML", () => {
+		expect(r.html).toContain("Hi &lt;there&gt;");
+		expect(r.html).toContain("Two &amp; three.");
+		expect(r.html).toContain('href="https://x/a?b=1&amp;c=2"');
+		expect(r.html).toContain("Or paste this into a browser");
+		expect(r.html).toContain("<hr>");
+		expect(r.text).toBe(
+			[
+				"Heading <1>",
+				"Hi <there>",
+				"One.\n\nTwo & three.",
+				"When: Sat",
+				"Go: https://x/a?b=1&c=2",
+				"Quiet.",
+				"---",
+				r.text.slice(r.text.indexOf("You got this")),
+			].join("\n\n"),
+		);
+	});
+
+	it("draws nothing for an empty table, and the footer only on list mail", () => {
+		expect(r.html.match(/<table/g)).toHaveLength(1);
+		expect(r.text).toContain(PARAM.unsubscribeUrl);
+		const one = email({ subject: "S", heading: "H", blocks: [] });
+		expect(one.text).toBe("H");
+		expect(one.html).not.toContain(PARAM.unsubscribeUrl);
 	});
 });

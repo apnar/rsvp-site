@@ -9,6 +9,8 @@
  * and the buttons, and the text sits on white.
  */
 
+import type { Rendered } from "./brevo";
+
 export function escapeHtml(value: string): string {
 	return value
 		.replaceAll("&", "&amp;")
@@ -85,7 +87,7 @@ export type Palette = {
 	muted: string;
 };
 
-export const AFTER_DARK: Palette = {
+const AFTER_DARK: Palette = {
 	ground: COLORS.ground,
 	text: COLORS.ink,
 	band: COLORS.night,
@@ -155,7 +157,7 @@ export type EmailLook = {
 };
 
 /** After Dark, or the event's own colours when it has a design on. */
-export function paletteOf(look?: EmailLook | null): Palette {
+function paletteOf(look?: EmailLook | null): Palette {
 	if (!look) return AFTER_DARK;
 	return {
 		ground: look.ground,
@@ -171,7 +173,7 @@ export function paletteOf(look?: EmailLook | null): Palette {
 }
 
 /** An escaped paragraph of plain text. */
-export function para(text: string): string {
+function para(text: string): string {
 	return paraHtml(escapeHtml(text));
 }
 
@@ -181,7 +183,7 @@ export function paraHtml(html: string): string {
 }
 
 /** Escaped paragraphs from a block of plain text (blank line = new paragraph). */
-export function paragraphs(text: string): string {
+function paragraphs(text: string): string {
 	return text
 		.split(/\n{2,}/)
 		.map((block) => block.trim())
@@ -191,7 +193,7 @@ export function paragraphs(text: string): string {
 }
 
 /** A small label/value table, escaped. */
-export function factsTable(facts: Fact[], pal: Palette = AFTER_DARK): string {
+function factsTable(facts: Fact[], pal: Palette = AFTER_DARK): string {
 	const rows = facts
 		.map(
 			(f) =>
@@ -218,18 +220,8 @@ function buttonLink(
 	return `<a href="${escapeHtml(href)}" style="${style}">${escapeHtml(label)}</a>`;
 }
 
-/** A call-to-action link styled as a button. `href` must already be safe. */
-export function button(
-	label: string,
-	href: string,
-	tone: ButtonTone = "lime",
-	pal: Palette = AFTER_DARK,
-): string {
-	return `<p style="${styles.buttonRow}">${buttonLink(label, href, tone, pal)}</p>`;
-}
-
 /** Several buttons on one line, wrapping on a phone. */
-export function buttons(
+function buttons(
 	items: { label: string; href: string; tone?: ButtonTone }[],
 	pal: Palette = AFTER_DARK,
 ): string {
@@ -246,7 +238,7 @@ export function muted(html: string, pal: Palette = AFTER_DARK): string {
  * The fallback under a button for clients that mangle it. Concrete URL,
  * so it is escaped here; the link is meant for one reader.
  */
-export function pasteLink(url: string, pal: Palette = AFTER_DARK): string {
+function pasteLink(url: string, pal: Palette = AFTER_DARK): string {
 	return muted(
 		`Or paste this into a browser:<br><a href="${escapeHtml(url)}" style="color:${pal.link}; word-break:break-all;">${escapeHtml(url)}</a>`,
 		pal,
@@ -258,11 +250,11 @@ export function pasteLink(url: string, pal: Palette = AFTER_DARK): string {
  * page with a button rather than acting on the GET, because mail clients
  * fetch links unprompted. Uses raw placeholders.
  */
-export function listFooter(pal: Palette = AFTER_DARK): string {
+function listFooter(pal: Palette = AFTER_DARK): string {
 	return `<p style="${footerStyle(pal)}">You got this because you're on ${escapeHtml(SITE_LABEL)}. Links in this email sign you in, so don't forward it. Rather not get these? <a href="${PARAM.unsubscribeUrl}" style="color:${pal.link};">Unsubscribe</a>.</p>`;
 }
 
-export function listFooterText(): string {
+function listFooterText(): string {
 	return `You got this because you're on ${SITE_LABEL}.\nLinks in this email sign you in, so don't forward it.\nRather not get these? Unsubscribe: ${PARAM.unsubscribeUrl}`;
 }
 
@@ -315,4 +307,103 @@ ${input.footerHtml ?? ""}
 </div>
 </body>
 </html>`;
+}
+
+/**
+ * One piece of an email body, written once and drawn twice: as HTML for
+ * mail apps and as the plain-text part beside it. Templates list blocks
+ * instead of keeping an HTML array and a text array in step by hand,
+ * where a line added to one was easily missed in the other.
+ */
+export type Block =
+	/** A paragraph of plain text. */
+	| { kind: "text"; text: string }
+	/** Something a person typed: blank lines start new paragraphs. */
+	| { kind: "typed"; text: string }
+	/** A small label/value table; text lines read "Label: value". */
+	| { kind: "facts"; facts: Fact[] }
+	/** Buttons on one line; text lines read "Label: link". */
+	| {
+			kind: "buttons";
+			items: { label: string; href: string; tone?: ButtonTone }[];
+	  }
+	/** The "or paste this" fallback under a button. Text has the button line. */
+	| { kind: "pasteLink"; url: string }
+	/** A quieter paragraph of plain text. */
+	| { kind: "muted"; text: string }
+	/** A template's own piece, with HTML it has already made safe. */
+	| { kind: "custom"; html: string; text: string };
+
+function blockHtml(block: Block, pal: Palette): string {
+	switch (block.kind) {
+		case "text":
+			return para(block.text);
+		case "typed":
+			return paragraphs(block.text);
+		case "facts":
+			return block.facts.length > 0 ? factsTable(block.facts, pal) : "";
+		case "buttons":
+			return buttons(block.items, pal);
+		case "pasteLink":
+			return pasteLink(block.url, pal);
+		case "muted":
+			return muted(escapeHtml(block.text), pal);
+		case "custom":
+			return block.html;
+	}
+}
+
+function blockText(block: Block): string {
+	switch (block.kind) {
+		case "text":
+		case "muted":
+			return block.text;
+		case "typed":
+			return block.text.trim();
+		case "facts":
+			return block.facts.map((f) => `${f.label}: ${f.value}`).join("\n");
+		case "buttons":
+			return block.items.map((b) => `${b.label}: ${b.href}`).join("\n");
+		case "pasteLink":
+			return "";
+		case "custom":
+			return block.text;
+	}
+}
+
+/**
+ * A whole email from its blocks. The text part opens with the heading, as
+ * the HTML does, and puts a blank line between blocks. `list` adds the
+ * unsubscribe footer every list email carries.
+ */
+export function email(input: {
+	subject: string;
+	kicker?: string;
+	heading: string;
+	blocks: Block[];
+	list?: boolean;
+	coverUrl?: string | null;
+	look?: EmailLook | null;
+}): Rendered {
+	const pal = paletteOf(input.look);
+	const html = layout({
+		title: input.subject,
+		kicker: input.kicker,
+		heading: input.heading,
+		coverUrl: input.coverUrl,
+		look: input.look,
+		bodyHtml: input.blocks
+			.map((b) => blockHtml(b, pal))
+			.filter(Boolean)
+			.join("\n"),
+		footerHtml: input.list ? listFooter(pal) : undefined,
+	});
+	const text = [
+		input.heading,
+		...input.blocks.map(blockText),
+		input.list ? listFooterText() : "",
+	]
+		.filter(Boolean)
+		.join("\n\n");
+	return { subject: input.subject, html, text };
 }
