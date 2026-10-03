@@ -297,6 +297,9 @@ function Editor({
 	const warnings = useMemo(() => warn(lagging), [warn, lagging]);
 
 	const previewPdf = async () => {
+		// Only ever called from a click, as on the guest list: saying so drops
+		// the PDF library from the Worker, which would carry it for nothing.
+		if (import.meta.env.SSR) return;
 		try {
 			const { buildDesignInvites } = await import("@/lib/design-pdf");
 			const layout = layoutsFor(doc.format)[0]?.value ?? "exact";
