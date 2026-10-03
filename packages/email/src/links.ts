@@ -68,6 +68,9 @@ export function safeReturnPath(to: unknown): string {
 		return "/";
 	}
 	if (url.origin !== HOME) return "/";
+	// Dot segments collapse during that resolve: "/.//evil.com" comes out
+	// as the path "//evil.com", which a browser then reads as another site.
+	if (url.pathname.startsWith("//")) return "/";
 	return `${url.pathname}${url.search}${url.hash}`;
 }
 
