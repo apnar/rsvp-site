@@ -18,7 +18,7 @@ import {
 import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
 import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
-import type { Design } from "@rsvp-site/design/schema";
+import type { Design, Format } from "@rsvp-site/design/schema";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
@@ -324,6 +324,20 @@ export function designValues(row: EventRow, guest: string): Values {
 	};
 }
 
+/** The saved design, when it is on. Parsed on the way in (designs.save). */
+export async function designedDoc(
+	db: Db,
+	row: EventRow,
+): Promise<{ doc: Design; version: number } | null> {
+	if (!row.designOn) return null;
+	const saved = await db
+		.select({ doc: eventDesign.doc, version: eventDesign.version })
+		.from(eventDesign)
+		.where(eq(eventDesign.eventId, row.id))
+		.get();
+	return saved ? { doc: saved.doc as Design, version: saved.version } : null;
+}
+
 /**
  * The event's card laid out for one viewer, when its design is on. The
  * layout happens here, on the server, so the page receives line breaks
@@ -335,18 +349,31 @@ export async function designedCard(
 	mode: Mode,
 	guest: string,
 ): Promise<{ scene: Scene; version: number } | null> {
-	if (!row.designOn) return null;
-	const saved = await db
-		.select({ doc: eventDesign.doc, version: eventDesign.version })
-		.from(eventDesign)
-		.where(eq(eventDesign.eventId, row.id))
-		.get();
+	const saved = await designedDoc(db, row);
 	if (!saved) return null;
-	// Parsed on the way in (designs.save), so it is read back as it was kept.
-	const doc = saved.doc as Design;
+	const doc = saved.doc;
 	const faces = await loadFaces(facesOf(doc));
 	return {
 		scene: layoutCard(doc, { values: designValues(row, guest), mode, faces }),
 		version: saved.version,
 	};
+}
+
+/**
+ * The card's format, when the event's design is on: the guest list needs
+ * it to offer print layouts, and nothing else of the document.
+ */
+export async function designFormatOf(
+	db: Db,
+	row: EventRow,
+): Promise<Format | null> {
+	if (!row.designOn) return null;
+	const found = await db
+		.select({
+			format: sql<Format>`json_extract(${eventDesign.doc}, '$.format')`,
+		})
+		.from(eventDesign)
+		.where(eq(eventDesign.eventId, row.id))
+		.get();
+	return found?.format ?? null;
 }

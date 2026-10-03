@@ -61,6 +61,12 @@ describe("layoutCard", async () => {
 			bleed: true,
 		});
 		expect(web.area).toEqual({ x: 0, y: 0, w: 1000, h: 1400 });
+		// The band sits flush with the top and sides, so it runs into the bleed.
+		const band = print.nodes.find((n) => n.id === "band");
+		expect(band?.box.x).toBeCloseTo(-25);
+		expect(band?.box.w).toBeCloseTo(1050);
+		expect(band?.box.y).toBeCloseTo(-25);
+		expect(web.nodes.find((n) => n.id === "band")?.box.x).toBe(0);
 		expect(print.area.x).toBeCloseTo(-25);
 		expect(print.area.w).toBeCloseTo(1050);
 	});

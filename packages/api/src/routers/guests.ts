@@ -20,6 +20,7 @@ import { z } from "zod";
 import {
 	type Access,
 	accessTo,
+	designFormatOf,
 	emailsHeld,
 	guestsOf,
 	hostAccessTo,
@@ -59,6 +60,7 @@ export const guestsRouter = {
 				paper: row.paper,
 				emailsReleasedAt: row.emailsReleasedAt,
 				emailsHeld: emailsHeld(row),
+				designFormat: await designFormatOf(context.db, row),
 			},
 			totals,
 			headcount: headcount(totals),

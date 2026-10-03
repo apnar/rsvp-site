@@ -46,6 +46,8 @@ import {
 	accessTo,
 	cardsFor,
 	designedCard,
+	designedDoc,
+	designValues,
 	type EventRow,
 	emailsHeld,
 	findEvent,
@@ -811,7 +813,11 @@ export const eventsRouter = {
 				.where(eq(eventGuest.eventId, row.id))
 				.orderBy(asc(user.name))
 				.all();
+			const design = await designedDoc(context.db, row);
 			return {
+				// Laid out in the browser, which has the time and the fonts.
+				design,
+				values: designValues(row, ""),
 				event: {
 					title: row.title,
 					hostLine: row.hostLine,

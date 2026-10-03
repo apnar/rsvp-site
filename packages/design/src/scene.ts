@@ -182,7 +182,7 @@ export function layoutCard(design: Design, opts: SceneOptions): Scene {
 	for (const el of design.elements) {
 		if (el.hidden && !opts.keepHidden) continue;
 		if (!shows(el, opts.mode)) continue;
-		const node = nodeOf(el, opts);
+		const node = nodeOf(b ? bleedOut(el, b, w, h) : el, opts);
 		if (node) nodes.push(node);
 	}
 	return {
@@ -194,6 +194,28 @@ export function layoutCard(design: Design, opts: SceneOptions): Scene {
 		background: backgroundOf(design, w, h, area),
 		nodes,
 	};
+}
+
+/**
+ * A photo or panel set flush with the card's edge is meant to run off it:
+ * on a print shop's card it reaches through the bleed, or a cut a hair off
+ * would leave a white sliver.
+ */
+function bleedOut(el: Element, b: number, w: number, h: number): Element {
+	if ((el.type !== "rect" && el.type !== "image") || el.rot !== 0) return el;
+	const near = (a: number, c: number) => Math.abs(a - c) < 0.5;
+	let { x, y, w: ew, h: eh } = el;
+	if (near(x, 0)) {
+		x -= b;
+		ew += b;
+	}
+	if (near(y, 0)) {
+		y -= b;
+		eh += b;
+	}
+	if (near(el.x + el.w, w)) ew += b;
+	if (near(el.y + el.h, h)) eh += b;
+	return { ...el, x, y, w: ew, h: eh };
 }
 
 function backgroundOf(

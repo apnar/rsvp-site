@@ -111,9 +111,15 @@ export function confetti(p: PatternSpec, w: number, h: number): PatternShape[] {
 /**
  * A tile repeated over a w x h area, in the tile's own (turned) frame:
  * draw these inside rotate(angle) about (w/2, h/2), clipped to the area.
+ * `pad` reaches past the card's edges, for a print bleed.
  */
-export function tiled(tile: Tile, w: number, h: number): PatternShape[] {
-	const reach = Math.hypot(w, h) / 2;
+export function tiled(
+	tile: Tile,
+	w: number,
+	h: number,
+	pad = 0,
+): PatternShape[] {
+	const reach = Math.hypot(w + 2 * pad, h + 2 * pad) / 2;
 	const cx = w / 2;
 	const cy = h / 2;
 	const out: PatternShape[] = [];

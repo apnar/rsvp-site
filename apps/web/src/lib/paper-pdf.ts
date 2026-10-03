@@ -20,7 +20,7 @@ import {
 } from "./paper-pdf-core";
 import type { PaperSize } from "./paper-sizes";
 
-async function bytes(url: string): Promise<ArrayBuffer> {
+export async function bytes(url: string): Promise<ArrayBuffer> {
 	const res = await fetch(url);
 	if (!res.ok) throw new Error(`Could not load ${url}`);
 	return res.arrayBuffer();

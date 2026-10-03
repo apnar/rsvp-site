@@ -17,9 +17,9 @@ import {
 	rectangle,
 	rgb,
 } from "pdf-lib";
-import QRCode from "qrcode";
 
 import type { PaperSize } from "./paper-sizes";
+import { drawQr } from "./pdf-qr";
 
 export type { PaperSize };
 
@@ -108,34 +108,6 @@ function fit(
 		if (out.length <= lines) return { size, lines: out };
 	}
 	return { size: min, lines: wrap(text, font, min, width, lines) };
-}
-
-/** A QR code as vector squares: sharp at any print size. */
-function drawQr(
-	page: PDFPage,
-	url: string,
-	x: number,
-	y: number,
-	size: number,
-) {
-	const qr = QRCode.create(url, { errorCorrectionLevel: "M" });
-	const n = qr.modules.size;
-	const quiet = 2;
-	const cell = size / (n + quiet * 2);
-	page.drawRectangle({ x, y, width: size, height: size, color: C.paper });
-	for (let row = 0; row < n; row++) {
-		for (let col = 0; col < n; col++) {
-			if (!qr.modules.get(row, col)) continue;
-			page.drawRectangle({
-				x: x + (col + quiet) * cell,
-				// PDF y runs up from the bottom; QR rows run down from the top.
-				y: y + size - (row + quiet + 1) * cell,
-				width: cell + 0.05,
-				height: cell + 0.05,
-				color: C.night,
-			});
-		}
-	}
 }
 
 /** Draw an image to fill a box, cropped like CSS `object-fit: cover`. */
@@ -358,7 +330,12 @@ function drawInvite(
 		}
 	}
 
-	drawQr(page, guest.url, qrX, qrY, qrSize);
+	drawQr(
+		page,
+		guest.url,
+		{ x: qrX, y: qrY, size: qrSize },
+		{ fg: C.night, bg: C.paper },
+	);
 	page.drawRectangle({
 		x: qrX,
 		y: qrY,

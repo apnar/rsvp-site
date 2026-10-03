@@ -20,7 +20,12 @@ import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
 import type { Outputs } from "@/lib/api-types";
 import { ago, initials, plural, shortDate } from "@/lib/format";
-import { PAPER_SIZES, type PaperSize } from "@/lib/paper-sizes";
+import {
+	type CardFormat,
+	layoutsFor,
+	PAPER_SIZES,
+	type PaperSize,
+} from "@/lib/paper-sizes";
 import { client, orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/guests")({
@@ -187,6 +192,7 @@ function GuestListPage() {
 					held={e.emailsHeld}
 					releasedAt={e.emailsReleasedAt}
 					emailable={notInvited}
+					designFormat={e.designFormat}
 					onChange={refresh}
 				/>
 			) : null}
@@ -298,6 +304,7 @@ function GuestListPage() {
 							paper={e.paper}
 							eventId={eventId}
 							eventTitle={e.title}
+							designFormat={e.designFormat}
 							nudging={nudge.isPending}
 							onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
 							onRemove={() => remove.mutate({ eventId, guestId: g.id })}
@@ -344,6 +351,7 @@ function GuestRow({
 	paper,
 	eventId,
 	eventTitle,
+	designFormat,
 	nudging,
 	onNudge,
 	onRemove,
@@ -355,6 +363,7 @@ function GuestRow({
 	paper: boolean;
 	eventId: string;
 	eventTitle: string;
+	designFormat: CardFormat | null;
 	nudging: boolean;
 	onNudge: () => void;
 	onRemove: () => void;
@@ -452,7 +461,12 @@ function GuestRow({
 			</span>
 			<span className="flex items-center justify-end gap-1.5 max-md:empty:hidden md:ml-auto md:min-w-[40px]">
 				{paper ? (
-					<PaperActions eventId={eventId} eventTitle={eventTitle} guest={g} />
+					<PaperActions
+						eventId={eventId}
+						eventTitle={eventTitle}
+						designFormat={designFormat}
+						guest={g}
+					/>
 				) : null}
 				<Button
 					variant="ghost"
@@ -520,6 +534,7 @@ function PaperPanel({
 	held,
 	releasedAt,
 	emailable,
+	designFormat,
 	onChange,
 }: {
 	eventId: string;
@@ -528,9 +543,10 @@ function PaperPanel({
 	held: boolean;
 	releasedAt: Date | null;
 	emailable: number;
+	designFormat: CardFormat | null;
 	onChange: () => void;
 }) {
-	const [size, setSize] = usePaperSize();
+	const [print, setPrint] = usePrint(designFormat);
 	const [busy, setBusy] = useState(false);
 	const [sure, setSure] = useState(false);
 	const release = useMutation(
@@ -562,13 +578,17 @@ function PaperPanel({
 				{published ? "" : " The codes start working when you publish."}
 			</p>
 			<div className="flex flex-wrap items-center gap-2">
-				<PaperSizeSelect value={size} onChange={setSize} />
+				<PrintSelect
+					value={print}
+					options={printOptions(designFormat)}
+					onChange={setPrint}
+				/>
 				<Button
 					variant="light"
 					disabled={busy}
 					onClick={async () => {
 						setBusy(true);
-						await downloadCards(eventId, title, size, null);
+						await downloadCards(eventId, title, print, null);
 						setBusy(false);
 					}}
 				>
@@ -607,25 +627,36 @@ function PaperPanel({
 	);
 }
 
-/** The paper size, remembered per browser: it is the host's printer. */
-function usePaperSize(): [PaperSize, (size: PaperSize) => void] {
-	const [size, setSize] = useState<PaperSize>("card");
+function printOptions(format: CardFormat | null) {
+	return format ? layoutsFor(format) : PAPER_SIZES;
+}
+
+/**
+ * How the cards go onto paper, remembered per browser (it is the host's
+ * printer): a paper size for the classic card, a sheet layout for a
+ * designed one, per card format.
+ */
+function usePrint(
+	format: CardFormat | null,
+): [string, (value: string) => void] {
+	const key = format ? `print-layout-${format}` : "paper-size";
+	const fallback = printOptions(format)[0]?.value ?? "card";
+	const [value, setValue] = useState<string>(fallback);
 	useEffect(() => {
 		try {
-			const saved = localStorage.getItem("paper-size");
-			if (saved === "card" || saved === "letter" || saved === "half") {
-				setSize(saved);
-			}
+			const saved = localStorage.getItem(key);
+			const known = printOptions(format).some((o) => o.value === saved);
+			setValue(saved && known ? saved : fallback);
 		} catch {
 			// Storage may be blocked; the default is fine.
 		}
-	}, []);
+	}, [key, format, fallback]);
 	return [
-		size,
+		value,
 		(next) => {
-			setSize(next);
+			setValue(next);
 			try {
-				localStorage.setItem("paper-size", next);
+				localStorage.setItem(key, next);
 			} catch {
 				// Not remembered, then.
 			}
@@ -633,12 +664,14 @@ function usePaperSize(): [PaperSize, (size: PaperSize) => void] {
 	];
 }
 
-function PaperSizeSelect({
+function PrintSelect({
 	value,
+	options,
 	onChange,
 }: {
-	value: PaperSize;
-	onChange: (size: PaperSize) => void;
+	value: string;
+	options: { value: string; label: string }[];
+	onChange: (value: string) => void;
 }) {
 	return (
 		<>
@@ -648,10 +681,10 @@ function PaperSizeSelect({
 			<select
 				id="paper-size"
 				value={value}
-				onChange={(ev) => onChange(ev.target.value as PaperSize)}
+				onChange={(ev) => onChange(ev.target.value)}
 				className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 py-2 text-[14px] text-ink hover:border-haze focus-visible:border-lime"
 			>
-				{PAPER_SIZES.map((o) => (
+				{options.map((o) => (
 					<option key={o.value} value={o.value}>
 						{o.label}
 					</option>
@@ -668,30 +701,45 @@ function PaperSizeSelect({
 async function downloadCards(
 	eventId: string,
 	title: string,
-	size: PaperSize,
+	print: string,
 	guest: { id: string; name: string } | null,
 ) {
 	// Only ever called from a click. Saying so lets the server build drop the
 	// PDF library, which would otherwise ride along in the Worker for nothing.
 	if (import.meta.env.SSR) return;
 	try {
-		const [data, pdf] = await Promise.all([
-			client.events.paperInvites({
-				eventId,
-				guestIds: guest ? [guest.id] : undefined,
-			}),
-			import("@/lib/paper-pdf"),
-		]);
+		const data = await client.events.paperInvites({
+			eventId,
+			guestIds: guest ? [guest.id] : undefined,
+		});
 		if (data.guests.length === 0) {
 			toast.error("Nobody on the list yet.");
 			return;
 		}
-		const file = await pdf.buildPaperInvites({
-			event: data.event,
-			guests: data.guests,
-			size,
-		});
-		pdf.download(
+		let file: Uint8Array;
+		if (data.design) {
+			const { buildDesignInvites } = await import("@/lib/design-pdf");
+			const layouts = layoutsFor(data.design.doc.format);
+			file = await buildDesignInvites({
+				design: data.design.doc,
+				values: data.values,
+				guests: data.guests,
+				layout:
+					(layouts.find((l) => l.value === print) ?? layouts[0])?.value ??
+					"exact",
+				title: data.event.title,
+			});
+		} else {
+			const { buildPaperInvites } = await import("@/lib/paper-pdf");
+			file = await buildPaperInvites({
+				event: data.event,
+				guests: data.guests,
+				size: (PAPER_SIZES.find((p) => p.value === print)?.value ??
+					"card") as PaperSize,
+			});
+		}
+		const { download } = await import("@/lib/paper-pdf");
+		download(
 			file,
 			guest ? `${title} - ${guest.name}.pdf` : `${title} - invitations.pdf`,
 		);
@@ -704,15 +752,17 @@ async function downloadCards(
 function PaperActions({
 	eventId,
 	eventTitle,
+	designFormat,
 	guest,
 }: {
 	eventId: string;
 	eventTitle: string;
+	designFormat: CardFormat | null;
 	guest: Guest;
 }) {
 	const queryClient = useQueryClient();
 	const [busy, setBusy] = useState(false);
-	const [size] = usePaperSize();
+	const [print] = usePrint(designFormat);
 	const fresh = useMutation(
 		orpc.guests.newPaperCode.mutationOptions({
 			onSuccess: () => {
@@ -732,7 +782,7 @@ function PaperActions({
 				disabled={busy}
 				onClick={async () => {
 					setBusy(true);
-					await downloadCards(eventId, eventTitle, size, guest);
+					await downloadCards(eventId, eventTitle, print, guest);
 					setBusy(false);
 				}}
 			>
