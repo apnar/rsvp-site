@@ -36,9 +36,9 @@ export const contact = sqliteTable(
 
 /**
  * A host's own named list of people ("King Farm Swim Team"), added to an
- * event's guest list in one go. Private to its owner unless an admin marks
- * it `shared`, which lets every host add from it (never edit it); admins
- * can read all.
+ * event's guest list in one go. Private to its owner unless an admin shares
+ * it with particular hosts (`contact_group_share`), who may then add from
+ * it but never edit it; admins can read all.
  */
 export const contactGroup = sqliteTable(
 	"contact_group",
@@ -48,6 +48,11 @@ export const contactGroup = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
 		name: text("name").notNull(),
+		/**
+		 * Unused: sharing is per host now, in `contact_group_share`. Kept one
+		 * deploy so the old code still runs against the new schema while CI
+		 * migrates; drop it in a migration of its own.
+		 */
 		shared: integer("shared", { mode: "boolean" }).notNull().default(false),
 		createdAt: integer("created_at", { mode: "timestamp_ms" })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -76,5 +81,28 @@ export const contactGroupMember = sqliteTable(
 	(table) => [
 		primaryKey({ columns: [table.groupId, table.userId] }),
 		index("contact_group_member_user_idx").on(table.userId),
+	],
+);
+
+/**
+ * The hosts an admin has shared a group with: each may add its members to
+ * their events, and nobody else beyond its owner sees it.
+ */
+export const contactGroupShare = sqliteTable(
+	"contact_group_share",
+	{
+		groupId: text("group_id")
+			.notNull()
+			.references(() => contactGroup.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.groupId, table.userId] }),
+		index("contact_group_share_user_idx").on(table.userId),
 	],
 );

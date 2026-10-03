@@ -12,6 +12,7 @@ import {
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
+	notDeactivated,
 	type Person,
 } from "@rsvp-site/db/people";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
@@ -20,6 +21,7 @@ import {
 	contact,
 	contactGroup,
 	contactGroupMember,
+	contactGroupShare,
 } from "@rsvp-site/db/schema/contact";
 import { familyMember } from "@rsvp-site/db/schema/family";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
@@ -143,8 +145,8 @@ async function join(
 /**
  * A host's address book and the groups made from it. The book is private:
  * a host's address book is not the site's. A group is too, until an admin
- * shares it; then every host may add from it (`shared`), and only its
- * owner and admins change it.
+ * shares it with chosen hosts (`contact_group_share`); they may add from
+ * it, and only its owner and admins change it.
  */
 export const contactsRouter = {
 	/**
@@ -404,8 +406,8 @@ export const contactsRouter = {
 		}),
 
 	/**
-	 * What every host may add from beyond their own book: groups an admin
-	 * shared, and families (the shared ones; all of them for an admin).
+	 * What a host may add from beyond their own book: groups an admin shared
+	 * with them, and families (the shared ones; all of them for an admin).
 	 * Members by name only -- enough to pick them, nothing to contact them.
 	 */
 	shared: hostProcedure.handler(async ({ context }) => {
@@ -428,15 +430,17 @@ export const contactsRouter = {
 		};
 	}),
 
-	/** Every host's groups, for an admin deciding which to share. */
+	/**
+	 * Every host's groups, for an admin deciding who to share each with, and
+	 * the people they could share it with: anybody who may host.
+	 */
 	allGroups: adminProcedure.handler(async ({ context }) => {
 		const owner = alias(user, "owner");
-		const [groups, counts] = await Promise.all([
+		const [groups, counts, shares, hosts] = await Promise.all([
 			context.db
 				.select({
 					id: contactGroup.id,
 					name: contactGroup.name,
-					shared: contactGroup.shared,
 					ownerId: contactGroup.ownerId,
 					ownerName: owner.name,
 				})
@@ -449,20 +453,70 @@ export const contactsRouter = {
 				.from(contactGroupMember)
 				.groupBy(contactGroupMember.groupId)
 				.all(),
+			context.db
+				.select({
+					groupId: contactGroupShare.groupId,
+					userId: contactGroupShare.userId,
+				})
+				.from(contactGroupShare)
+				.all(),
+			context.db
+				.select({ id: user.id, name: user.name, role: user.role })
+				.from(user)
+				.where(and(inArray(user.role, ["host", "admin"]), notDeactivated()))
+				.orderBy(asc(user.name))
+				.all(),
 		]);
 		const n = new Map(counts.map((c) => [c.groupId, c.n]));
-		return groups.map((g) => ({ ...g, count: n.get(g.id) ?? 0 }));
+		const sharedWith = new Map<string, string[]>();
+		for (const { groupId, userId } of shares) {
+			const list = sharedWith.get(groupId);
+			if (list) list.push(userId);
+			else sharedWith.set(groupId, [userId]);
+		}
+		return {
+			groups: groups.map((g) => ({
+				...g,
+				count: n.get(g.id) ?? 0,
+				sharedWith: sharedWith.get(g.id) ?? [],
+			})),
+			hosts: hosts
+				.filter((h) => canHost(h))
+				.map(({ id, name }) => ({ id, name })),
+		};
 	}),
 
-	/** Share a group with every host, or take it back. Admins only. */
-	setShared: adminProcedure
-		.input(groupInput.extend({ shared: z.boolean() }))
+	/**
+	 * Share a group with one host, or take it back. Admins only, and only
+	 * with somebody who may host: a guest has no picker to see it in.
+	 */
+	setShare: adminProcedure
+		.input(groupInput.extend({ userId: idSchema, shared: z.boolean() }))
 		.handler(async ({ context, input }) => {
 			const row = await ownGroup(context, input.groupId);
+			const where = and(
+				eq(contactGroupShare.groupId, row.id),
+				eq(contactGroupShare.userId, input.userId),
+			);
+			if (!input.shared) {
+				await context.db.delete(contactGroupShare).where(where);
+				return { ok: true };
+			}
+			const host = await context.db
+				.select({ role: user.role, status: user.status })
+				.from(user)
+				.where(eq(user.id, input.userId))
+				.get();
+			if (!host || host.status === "deactivated" || !canHost(host)) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Only hosts can be given a group.",
+				});
+			}
+			if (input.userId === row.ownerId) return { ok: true };
 			await context.db
-				.update(contactGroup)
-				.set({ shared: input.shared })
-				.where(eq(contactGroup.id, row.id));
+				.insert(contactGroupShare)
+				.values({ groupId: row.id, userId: input.userId })
+				.onConflictDoNothing();
 			return { ok: true };
 		}),
 };

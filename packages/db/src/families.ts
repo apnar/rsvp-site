@@ -7,7 +7,11 @@ import type { Db } from "./index";
 import { notDeactivated } from "./people";
 import { isAdmin } from "./roles";
 import { user } from "./schema/auth";
-import { contactGroup, contactGroupMember } from "./schema/contact";
+import {
+	contactGroup,
+	contactGroupMember,
+	contactGroupShare,
+} from "./schema/contact";
 import { eventGuest } from "./schema/event";
 import { family, familyMember } from "./schema/family";
 
@@ -69,7 +73,7 @@ export async function inAnyFamily(db: Db, userId: string): Promise<boolean> {
 /**
  * Which of these people a host may put on a list by id: anybody in their
  * own book, in a family they can see (shared ones; all of them for an
- * admin), or in a group that is theirs or shared. A guessed id adds
+ * admin), or in a group that is theirs or shared with them. A guessed id adds
  * nobody, and nobody deactivated is added however they were reached.
  */
 export async function pickable(
@@ -106,7 +110,10 @@ export async function pickable(
 				.where(
 					and(
 						inArray(contactGroupMember.userId, slice),
-						or(eq(contactGroup.shared, true), eq(contactGroup.ownerId, me.id)),
+						or(
+							eq(contactGroup.ownerId, me.id),
+							inArray(contactGroup.id, sharedWith(db, me.id)),
+						),
 					),
 				)
 				.all(),
@@ -179,11 +186,19 @@ export async function listFamilies(db: Db, opts: { onlyShared: boolean }) {
 	return families.map((f) => ({ ...f, members: byFamily.get(f.id) ?? [] }));
 }
 
+/** The ids of the groups an admin has shared with this host, as a subquery. */
+function sharedWith(db: Db, hostId: string) {
+	return db
+		.select({ id: contactGroupShare.groupId })
+		.from(contactGroupShare)
+		.where(eq(contactGroupShare.userId, hostId));
+}
+
 /**
- * Groups an admin has shared, with their members, for every host's picker.
- * The caller's own are left out: they already have those.
+ * Groups an admin has shared with this host, with their members, for their
+ * picker. Their own are left out: they already have those.
  */
-export async function sharedGroups(db: Db, exceptOwnerId: string) {
+export async function sharedGroups(db: Db, hostId: string) {
 	const owner = alias(user, "owner");
 	const [groups, members] = await Promise.all([
 		db
@@ -196,8 +211,8 @@ export async function sharedGroups(db: Db, exceptOwnerId: string) {
 			.innerJoin(owner, eq(owner.id, contactGroup.ownerId))
 			.where(
 				and(
-					eq(contactGroup.shared, true),
-					ne(contactGroup.ownerId, exceptOwnerId),
+					inArray(contactGroup.id, sharedWith(db, hostId)),
+					ne(contactGroup.ownerId, hostId),
 				),
 			)
 			.orderBy(asc(contactGroup.name))
@@ -213,8 +228,8 @@ export async function sharedGroups(db: Db, exceptOwnerId: string) {
 			.innerJoin(user, eq(user.id, contactGroupMember.userId))
 			.where(
 				and(
-					eq(contactGroup.shared, true),
-					ne(contactGroup.ownerId, exceptOwnerId),
+					inArray(contactGroup.id, sharedWith(db, hostId)),
+					ne(contactGroup.ownerId, hostId),
 					notDeactivated(),
 				),
 			)
