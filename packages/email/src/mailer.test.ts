@@ -14,6 +14,22 @@ function recipients(n: number): ListRecipient[] {
 	}));
 }
 
+describe("subjects", () => {
+	it("reach Brevo as one clean line", async () => {
+		const fetchImpl = vi.fn(
+			async (_url: string | URL | Request, _init?: RequestInit) =>
+				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
+		);
+		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		await mailer.sendOne(
+			{ email: "a@example.com" },
+			{ ...rendered, subject: "Hi\r\nBcc: x@example.com\u0000\u2028 there" },
+		);
+		const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+		expect(body.subject).toBe("Hi Bcc: x@example.com there");
+	});
+});
+
 describe("createMailer", () => {
 	it("dry-runs when there is no API key", async () => {
 		const log = vi.fn();
@@ -56,7 +72,7 @@ describe("createMailer", () => {
 
 	it("lets no stray brace open a template tag, however many there are", async () => {
 		const fetchImpl = vi.fn(
-			async () =>
+			async (_url: string | URL | Request, _init?: RequestInit) =>
 				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
 		);
 		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
@@ -101,7 +117,7 @@ describe("createMailer", () => {
 
 	it("batches 100 recipients into calls of 99 and 1 with per-recipient params", async () => {
 		const fetchImpl = vi.fn(
-			async () =>
+			async (_url: string | URL | Request, _init?: RequestInit) =>
 				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
 		);
 		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });

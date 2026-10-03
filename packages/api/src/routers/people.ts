@@ -1,3 +1,4 @@
+import { waitUntil } from "cloudflare:workers";
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import type { Db } from "@rsvp-site/db";
@@ -8,6 +9,7 @@ import {
 	findReachablePersonByEmail,
 	listPeople,
 	reactivate,
+	rotateLinkToken,
 	setRole,
 } from "@rsvp-site/db/people";
 import { ROLES, user } from "@rsvp-site/db/schema/auth";
@@ -17,7 +19,7 @@ import { count, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { adminProcedure, publicProcedure } from "../index";
-import { emailSchema } from "../inputs";
+import { emailSchema, idSchema } from "../inputs";
 import { sendWelcome } from "../mail";
 
 const nameSchema = z.string().trim().max(60, "Shorter name, please.");
@@ -111,7 +113,7 @@ export const peopleRouter = {
 	 * demoting themselves would leave nobody able to undo it.
 	 */
 	setRole: adminProcedure
-		.input(z.object({ userId: z.string().min(1), role: z.enum(ROLES) }))
+		.input(z.object({ userId: idSchema, role: z.enum(ROLES) }))
 		.handler(async ({ context, input }) => {
 			if (input.userId === context.me.id) {
 				throw new ORPCError("BAD_REQUEST", {
@@ -125,7 +127,7 @@ export const peopleRouter = {
 
 	/** Send someone their sign-in link again. */
 	sendLink: adminProcedure
-		.input(z.object({ userId: z.string().min(1) }))
+		.input(z.object({ userId: idSchema }))
 		.handler(async ({ context, input }) => {
 			const person = await requirePerson(context.db, input.userId);
 			if (person.status === "deactivated") {
@@ -143,11 +145,29 @@ export const peopleRouter = {
 		}),
 
 	/**
+	 * Replace somebody's sign-in token and end their sessions: every link
+	 * already emailed to them stops working. For a leaked or forwarded
+	 * email. They get back in with a new link (`sendLink`). Says nothing of
+	 * the token itself.
+	 */
+	newLink: adminProcedure
+		.input(z.object({ userId: idSchema }))
+		.handler(async ({ context, input }) => {
+			await requirePerson(context.db, input.userId);
+			await rotateLinkToken(context.db, input.userId);
+			await createAuth().api.revokeUserSessions({
+				body: { userId: input.userId },
+				headers: context.headers,
+			});
+			return { ok: true };
+		}),
+
+	/**
 	 * Out: no email of any kind, no way in, every session killed. The only
 	 * thing that sets Better Auth's `banned`, which closes the password door.
 	 */
 	deactivate: adminProcedure
-		.input(z.object({ userId: z.string().min(1), reason: reasonSchema }))
+		.input(z.object({ userId: idSchema, reason: reasonSchema }))
 		.handler(async ({ context, input }) => {
 			if (input.userId === context.me.id) {
 				throw new ORPCError("BAD_REQUEST", {
@@ -165,7 +185,7 @@ export const peopleRouter = {
 
 	/** Undo a deactivation; the only path that clears `banned`. */
 	reactivate: adminProcedure
-		.input(z.object({ userId: z.string().min(1) }))
+		.input(z.object({ userId: idSchema }))
 		.handler(async ({ context, input }) => {
 			const person = await requirePerson(context.db, input.userId);
 			if (person.status !== "deactivated") {
@@ -199,10 +219,15 @@ export const peopleRouter = {
 			const cooledOff =
 				!row?.linkSentAt || Date.now() - row.linkSentAt.getTime() > 10 * 60_000;
 			if (row && cooledOff) {
-				await sendWelcome(context.db, row.id, {
-					email: input.email,
-					name: null,
-				});
+				// In the background, so an address with an account doesn't answer
+				// measurably slower than one without. Errors are logged, never
+				// surfaced: the caller was told the same thing either way.
+				const db = context.db;
+				waitUntil(
+					sendWelcome(db, row.id, { email: input.email, name: null }).catch(
+						(error) => console.error("sign-in link send failed", error),
+					),
+				);
 			}
 			return { ok: true };
 		}),

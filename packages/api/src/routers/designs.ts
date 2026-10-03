@@ -34,6 +34,15 @@ const ORPHAN_GRACE_MS = 60 * 60 * 1000;
  * without end.
  */
 const MAX_CARDS = 30;
+/**
+ * Card pictures an event may hold. Sent emails keep showing the old ones, so
+ * uploadCard can't just overwrite; but a host (or a stolen session) calling
+ * it in a loop would otherwise fill R2 without limit. Past the cap the
+ * cards older than CARD_KEEP_MS go first, and if that is not enough the
+ * upload is refused: nobody sent an email last month with 200 cards in it.
+ */
+const MAX_CARD_FILES = 200;
+const CARD_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 
 const cardFile = z
 	.file()
@@ -76,6 +85,31 @@ async function prune(env: Env, eventId: string, keep: Set<string>) {
 		.sort((a, b) => b.uploaded.getTime() - a.uploaded.getTime());
 	drop.push(...cards.slice(MAX_CARDS - 1).map((o) => o.key));
 	if (drop.length > 0) await env.MEDIA.delete(drop);
+}
+
+async function makeRoomForCard(
+	env: Env,
+	eventId: string,
+	current: string | null,
+) {
+	const prefix = designPrefix(eventId);
+	const cards = (await listPrefix(env, prefix)).filter((o) =>
+		isCard(o.key, prefix),
+	);
+	if (cards.length < MAX_CARD_FILES) return;
+	const cutoff = Date.now() - CARD_KEEP_MS;
+	// Never the card the event points at, however old: it is the live one.
+	const old = cards
+		.filter((o) => o.key !== current && o.uploaded.getTime() < cutoff)
+		.sort((a, b) => a.uploaded.getTime() - b.uploaded.getTime())
+		.slice(0, cards.length - MAX_CARD_FILES + 1)
+		.map((o) => o.key);
+	if (cards.length - old.length >= MAX_CARD_FILES) {
+		throw new ORPCError("BAD_REQUEST", {
+			message: "This event has as many card pictures as it can keep.",
+		});
+	}
+	if (old.length > 0) await env.MEDIA.delete(old);
 }
 
 /**
@@ -334,6 +368,7 @@ export const designsRouter = {
 					message: "The card image must be a JPEG.",
 				});
 			}
+			await makeRoomForCard(context.env, row.id, row.cardKey);
 			const key = await putCard(context.env, row.id, bytes, context.me.id);
 			await context.db
 				.update(event)

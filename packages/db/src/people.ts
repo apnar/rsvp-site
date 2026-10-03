@@ -418,6 +418,24 @@ export async function ensureLinkToken(db: Db, id: string): Promise<string> {
 	return after.linkToken;
 }
 
+/**
+ * Replace the sign-in token. It sits in every list email, so a forwarded
+ * message or a mail log is a way in until it changes; every link already
+ * sent stops working. The caller revokes the person's sessions too, or the
+ * old token would only be dead for the next sign-in.
+ */
+export async function rotateLinkToken(
+	db: Db,
+	userId: string,
+): Promise<boolean> {
+	const result = await db
+		.update(user)
+		.set({ linkToken: newToken() })
+		.where(eq(user.id, userId))
+		.run();
+	return result.meta.changes === 1;
+}
+
 /** The token in this person's list-email footer, generating one if missing. */
 export async function ensureUnsubscribeToken(
 	db: Db,
@@ -490,7 +508,11 @@ export async function unsubscribe(
 	const result = await db
 		.update(user)
 		.set({ unsubscribedAt: new Date(), unsubscribeReason: reason })
-		.where(and(match, isNull(user.unsubscribedAt)))
+		// Never a deactivated row, like resubscribe: a Brevo event or the footer
+		// form must not rewrite what an admin's decision left behind.
+		.where(
+			and(match, isNull(user.unsubscribedAt), ne(user.status, "deactivated")),
+		)
 		.run();
 	return result.meta.changes === 1;
 }

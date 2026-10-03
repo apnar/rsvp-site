@@ -1,13 +1,18 @@
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import { APIError } from "@rsvp-site/auth/errors";
-import { findPerson, resubscribe, unsubscribe } from "@rsvp-site/db/people";
+import {
+	findPerson,
+	resubscribe,
+	rotateLinkToken,
+	unsubscribe,
+} from "@rsvp-site/db/people";
 import { account, user } from "@rsvp-site/db/schema/auth";
 import { getMailer } from "@rsvp-site/email/worker";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
-import { personProcedure, protectedProcedure } from "../index";
+import { personProcedure } from "../index";
 
 /**
  * Somebody's own account. Passwords are optional here: the emailed links are
@@ -58,17 +63,29 @@ export const accountRouter = {
 		}),
 
 	/**
+	 * Lock everybody else out of this account: the sign-in token in every
+	 * email already sent stops working and every session, this one included,
+	 * ends. For a forwarded email or a lost phone. The caller signs back in
+	 * with a fresh link, so the page must send them to the login screen.
+	 */
+	signOutEverywhere: personProcedure.handler(async ({ context }) => {
+		await rotateLinkToken(context.db, context.me.id);
+		await createAuth().api.revokeSessions({ headers: context.headers });
+		return { ok: true };
+	}),
+
+	/**
 	 * Whether the caller has a password at all. Asked of the `account` table
 	 * directly: `listUserAccounts` strips the password, and a credential row
 	 * can exist without one.
 	 */
-	hasPassword: protectedProcedure.handler(async ({ context }) => {
+	hasPassword: personProcedure.handler(async ({ context }) => {
 		const row = await context.db
 			.select({ id: account.id })
 			.from(account)
 			.where(
 				and(
-					eq(account.userId, context.session.user.id),
+					eq(account.userId, context.me.id),
 					eq(account.providerId, "credential"),
 					isNotNull(account.password),
 				),
@@ -78,7 +95,7 @@ export const accountRouter = {
 	}),
 
 	/** Set a first password. Changing an existing one goes through the client. */
-	setPassword: protectedProcedure
+	setPassword: personProcedure
 		.input(z.object({ newPassword: z.string().min(8) }))
 		.handler(async ({ context, input }) => {
 			try {

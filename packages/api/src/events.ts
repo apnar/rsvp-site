@@ -7,7 +7,7 @@ import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { mapChunks } from "@rsvp-site/db/batch";
 import type { Person } from "@rsvp-site/db/people";
-import { isAdmin } from "@rsvp-site/db/roles";
+import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
 	event,
@@ -106,15 +106,20 @@ export async function stillComing(db: Db, eventId: string): Promise<string[]> {
 	return rows.map((r) => r.userId);
 }
 
-/** The ids of an event's hosts, owner first. */
+/**
+ * The ids of an event's hosts, owner first. Only people who may still host:
+ * a demoted co-host keeps their event_host row, but alerts and digests carry
+ * guests' names and notes and must stop with the role.
+ */
 export async function hostIdsOf(db: Db, eventId: string): Promise<string[]> {
 	const rows = await db
-		.select({ userId: eventHost.userId })
+		.select({ userId: eventHost.userId, role: user.role })
 		.from(eventHost)
+		.innerJoin(user, eq(user.id, eventHost.userId))
 		.where(eq(eventHost.eventId, eventId))
 		.orderBy(...hostOrder())
 		.all();
-	return rows.map((r) => r.userId);
+	return rows.filter((r) => canHost(r)).map((r) => r.userId);
 }
 
 export async function hostsOf(db: Db, eventId: string) {
@@ -164,7 +169,9 @@ export async function accessTo(
 			.where(and(eq(eventGuest.eventId, eventId), eq(eventGuest.userId, me.id)))
 			.get(),
 	]);
-	const isHost = Boolean(hostRow) || isAdmin(me);
+	// The row alone is not enough: a demoted co-host keeps it, and must fall
+	// back to an ordinary guest (or a stranger) the moment the role changes.
+	const isHost = (Boolean(hostRow) && canHost(me)) || isAdmin(me);
 	if (isHost) return { event: row, isHost, guest: guest ?? null };
 	if (!guest || row.status === "draft") throw notFound();
 	return { event: row, isHost: false, guest };

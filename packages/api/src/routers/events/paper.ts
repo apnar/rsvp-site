@@ -15,7 +15,7 @@ import {
 } from "../../events";
 import { withHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
-import { idInput } from "../../inputs";
+import { idInput, idSchema } from "../../inputs";
 
 export const paperRouter = {
 	/**
@@ -28,7 +28,7 @@ export const paperRouter = {
 	 * they are per invitation and sign in plain guests only.
 	 */
 	paperInvites: hostProcedure
-		.input(idInput.extend({ guestIds: z.array(z.string().min(1)).optional() }))
+		.input(idInput.extend({ guestIds: z.array(idSchema).max(1000).optional() }))
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;

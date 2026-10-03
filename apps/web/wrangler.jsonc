@@ -11,8 +11,18 @@
 	// and certificate on deploy. The Worker redirects every other host
 	// (workers.dev) to BETTER_AUTH_URL; see src/server.ts.
 	"routes": [{ "pattern": "rsvp.botch.com", "custom_domain": true }],
+	// Invocation logs record every request's URL, and sign-in links and
+	// unsubscribe links carry their bearer token in it
+	// (/api/auth/link?k=..., /api/unsubscribe/<token>). Workers Logs sit in
+	// an account shared with other sites, so the request log is off. The
+	// console.log/error lines the code writes stay on, and they are
+	// redacted (no addresses, no tokens).
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"logs": {
+			"enabled": true,
+			"invocation_logs": false
+		}
 	},
 	// Every half hour. Nothing about the schedule lives here: the handler in
 	// src/server.ts asks @rsvp-site/api/schedule what each event has due, on

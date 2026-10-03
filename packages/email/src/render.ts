@@ -412,6 +412,30 @@ function blockText(block: Block): string {
 }
 
 /**
+ * A subject as one line of plain text: a person typed the title or the
+ * host's own subject, and a line break or control character has no business
+ * in a header, a notification or a log line. Lengths are the caller's.
+ */
+export function cleanSubject(subject: string): string {
+	return subject
+		.replace(/[\p{Cc}\u2028\u2029]+/gu, " ")
+		.replace(/ {2,}/g, " ")
+		.trim();
+}
+
+/** `j***@example.com`: enough to tell a log line's subject, not to mail them. */
+export function redactEmail(address: string): string {
+	const at = address.lastIndexOf("@");
+	if (at < 1) return "***";
+	return `${address.slice(0, 1)}***${address.slice(at)}`;
+}
+
+/** Redact every address in a string, for logging text a vendor sent back. */
+export function scrubEmails(text: string): string {
+	return text.replace(/[^\s<>"',;:()]+@[^\s<>"',;:()]+/g, redactEmail);
+}
+
+/**
  * A whole email from its blocks. The text part opens with the heading, as
  * the HTML does, and puts a blank line between blocks. `list` adds the
  * unsubscribe footer every list email carries.
@@ -426,7 +450,7 @@ export function email(input: {
 	look?: EmailLook | null;
 }): Rendered {
 	const pal = paletteOf(input.look);
-	const subject = defuse(input.subject);
+	const subject = defuse(cleanSubject(input.subject));
 	const heading = defuse(input.heading);
 	const kicker = input.kicker === undefined ? undefined : defuse(input.kicker);
 	const blocks = input.blocks.map(defused);

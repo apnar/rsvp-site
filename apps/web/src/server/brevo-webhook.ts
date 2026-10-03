@@ -1,6 +1,7 @@
 import { createDb } from "@rsvp-site/db";
 import { unsubscribe } from "@rsvp-site/db/people";
 import type { UnsubscribeReason } from "@rsvp-site/db/schema/auth";
+import { redactEmail } from "@rsvp-site/email";
 import { env } from "@rsvp-site/env/server";
 import { Hono } from "hono";
 
@@ -68,7 +69,9 @@ brevoWebhook.post("/", async (c) => {
 		// reason rather than overwriting it.
 		if (await unsubscribe(db, { email: e.email }, reason)) {
 			dropped++;
-			console.log(`brevo webhook: ${e.event} -> unsubscribed ${e.email}`);
+			console.log(
+				`brevo webhook: ${e.event} -> unsubscribed ${redactEmail(e.email)}`,
+			);
 		}
 	}
 	return c.json({ received: events.length, dropped });

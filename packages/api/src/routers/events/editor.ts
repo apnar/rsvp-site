@@ -28,7 +28,7 @@ import {
 import { notInvitedCount, stillComingCount } from "../../headcount";
 import { withHostEvent, withLiveHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
-import { emailSchema, idInput } from "../../inputs";
+import { emailSchema, idInput, idSchema } from "../../inputs";
 import { eventFacts, sendToList } from "../../mail";
 import { deleteDesignMedia } from "../../media";
 
@@ -70,7 +70,7 @@ const eventFields = z.object({
 const potluckInput = z
 	.array(
 		z.object({
-			id: z.string().min(1).optional(),
+			id: idSchema.optional(),
 			label: z.string().trim().min(1).max(80),
 			quantity: z.number().int().min(1).max(99),
 		}),
@@ -279,7 +279,7 @@ export const editorRouter = {
 		}),
 
 	removeCohost: hostProcedure
-		.input(idInput.extend({ userId: z.string().min(1) }))
+		.input(idInput.extend({ userId: idSchema }))
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;

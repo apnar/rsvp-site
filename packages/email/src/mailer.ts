@@ -9,7 +9,7 @@ import {
 	type SendOutcome,
 	unblockContact,
 } from "./brevo";
-import { guardTemplateSyntax } from "./render";
+import { cleanSubject, guardTemplateSyntax, redactEmail } from "./render";
 
 /** Someone on the list, with the link that takes them off it. */
 export type ListRecipient = {
@@ -82,7 +82,7 @@ export function createMailer(options: MailerOptions): Mailer {
 		return {
 			sender: options.sender,
 			replyTo: options.replyTo,
-			subject: guardTemplateSyntax(rendered.subject),
+			subject: guardTemplateSyntax(cleanSubject(rendered.subject)),
 			htmlContent: guardTemplateSyntax(rendered.html),
 			textContent: guardTemplateSyntax(rendered.text),
 			tags,
@@ -173,7 +173,9 @@ export function createMailer(options: MailerOptions): Mailer {
 				apiKey,
 				fetch: options.fetch,
 			});
-			if (!result.ok) log(`[email] unblock ${email} failed: ${result.status}`);
+			if (!result.ok) {
+				log(`[email] unblock ${redactEmail(email)} failed: ${result.status}`);
+			}
 			return result.ok;
 		},
 	};

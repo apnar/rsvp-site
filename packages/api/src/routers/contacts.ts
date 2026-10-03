@@ -18,8 +18,9 @@ import { z } from "zod";
 
 import type { Context } from "../context";
 import { hostProcedure } from "../index";
+import { idSchema } from "../inputs";
 
-const groupInput = z.object({ groupId: z.string().min(1) });
+const groupInput = z.object({ groupId: idSchema });
 const nameSchema = z.string().trim().min(1, "Name it.").max(80);
 const emailsSchema = z.string().max(20_000);
 
@@ -156,7 +157,7 @@ export const contactsRouter = {
 	 * caller's. Events they are already invited to keep them.
 	 */
 	removePerson: hostProcedure
-		.input(z.object({ userId: z.string().min(1) }))
+		.input(z.object({ userId: idSchema }))
 		.handler(async ({ context, input }) => {
 			const mine = context.db
 				.select({ id: contactGroup.id })
@@ -189,7 +190,7 @@ export const contactsRouter = {
 			z.object({
 				name: nameSchema,
 				emails: emailsSchema.default(""),
-				userIds: z.array(z.string().min(1)).max(1000).default([]),
+				userIds: z.array(idSchema).max(1000).default([]),
 			}),
 		)
 		.handler(async ({ context, input }) => {
@@ -241,9 +242,7 @@ export const contactsRouter = {
 	 * made from the book: somebody not in it cannot be put in a group.
 	 */
 	setMember: hostProcedure
-		.input(
-			groupInput.extend({ userId: z.string().min(1), member: z.boolean() }),
-		)
+		.input(groupInput.extend({ userId: idSchema, member: z.boolean() }))
 		.handler(async ({ context, input }) => {
 			const row = await ownGroup(context, input.groupId);
 			if (input.member) {

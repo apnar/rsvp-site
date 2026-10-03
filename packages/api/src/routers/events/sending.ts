@@ -15,7 +15,7 @@ import {
 } from "../../events";
 import { withHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
-import { idInput } from "../../inputs";
+import { idInput, idSchema } from "../../inputs";
 import { eventFacts, sendInvites, sendToList } from "../../mail";
 
 /** How long before the same person can be nudged again. */
@@ -139,7 +139,7 @@ export const sendingRouter = {
 	 * claimed in the UPDATE so two hosts pressing at once send one email.
 	 */
 	nudge: hostProcedure
-		.input(idInput.extend({ guestId: z.string().min(1).optional() }))
+		.input(idInput.extend({ guestId: idSchema.optional() }))
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;

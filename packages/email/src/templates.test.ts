@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { email, escapeHtml, PARAM } from "./render";
+import {
+	cleanSubject,
+	email,
+	escapeHtml,
+	PARAM,
+	redactEmail,
+	scrubEmails,
+} from "./render";
 import {
 	cancelEmail,
 	dayBeforeEmail,
@@ -285,6 +292,22 @@ describe("email blocks", () => {
 		const one = email({ subject: "S", heading: "H", blocks: [] });
 		expect(one.text).toBe("H");
 		expect(one.html).not.toContain(PARAM.unsubscribeUrl);
+	});
+});
+
+describe("subjects and logs", () => {
+	it("a subject is one line without control characters", () => {
+		expect(cleanSubject("a\r\nb\tc\u0007d")).toBe("a b c d");
+		expect(email({ subject: "x\ny", heading: "H", blocks: [] }).subject).toBe(
+			"x y",
+		);
+	});
+
+	it("addresses are redacted for logs", () => {
+		expect(redactEmail("jane@example.com")).toBe("j***@example.com");
+		expect(scrubEmails("bad address <jane@example.com>, x@y.org")).toBe(
+			"bad address <j***@example.com>, x***@y.org",
+		);
 	});
 });
 
