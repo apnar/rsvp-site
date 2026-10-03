@@ -1,4 +1,5 @@
-import { getTableColumns, type Table } from "drizzle-orm";
+import { getTableColumns, type SQL, type Table } from "drizzle-orm";
+import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
 
 export function chunk<T>(items: readonly T[], size: number): T[][] {
 	const out: T[][] = [];
@@ -35,4 +36,26 @@ export async function mapChunks<T, R>(
 	const out: R[] = [];
 	for (const slice of inChunks(items)) out.push(...(await run(slice)));
 	return out;
+}
+
+/** A statement as D1 takes it. */
+export type Built = { sql: string; params: unknown[] };
+
+const dialect = new SQLiteAsyncDialect();
+
+/** A drizzle query builder, or a raw `sql` template, as D1 takes it. */
+export function built(query: SQL | { toSQL(): Built }): Built {
+	return "toSQL" in query ? query.toSQL() : dialect.sqlToQuery(query);
+}
+
+/**
+ * One atomic D1 batch that may hold raw `sql` with parameters, which
+ * drizzle's own batch can't: its raw query has no prepared statement to
+ * bind and fails at run time. Each result's meta says what it changed.
+ */
+export function rawBatch(
+	d1: D1Database,
+	queries: readonly Built[],
+): Promise<D1Result[]> {
+	return d1.batch(queries.map((q) => d1.prepare(q.sql).bind(...q.params)));
 }

@@ -1,6 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
-import { insertChunks } from "@rsvp-site/db/batch";
+import { built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
@@ -332,49 +332,50 @@ export const guestsRouter = {
 			);
 			// One batch (atomic on D1): the answer, the dropped claims and each
 			// guarded claim land together or not at all.
-			const statements = [
-				context.db
-					.update(eventGuest)
-					.set({
-						response: input.response,
-						...party,
-						dietary: row.askDietary ? input.dietary : "",
-						note: row.askNote ? input.note : "",
-						respondedAt: new Date(),
-					})
-					.where(eq(eventGuest.id, guest.id)),
-				context.db
-					.delete(potluckClaim)
-					.where(
-						wanted.length
-							? and(
-									eq(potluckClaim.guestId, guest.id),
-									notInArray(potluckClaim.itemId, wanted),
-								)
-							: eq(potluckClaim.guestId, guest.id),
-					),
+			const results = await rawBatch(context.db.$client, [
+				built(
+					context.db
+						.update(eventGuest)
+						.set({
+							response: input.response,
+							...party,
+							dietary: row.askDietary ? input.dietary : "",
+							note: row.askNote ? input.note : "",
+							respondedAt: new Date(),
+						})
+						.where(eq(eventGuest.id, guest.id)),
+				),
+				built(
+					context.db
+						.delete(potluckClaim)
+						.where(
+							wanted.length
+								? and(
+										eq(potluckClaim.guestId, guest.id),
+										notInArray(potluckClaim.itemId, wanted),
+									)
+								: eq(potluckClaim.guestId, guest.id),
+						),
+				),
 				// Plain names, not drizzle columns: in a raw template drizzle may
 				// write `"id"` unqualified, which would resolve against the wrong
 				// table here (see CLAUDE.md).
 				...wanted.map((itemId) =>
-					context.db.run(sql`
-					insert into potluck_claim (item_id, guest_id)
-					select ${itemId}, ${guest.id}
-					where exists (
-						select 1 from potluck_item i
-						where i.id = ${itemId}
-							and i.event_id = ${row.id}
-							and i.quantity > (
-								select count(*) from potluck_claim c where c.item_id = i.id
-							)
-					)
-					on conflict do nothing
-				`),
+					built(sql`
+						insert into potluck_claim (item_id, guest_id)
+						select ${itemId}, ${guest.id}
+						where exists (
+							select 1 from potluck_item i
+							where i.id = ${itemId}
+								and i.event_id = ${row.id}
+								and i.quantity > (
+									select count(*) from potluck_claim c where c.item_id = i.id
+								)
+						)
+						on conflict do nothing
+					`),
 				),
-			];
-			const results = await context.db.batch(
-				statements as [(typeof statements)[0], ...typeof statements],
-			);
+			]);
 			const full = wanted.filter(
 				(itemId, i) => results[i + 2]?.meta.changes !== 1 && !held.has(itemId),
 			);
