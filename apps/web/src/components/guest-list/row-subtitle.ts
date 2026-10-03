@@ -9,11 +9,17 @@ import type { Guest } from "./types";
 export function rowSubtitle(
 	g: Pick<
 		Guest,
-		"email" | "response" | "respondedAt" | "invitedAt" | "hasPaper"
+		"email" | "response" | "respondedAt" | "invitedAt" | "hasPaper" | "noEmail"
 	>,
-	opts: { isYou: boolean; paper: boolean; nowMs: number },
+	opts: {
+		isYou: boolean;
+		paper: boolean;
+		nowMs: number;
+		/** Somebody else on this list shares their family. */
+		familyOnList?: boolean;
+	},
 ): string {
-	const { isYou, paper, nowMs } = opts;
+	const { isYou, paper, nowMs, familyOnList = false } = opts;
 	const answered = g.respondedAt ? ` · ${ago(g.respondedAt, nowMs)}` : "";
 	if (isYou) return `That's you${answered}`;
 	const email = g.email || "No email";
@@ -22,6 +28,10 @@ export function rowSubtitle(
 	if (paper) {
 		return `${email} · paper invite${g.hasPaper ? "" : ", not printed yet"}`;
 	}
-	// An email event's uninvited guest always has an address.
+	// Nobody is emailed for a name-only guest: a relative answers if one is
+	// on the list, and otherwise the host does.
+	if (g.noEmail) {
+		return `No email · ${familyOnList ? "family answers" : "you answer for them"}`;
+	}
 	return `${g.email} · not invited yet`;
 }

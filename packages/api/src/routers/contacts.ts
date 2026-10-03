@@ -5,6 +5,11 @@ import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, insertChunks } from "@rsvp-site/db/batch";
 import { canEditDetails, detailColumns } from "@rsvp-site/db/details";
 import {
+	inAnyFamily,
+	listFamilies,
+	sharedGroups,
+} from "@rsvp-site/db/families";
+import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
 	type Person,
@@ -16,20 +21,25 @@ import {
 	contactGroup,
 	contactGroupMember,
 } from "@rsvp-site/db/schema/contact";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { familyMember } from "@rsvp-site/db/schema/family";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 
 import { CLAIMED, detailsPatch, saveDetails, saveEmail } from "../details";
-import { hostProcedure } from "../index";
+import { adminProcedure, hostProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
 
 const groupInput = z.object({ groupId: idSchema });
 const nameSchema = z.string().trim().min(1, "Name it.").max(80);
 const emailsSchema = z.string().max(20_000);
+const IN_FAMILY =
+	"They're in a family, so the site's admins keep their details.";
 
 /**
- * A group the caller may touch: their own, or anybody's for an admin. A
- * stranger's group is "no such group", the same as a wrong id.
+ * A group the caller may change: their own, or anybody's for an admin. A
+ * stranger's group is "no such group", the same as a wrong id -- shared or
+ * not, since sharing lets other hosts add from a group, never edit it.
  */
 async function ownGroup(
 	context: { db: Db; me: Pick<Person, "id" | "role"> },
@@ -84,8 +94,9 @@ async function bookEntry(
 	context: { db: Db; me: Pick<Person, "id" | "role"> },
 	userId: string,
 ) {
-	const [known, person] = await Promise.all([
+	const [known, inFamily, person] = await Promise.all([
 		inBook(context.db, context.me.id, [userId]),
+		inAnyFamily(context.db, userId),
 		context.db
 			.select({
 				id: user.id,
@@ -100,8 +111,10 @@ async function bookEntry(
 	if (!person || !known.has(userId)) {
 		throw new ORPCError("NOT_FOUND", { message: "Nobody by that id." });
 	}
-	if (!canEditDetails(context.me, person, true)) {
-		throw new ORPCError("BAD_REQUEST", { message: CLAIMED });
+	if (!canEditDetails(context.me, { ...person, inFamily }, true)) {
+		throw new ORPCError("BAD_REQUEST", {
+			message: inFamily && person.claimedAt === null ? IN_FAMILY : CLAIMED,
+		});
 	}
 	return person;
 }
@@ -128,8 +141,10 @@ async function join(
 }
 
 /**
- * A host's address book and the groups made from it. Private: other hosts
- * never see either, because a host's address book is not the site's.
+ * A host's address book and the groups made from it. The book is private:
+ * a host's address book is not the site's. A group is too, until an admin
+ * shares it; then every host may add from it (`shared`), and only its
+ * owner and admins change it.
  */
 export const contactsRouter = {
 	/**
@@ -149,9 +164,11 @@ export const contactsRouter = {
 					role: user.role,
 					status: user.status,
 					claimedAt: user.claimedAt,
+					familyMember: familyMember.userId,
 				})
 				.from(contact)
 				.innerJoin(user, eq(user.id, contact.userId))
+				.leftJoin(familyMember, eq(familyMember.userId, user.id))
 				.where(eq(contact.ownerId, context.me.id))
 				.orderBy(asc(user.name))
 				.all(),
@@ -182,16 +199,24 @@ export const contactsRouter = {
 			else groupsOf.set(m.userId, [m.groupId]);
 			countOf.set(m.groupId, (countOf.get(m.groupId) ?? 0) + 1);
 		}
+
 		return {
 			people: people.map(
-				({ unsubscribedAt, role, status, claimedAt, ...p }) => ({
+				({ unsubscribedAt, role, status, claimedAt, familyMember, ...p }) => ({
 					...p,
 					// Who could be a co-host: hosts and admins who are still in.
 					canHost: canHost({ role }) && status !== "deactivated",
 					claimed: claimedAt !== null,
+					inFamily: familyMember !== null,
 					editable: canEditDetails(
 						context.me,
-						{ id: p.userId, role, status, claimedAt },
+						{
+							id: p.userId,
+							role,
+							status,
+							claimedAt,
+							inFamily: familyMember !== null,
+						},
 						true,
 					),
 					// A placeholder address is never shown, not even to its host.
@@ -375,6 +400,69 @@ export const contactsRouter = {
 						),
 					);
 			}
+			return { ok: true };
+		}),
+
+	/**
+	 * What every host may add from beyond their own book: groups an admin
+	 * shared, and families (the shared ones; all of them for an admin).
+	 * Members by name only -- enough to pick them, nothing to contact them.
+	 */
+	shared: hostProcedure.handler(async ({ context }) => {
+		const [groups, families] = await Promise.all([
+			sharedGroups(context.db, context.me.id),
+			listFamilies(context.db, { onlyShared: !isAdmin(context.me) }),
+		]);
+		return {
+			groups,
+			families: families.map((f) => ({
+				id: f.id,
+				name: f.name,
+				members: f.members.map(({ id, name, child, noEmail }) => ({
+					id,
+					name,
+					child,
+					noEmail,
+				})),
+			})),
+		};
+	}),
+
+	/** Every host's groups, for an admin deciding which to share. */
+	allGroups: adminProcedure.handler(async ({ context }) => {
+		const owner = alias(user, "owner");
+		const [groups, counts] = await Promise.all([
+			context.db
+				.select({
+					id: contactGroup.id,
+					name: contactGroup.name,
+					shared: contactGroup.shared,
+					ownerId: contactGroup.ownerId,
+					ownerName: owner.name,
+				})
+				.from(contactGroup)
+				.innerJoin(owner, eq(owner.id, contactGroup.ownerId))
+				.orderBy(asc(contactGroup.name))
+				.all(),
+			context.db
+				.select({ groupId: contactGroupMember.groupId, n: count() })
+				.from(contactGroupMember)
+				.groupBy(contactGroupMember.groupId)
+				.all(),
+		]);
+		const n = new Map(counts.map((c) => [c.groupId, c.n]));
+		return groups.map((g) => ({ ...g, count: n.get(g.id) ?? 0 }));
+	}),
+
+	/** Share a group with every host, or take it back. Admins only. */
+	setShared: adminProcedure
+		.input(groupInput.extend({ shared: z.boolean() }))
+		.handler(async ({ context, input }) => {
+			const row = await ownGroup(context, input.groupId);
+			await context.db
+				.update(contactGroup)
+				.set({ shared: input.shared })
+				.where(eq(contactGroup.id, row.id));
 			return { ok: true };
 		}),
 };

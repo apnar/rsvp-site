@@ -95,7 +95,6 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 			await client.guests.add({
 				eventId: id,
 				emails: pick.emails,
-				groupIds: pick.groupIds,
 				userIds: pick.userIds,
 			});
 		}

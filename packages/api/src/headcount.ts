@@ -15,7 +15,7 @@ export type GuestCounts = {
 };
 
 export type Totals = {
-	/** Households invited, answered or not. */
+	/** Invitations (rows on the list), answered or not. */
 	invited: number;
 	yes: number;
 	maybe: number;
@@ -44,8 +44,15 @@ export function tally(guests: readonly GuestCounts[]): Totals {
 		}
 		t[g.response]++;
 		if (g.response === "yes") {
-			t.adults += Math.max(1, g.adults);
-			t.kids += Math.max(0, g.kids);
+			// A yes is at least one person. A child a relative answered for is
+			// stored as 0 adults and 1 kid, so the floor is on the sum.
+			const adults = Math.max(0, g.adults);
+			const kids = Math.max(0, g.kids);
+			if (adults + kids < 1) t.adults += 1;
+			else {
+				t.adults += adults;
+				t.kids += kids;
+			}
 		}
 	}
 	return t;
@@ -56,7 +63,7 @@ export function headcount(t: Totals): number {
 	return t.adults + t.kids;
 }
 
-/** Households still to be heard from for certain: no reply, or a maybe. */
+/** Invitations still to be heard from for certain: no reply, or a maybe. */
 export function deciding(t: Totals): number {
 	return t.waiting + t.maybe;
 }
@@ -125,7 +132,9 @@ export function extraPeople(party: { adults: number; kids: number }): number {
 /**
  * Clamp what a guest sent to what the event allows. The form enforces the
  * same limits; this is what makes them true. `maxPlusOnes` 0 means the
- * guest comes alone; kids are dropped when the event does not ask.
+ * guest comes alone; kids are dropped when the event does not ask. A child
+ * answering on their own form counts as an adult here: only a relative's
+ * answer (`relativeParty`) knows them as a kid.
  */
 export function clampParty(
 	input: { adults: number; kids: number },
@@ -139,4 +148,16 @@ export function clampParty(
 		? Math.min(Math.max(0, Math.trunc(input.kids)), 20)
 		: 0;
 	return { adults, kids };
+}
+
+/**
+ * What a relative's answer stands for: that one person, no plus-ones. A
+ * child is a kid when the event asks about kids, and otherwise counted like
+ * everybody else.
+ */
+export function relativeParty(
+	child: boolean,
+	askKids: boolean,
+): { adults: number; kids: number } {
+	return child && askKids ? { adults: 0, kids: 1 } : { adults: 1, kids: 0 };
 }

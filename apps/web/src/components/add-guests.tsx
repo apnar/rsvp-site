@@ -58,7 +58,7 @@ export function AddGuests({
 			className="gap-3.5"
 			onSubmit={(ev) => {
 				ev.preventDefault();
-				add.mutate({ eventId, ...pick });
+				add.mutate({ eventId, emails: pick.emails, userIds: pick.userIds });
 			}}
 		>
 			<h2 className="m-0 text-[20px]">Invite more</h2>

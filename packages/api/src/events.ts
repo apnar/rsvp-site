@@ -18,6 +18,7 @@ import {
 	potluckClaim,
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
+import { familyMember } from "@rsvp-site/db/schema/family";
 import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
 import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
@@ -216,12 +217,15 @@ export function notFound() {
 
 /** The person who added a guest, joined a second time under its own name. */
 const adder = alias(user, "adder");
+/** The relative who answered for a guest, a third time. */
+const answerer = alias(user, "answerer");
 
 /**
  * Everybody on an event's list, with the person behind each row.
  * `unreachable` means mail cannot reach them (unsubscribed, deactivated, no
- * address); `addedBy` is who put them on the list; `hasPaper` says their
- * printed card has a QR code issued.
+ * address); `addedBy` is who put them on the list; `answeredByName` the
+ * relative who answered for them; `familyId` their family, if any;
+ * `hasPaper` says their printed card has a QR code issued.
  */
 export async function guestsOf(db: Db, eventId: string) {
 	const rows = await db
@@ -244,12 +248,16 @@ export async function guestsOf(db: Db, eventId: string) {
 			status: user.status,
 			addedBy: eventGuest.addedBy,
 			addedByName: adder.name,
+			answeredByName: answerer.name,
+			familyId: familyMember.familyId,
 			noEmail: user.noEmail,
 			paperToken: eventGuest.paperToken,
 		})
 		.from(eventGuest)
 		.innerJoin(user, eq(user.id, eventGuest.userId))
 		.leftJoin(adder, eq(adder.id, eventGuest.addedBy))
+		.leftJoin(answerer, eq(answerer.id, eventGuest.answeredBy))
+		.leftJoin(familyMember, eq(familyMember.userId, eventGuest.userId))
 		.where(eq(eventGuest.eventId, eventId))
 		.orderBy(asc(eventGuest.createdAt))
 		.all();

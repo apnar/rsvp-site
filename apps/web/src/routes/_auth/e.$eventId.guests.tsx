@@ -237,7 +237,7 @@ function GuestListPage() {
 						/>
 					</div>
 					<span className="text-[13px] text-haze">
-						{plural(t.invited, "household")} invited
+						{plural(t.invited, "guest")} invited
 						{e.rsvpDeadline
 							? ` · RSVPs close ${formatDate(e.rsvpDeadline)}`
 							: ""}
@@ -326,6 +326,12 @@ function GuestListPage() {
 				<div className="flex flex-col gap-2">
 					{shown.map((g) => (
 						<GuestRow
+							familyOnList={
+								g.familyId !== null &&
+								data.guests.some(
+									(o) => o.id !== g.id && o.familyId === g.familyId,
+								)
+							}
 							key={g.id}
 							guest={g}
 							isYou={g.userId === session.user.id}
@@ -338,7 +344,7 @@ function GuestListPage() {
 					))}
 				</div>
 				<span className="text-[13px] text-haze">
-					Showing {shown.length} of {plural(data.guests.length, "household")}
+					Showing {shown.length} of {plural(data.guests.length, "guest")}
 				</span>
 			</section>
 		</Page>

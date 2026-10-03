@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, type SQL } from "drizzle-orm";
+import { and, eq, isNull, or, type SQL, sql } from "drizzle-orm";
 
 import { normalizeEmail } from "./addresses";
 import { batchAll } from "./batch";
@@ -50,7 +50,9 @@ export const detailColumns = {
  * Before that, a host who has them in their address book may -- the host
  * typed most of it in the first place -- but only for a plain guest who is
  * still in. An unclaimed host's or admin's address is a way to their role,
- * so no other host gets to move it.
+ * so no other host gets to move it. Nor does a host edit anybody in a
+ * family: families are shared across hosts and kept by admins, and a
+ * name-only child never signs in to take their record back.
  */
 export function canEditDetails(
 	me: { id: string; role: string | null },
@@ -59,12 +61,14 @@ export function canEditDetails(
 		role: string | null;
 		status: string;
 		claimedAt: Date | null;
+		inFamily: boolean;
 	},
 	inMyBook: boolean,
 ): boolean {
 	if (isAdmin(me) || me.id === target.id) return true;
 	return (
 		inMyBook &&
+		!target.inFamily &&
 		target.claimedAt === null &&
 		target.status !== "deactivated" &&
 		roleOf(target.role) === "user"
@@ -84,6 +88,8 @@ function editable(id: string, asHost: boolean): SQL | undefined {
 				eq(user.status, "active"),
 				// Null is a plain guest too: see `roleOf`.
 				or(isNull(user.role), eq(user.role, "user")),
+				// Plain names: a raw subquery on a single-table update (CLAUDE.md).
+				sql`not exists (select 1 from family_member where family_member.user_id = ${id})`,
 			)
 		: eq(user.id, id);
 }

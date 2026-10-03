@@ -221,7 +221,10 @@ export const eventGuest = sqliteTable(
 			.references(() => user.id, { onDelete: "cascade" }),
 		source: text("source", { enum: GUEST_SOURCES }).notNull().default("host"),
 		response: text("response", { enum: GUEST_RESPONSES }),
-		/** Including the guest themselves, so a yes is at least 1. */
+		/**
+		 * Including the guest themselves. A child a relative answered for is
+		 * 0 adults and 1 kid; `tally` counts any yes as at least one person.
+		 */
 		adults: integer("adults").notNull().default(1),
 		kids: integer("kids").notNull().default(0),
 		dietary: text("dietary").notNull().default(""),
@@ -238,6 +241,13 @@ export const eventGuest = sqliteTable(
 		respondedAt: integer("responded_at", { mode: "timestamp_ms" }),
 		nudgedAt: integer("nudged_at", { mode: "timestamp_ms" }),
 		addedBy: text("added_by").references(() => user.id, {
+			onDelete: "set null",
+		}),
+		/**
+		 * The relative who gave this answer, when it wasn't the guest. Null
+		 * when they answered themselves or a host recorded it.
+		 */
+		answeredBy: text("answered_by").references(() => user.id, {
 			onDelete: "set null",
 		}),
 		/**

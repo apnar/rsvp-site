@@ -15,8 +15,9 @@ import { rowSubtitle } from "./row-subtitle";
 import type { Guest } from "./types";
 
 function party(g: Guest) {
+	// A child a relative answered for is stored as 0 adults and 1 kid.
 	return [
-		plural(g.adults, "adult"),
+		...(g.adults > 0 || g.kids === 0 ? [plural(g.adults, "adult")] : []),
 		...(g.kids > 0 ? [plural(g.kids, "kid")] : []),
 	].join(" · ");
 }
@@ -39,6 +40,7 @@ export function GuestRow({
 	onNudge,
 	onRemove,
 	removing,
+	familyOnList = false,
 }: {
 	guest: Guest;
 	isYou: boolean;
@@ -47,13 +49,15 @@ export function GuestRow({
 	onNudge: () => void;
 	onRemove: () => void;
 	removing: boolean;
+	/** Another guest on this list is in the same family (see `rowSubtitle`). */
+	familyOnList?: boolean;
 }) {
 	const { nowMs, canNudge, paper, print } = event;
 	const eventId = event.id;
 	const [editing, setEditing] = useState(false);
 	const waiting = g.response === null;
 	const out = g.response === "no";
-	const sub = rowSubtitle(g, { isYou, paper, nowMs });
+	const sub = rowSubtitle(g, { isYou, paper, nowMs, familyOnList });
 	// Whose friend they are, for anybody the host did not choose.
 	const via =
 		g.source === "guest"
@@ -95,6 +99,11 @@ export function GuestRow({
 			    where the row wraps anyway. */}
 			<span className="flex w-[96px] flex-col items-start gap-1">
 				<AnswerTag response={g.response} />
+				{g.answeredByName && g.response !== null ? (
+					<span className="text-[11px] text-haze">
+						Answered by {g.answeredByName}
+					</span>
+				) : null}
 				{g.unreachable && !g.noEmail ? (
 					<span className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-ink">
 						No email

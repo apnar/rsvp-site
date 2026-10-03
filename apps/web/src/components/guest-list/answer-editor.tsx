@@ -66,14 +66,15 @@ export function AnswerEditor({
 					<Stepper
 						label="Adults"
 						value={adults}
-						min={1}
+						// A child a relative answered for is 0 adults and 1 kid.
+						min={kids >= 1 ? 0 : 1}
 						max={50}
 						onChange={setAdults}
 					/>
 					<Stepper
 						label="Kids"
 						value={kids}
-						min={0}
+						min={adults === 0 ? 1 : 0}
 						max={50}
 						onChange={setKids}
 					/>

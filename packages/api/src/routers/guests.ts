@@ -1,7 +1,8 @@
 import { ORPCError } from "@orpc/server";
-import { inBook, remember } from "@rsvp-site/db/address-book";
+import { remember } from "@rsvp-site/db/address-book";
 import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
+import { pickable } from "@rsvp-site/db/families";
 import { newPaperToken } from "@rsvp-site/db/paper";
 import {
 	createNameOnlyPeople,
@@ -72,8 +73,9 @@ export const guestsRouter = {
 		}),
 
 	/**
-	 * Put people on the list: pasted addresses, picks from the address book,
-	 * whole contact groups, or any mix. New addresses become accounts, and
+	 * Put people on the list: pasted addresses, picks from what the host can
+	 * see (address book, families, shared groups), whole contact groups, or
+	 * any mix. New addresses become accounts, and
 	 * everybody the host adds goes into their address book. Nobody is
 	 * emailed here -- the host sends when ready.
 	 */
@@ -82,7 +84,7 @@ export const guestsRouter = {
 			idInput.extend({
 				emails: z.string().max(20_000).default(""),
 				groupIds: z.array(idSchema).max(50).default([]),
-				/** People from the caller's address book. Anybody else is ignored. */
+				/** People the caller can see: book, families, own or shared groups. Anybody else is ignored. */
 				userIds: z.array(idSchema).max(1000).default([]),
 			}),
 		)
@@ -119,9 +121,10 @@ export const guestsRouter = {
 					.all();
 			}
 
-			// Picks only count from the caller's own book, so a guessed user id
-			// adds nobody.
-			const picked = await inBook(context.db, context.me.id, input.userIds);
+			// Picks only count from what the caller can see -- their book,
+			// families they can see, their own or shared groups -- so a guessed
+			// user id adds nobody, and nobody deactivated is added.
+			const picked = await pickable(context.db, context.me, input.userIds);
 
 			// The cap is on everybody this one request adds, however they were
 			// named: typed lines, picks and whole groups, a person in two of
@@ -194,12 +197,21 @@ export const guestsRouter = {
 	 */
 	setAnswer: hostProcedure
 		.input(
-			idInput.extend({
-				guestId: idSchema,
-				response: z.enum(GUEST_RESPONSES).nullable(),
-				adults: z.number().int().min(1).max(50),
-				kids: z.number().int().min(0).max(50),
-			}),
+			idInput
+				.extend({
+					guestId: idSchema,
+					response: z.enum(GUEST_RESPONSES).nullable(),
+					adults: z.number().int().min(0).max(50),
+					kids: z.number().int().min(0).max(50),
+				})
+				// Adults may be 0 (a child's own row is a kid), but somebody
+				// has to be coming.
+				.refine(
+					(v) => !v.response || v.response === "no" || v.adults + v.kids >= 1,
+					{
+						message: "Somebody has to be coming.",
+					},
+				),
 		)
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
@@ -211,6 +223,8 @@ export const guestsRouter = {
 					adults: input.response === "no" ? 1 : input.adults,
 					kids: input.response === "no" ? 0 : input.kids,
 					respondedAt: input.response ? new Date() : null,
+					// The host recorded this, not a relative.
+					answeredBy: null,
 				})
 				.where(
 					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),

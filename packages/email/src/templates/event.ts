@@ -247,7 +247,21 @@ export type ReplyLine = {
 	adults: number;
 	kids: number;
 	note: string;
+	/** The relative who gave this answer, when it wasn't the guest. */
+	answeredBy?: string;
 };
+
+/** A relative somebody answered for, in the same go as their own answer. */
+export type RelativeLine = Pick<
+	ReplyLine,
+	"name" | "response" | "adults" | "kids"
+>;
+
+/**
+ * One submit's worth of answers: the guest's own (`self` false when only
+ * their relatives' changed) and the relatives they answered for.
+ */
+export type AlertReply = ReplyLine & { self?: boolean; for?: RelativeLine[] };
 
 /** The reply tallies a host email shows (not the api's `Totals`, which has no `expecting`). */
 export type HostTotals = {
@@ -260,12 +274,22 @@ export type HostTotals = {
 };
 
 function partyLine(r: ReplyLine): string {
-	if (r.response === "no") return ANSWER_WORD.no;
+	const by = r.answeredBy ? ` (answered by ${r.answeredBy})` : "";
+	if (r.response === "no") return `${ANSWER_WORD.no}${by}`;
+	// A child a relative answered for is 0 adults and 1 kid: never "0 adults".
 	const people = [
-		`${r.adults} ${r.adults === 1 ? "adult" : "adults"}`,
+		...(r.adults > 0 || r.kids < 1
+			? [`${r.adults} ${r.adults === 1 ? "adult" : "adults"}`]
+			: []),
 		...(r.kids > 0 ? [`${r.kids} ${r.kids === 1 ? "kid" : "kids"}`] : []),
 	];
-	return `${ANSWER_WORD[r.response]} · ${people.join(", ")}`;
+	return `${ANSWER_WORD[r.response]} · ${people.join(", ")}${by}`;
+}
+
+/** "Sam", "Sam and Ada", "Sam, Ada and Lou". */
+function nameList(names: readonly string[]): string {
+	if (names.length < 2) return names.join("");
+	return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 function totalsLine(t: HostTotals): string {
@@ -314,17 +338,32 @@ function hostRender(
 	});
 }
 
-/** One reply, to the hosts, as it lands. */
+/**
+ * One reply, to the hosts, as it lands: the guest's own answer and any
+ * relatives' they gave with it, in one email rather than one each.
+ */
 export function hostAlertEmail(
 	facts: EventFacts,
-	reply: ReplyLine,
+	reply: AlertReply,
 	totals: HostTotals,
 ): Rendered {
+	const { self = true, for: relatives = [], ...own } = reply;
+	const names = nameList(relatives.map((r) => r.name));
+	const rows: ReplyLine[] = [
+		...(self ? [own] : []),
+		...relatives.map((r) => ({ ...r, note: "" })),
+	];
 	return hostRender(
 		facts,
-		`${reply.name}: ${ANSWER_WORD[reply.response]} · ${facts.title}`,
-		`${reply.name} answered.`,
-		[reply],
+		self
+			? `${own.name}: ${ANSWER_WORD[own.response]} · ${facts.title}`
+			: `${own.name} answered for ${names} · ${facts.title}`,
+		self
+			? relatives.length
+				? `${own.name} answered, and for ${names}.`
+				: `${own.name} answered.`
+			: `${own.name} answered for ${names}.`,
+		rows,
 		totals,
 	);
 }

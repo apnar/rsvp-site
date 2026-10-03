@@ -52,8 +52,11 @@ function PaperInvitePage() {
 							pending={respond.isPending}
 						/>
 						<p className="m-0 text-[14px] text-haze">
-							This card answers for {data.me.name} at this party. To see your
-							other invitations,{" "}
+							This card answers for {data.me.name}
+							{data.me.family.length > 0
+								? ", and for their family on the list"
+								: ""}{" "}
+							at this party. To see your other invitations,{" "}
 							<Link to="/login" className="text-lime-ink">
 								sign in with your email
 							</Link>

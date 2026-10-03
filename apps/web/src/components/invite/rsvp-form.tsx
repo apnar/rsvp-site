@@ -18,6 +18,7 @@ export type RsvpValues = {
 	dietary: string;
 	note: string;
 	claims: string[];
+	family: { guestId: string; response: Answer }[];
 };
 
 /** Where the form starts: what is saved, or what an email button carried. */
@@ -36,8 +37,10 @@ export function initialRsvp(
 ): RsvpInitial {
 	return {
 		answer: preselected ?? me.response,
-		adults: me.adults,
-		kids: me.kids,
+		// A child's own row is 0 adults and 1 kid; the steppers are for a
+		// grown-up's party, and clampParty would count that kid twice.
+		adults: me.adults < 1 ? 1 : me.adults,
+		kids: me.adults < 1 ? 0 : me.kids,
 		dietary: me.dietary,
 		note: me.note,
 		claims: me.claims,
@@ -73,8 +76,15 @@ export function RsvpForm({
 	const [dietary, setDietary] = useState(initial.dietary);
 	const [note, setNote] = useState(initial.note);
 	const [claims, setClaims] = useState<string[]>(initial.claims);
+	// Relatives the guest has answered in this form. Until then an unanswered
+	// relative follows the guest's own pick, so one tap answers for a household.
+	const [touched, setTouched] = useState<Record<string, Answer>>({});
 
 	if (!me) return null;
+	const family = me.family.map((r) => ({
+		...r,
+		shown: touched[r.guestId] ?? r.response ?? answer,
+	}));
 	const pending = answer !== null && answer !== saved;
 	const coming = answer === "yes" || answer === "maybe";
 
@@ -88,7 +98,21 @@ export function RsvpForm({
 					return;
 				}
 				submit(
-					{ response: answer, adults, kids, dietary, note, claims },
+					{
+						response: answer,
+						adults,
+						kids,
+						dietary,
+						note,
+						claims,
+						// Only answers this form changes: re-sending a relative's own
+						// answer would stamp it as given by this guest.
+						family: family.flatMap((r) =>
+							r.shown && r.shown !== r.response
+								? [{ guestId: r.guestId, response: r.shown }]
+								: [],
+						),
+					},
 					{
 						onSuccess: (result) => {
 							if (result.full.length > 0) {
@@ -136,6 +160,41 @@ export function RsvpForm({
 							onChange={setKids}
 						/>
 					) : null}
+				</div>
+			) : null}
+			{coming && e.maxPlusOnes > 0 && family.length > 0 ? (
+				<span className="-mt-3 text-[13px] text-haze">
+					Family on the list is answered for below, so don't count them as
+					plus-ones.
+				</span>
+			) : null}
+
+			{family.length > 0 ? (
+				<div className="flex flex-col gap-3">
+					<span className="kicker text-soft">Your family</span>
+					{family.map((r) => (
+						<div key={r.guestId} className="flex flex-col gap-1.5">
+							<span className="font-bold text-[15px]">
+								{r.name}
+								{r.child ? (
+									<span className="ml-2 rounded-full border border-line px-2 py-0.5 font-semibold text-[11px] text-haze">
+										kid
+									</span>
+								) : null}
+								{r.answeredByName ? (
+									<span className="ml-2 font-normal text-[13px] text-haze">
+										answered by {r.answeredByName}
+									</span>
+								) : null}
+							</span>
+							<AnswerPicker
+								size="sm"
+								name={`family-${r.guestId}`}
+								value={r.shown}
+								onChange={(a) => setTouched((t) => ({ ...t, [r.guestId]: a }))}
+							/>
+						</div>
+					))}
 				</div>
 			) : null}
 

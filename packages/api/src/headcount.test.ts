@@ -8,6 +8,7 @@ import {
 	notInvitedCount,
 	openSlots,
 	potluckLines,
+	relativeParty,
 	slotsLeftFor,
 	stillComingCount,
 	tally,
@@ -39,11 +40,29 @@ describe("tally", () => {
 		expect(headcount(t)).toBe(5);
 	});
 
-	it("never counts a yes as fewer than one adult", () => {
+	it("never counts a yes as fewer than one person", () => {
 		expect(tally([{ response: "yes", adults: 0, kids: -1 }])).toMatchObject({
 			adults: 1,
 			kids: 0,
 		});
+	});
+
+	it("counts a child answered for as a kid, not an adult", () => {
+		expect(
+			tally([
+				{ response: "yes", adults: 1, kids: 0 },
+				{ response: "yes", adults: 0, kids: 1 },
+				{ response: "maybe", adults: 0, kids: 1 },
+			]),
+		).toMatchObject({ adults: 1, kids: 1, yes: 2, maybe: 1 });
+	});
+});
+
+describe("relativeParty", () => {
+	it("is one person, a kid only when the event asks about kids", () => {
+		expect(relativeParty(false, true)).toEqual({ adults: 1, kids: 0 });
+		expect(relativeParty(true, true)).toEqual({ adults: 0, kids: 1 });
+		expect(relativeParty(true, false)).toEqual({ adults: 1, kids: 0 });
 	});
 });
 

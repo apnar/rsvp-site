@@ -11,6 +11,7 @@ import { eventGuest } from "@rsvp-site/db/schema/event";
 import { ensureLinkToken, ensureUnsubscribeToken } from "@rsvp-site/db/tokens";
 import { emailLook } from "@rsvp-site/design/theme";
 import type {
+	AlertReply,
 	EmailLook,
 	EventFacts,
 	ListRecipient,
@@ -23,7 +24,6 @@ import {
 	inviteEmail,
 	mediaUrl,
 	messageEmail,
-	type ReplyLine,
 	welcomeEmail,
 } from "@rsvp-site/email";
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
@@ -285,7 +285,7 @@ async function releaseInvites(
 export async function alertHosts(
 	db: Db,
 	row: EventRow,
-	reply: ReplyLine,
+	reply: AlertReply,
 	replierId: string,
 ): Promise<void> {
 	if (row.hostAlerts !== "each") return;

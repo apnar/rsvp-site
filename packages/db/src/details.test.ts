@@ -8,6 +8,7 @@ const guest = {
 	role: "user",
 	status: "active",
 	claimedAt: null as Date | null,
+	inFamily: false,
 };
 
 describe("canEditDetails", () => {
@@ -26,6 +27,13 @@ describe("canEditDetails", () => {
 		).toBe(false);
 		expect(canEditDetails(host, { ...guest, role: "host" }, true)).toBe(false);
 		expect(canEditDetails(host, { ...guest, role: "admin" }, true)).toBe(false);
+	});
+
+	it("leaves family members to admins and themselves", () => {
+		const kin = { ...guest, inFamily: true };
+		expect(canEditDetails(host, kin, true)).toBe(false);
+		expect(canEditDetails({ id: "a", role: "admin" }, kin, false)).toBe(true);
+		expect(canEditDetails({ id: "g", role: "user" }, kin, false)).toBe(true);
 	});
 
 	it("always lets the person themselves and an admin", () => {

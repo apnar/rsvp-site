@@ -37,7 +37,7 @@ export function GuestsSection({
 				aside={
 					eventId ? (
 						<span className="text-[14px] text-haze">
-							{plural(guestCount, "household")}
+							{plural(guestCount, "guest")}
 						</span>
 					) : null
 				}
@@ -76,7 +76,7 @@ export function GuestsSection({
 					<p className="m-0 text-soft">
 						{guestCount === 0
 							? "Nobody yet."
-							: `${plural(guestCount, "household")} on the list${notInvited > 0 ? `, ${notInvited} not invited yet` : ""}.`}{" "}
+							: `${plural(guestCount, "guest")} on the list${notInvited > 0 ? `, ${notInvited} not invited yet` : ""}.`}{" "}
 						<Link to="/e/$eventId/guests" params={{ eventId }}>
 							See the guest list
 						</Link>

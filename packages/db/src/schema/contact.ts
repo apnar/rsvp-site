@@ -36,7 +36,9 @@ export const contact = sqliteTable(
 
 /**
  * A host's own named list of people ("King Farm Swim Team"), added to an
- * event's guest list in one go. Private to its owner; admins can read all.
+ * event's guest list in one go. Private to its owner unless an admin marks
+ * it `shared`, which lets every host add from it (never edit it); admins
+ * can read all.
  */
 export const contactGroup = sqliteTable(
 	"contact_group",
@@ -46,6 +48,7 @@ export const contactGroup = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
 		name: text("name").notNull(),
+		shared: integer("shared", { mode: "boolean" }).notNull().default(false),
 		createdAt: integer("created_at", { mode: "timestamp_ms" })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),

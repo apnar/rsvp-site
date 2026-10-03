@@ -130,6 +130,62 @@ describe("the event emails", () => {
 		expect(all.digest.subject).toBe("1 new reply · House Crawl <& tacos>");
 		expect(all.digest.text).toContain("expecting 8");
 	});
+
+	it("put relatives answered for in the same alert, never as 0 adults", () => {
+		const r = hostAlertEmail(
+			facts,
+			{
+				name: "Linh",
+				response: "yes",
+				adults: 1,
+				kids: 0,
+				note: "",
+				for: [
+					{ name: "Sam", response: "yes", adults: 1, kids: 0 },
+					{ name: "Ada", response: "yes", adults: 0, kids: 1 },
+				],
+			},
+			totals,
+		);
+		expect(r.subject).toBe("Linh: Yes · House Crawl <& tacos>");
+		expect(r.text).toContain("Linh answered, and for Sam and Ada.");
+		expect(r.text).toContain("Ada: Yes · 1 kid");
+		expect(r.text).not.toContain("0 adults");
+
+		const only = hostAlertEmail(
+			facts,
+			{
+				name: "Linh",
+				response: "yes",
+				adults: 1,
+				kids: 0,
+				note: "",
+				self: false,
+				for: [{ name: "Sam", response: "no", adults: 1, kids: 0 }],
+			},
+			totals,
+		);
+		expect(only.subject).toBe("Linh answered for Sam · House Crawl <& tacos>");
+		expect(only.text).not.toContain("Linh: Yes");
+	});
+
+	it("say in the digest who answered for whom", () => {
+		const r = hostDigestEmail(
+			facts,
+			[
+				{
+					name: "Ada",
+					response: "yes",
+					adults: 0,
+					kids: 1,
+					note: "",
+					answeredBy: "Linh",
+				},
+			],
+			totals,
+		);
+		expect(r.text).toContain("Ada: Yes · 1 kid (answered by Linh)");
+	});
 });
 
 describe("an invitation from a guest", () => {
@@ -345,6 +401,9 @@ describe("words people type", () => {
 				adults: 1,
 				kids: 0,
 				note: "see https://evil.example/?t={{ params.key }}",
+				for: [
+					{ name: "Kid {{ params.key }}", response: "yes", adults: 0, kids: 1 },
+				],
 			},
 			{ yes: 1, maybe: 0, no: 0, waiting: 0, expecting: 1 },
 		);

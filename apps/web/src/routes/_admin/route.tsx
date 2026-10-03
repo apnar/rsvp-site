@@ -34,6 +34,12 @@ function AdminLayout() {
 				<Link to="/admin/users" className={tabClass}>
 					People
 				</Link>
+				<Link to="/admin/families" className={tabClass}>
+					Families
+				</Link>
+				<Link to="/admin/groups" className={tabClass}>
+					Groups
+				</Link>
 				<Link to="/admin/email" className={tabClass}>
 					Email
 				</Link>

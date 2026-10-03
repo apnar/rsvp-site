@@ -11,6 +11,7 @@ const base = {
 	respondedAt: null,
 	invitedAt: null,
 	hasPaper: false,
+	noEmail: false,
 } as const;
 
 const email = { isYou: false, paper: false, nowMs };
@@ -60,5 +61,12 @@ describe("rowSubtitle", () => {
 	});
 	it("says an emailed guest is not invited yet", () => {
 		expect(rowSubtitle(base, email)).toBe("linh@example.com · not invited yet");
+	});
+	it("says who answers for a name-only guest on an emailed event", () => {
+		const child = { ...base, email: "", noEmail: true };
+		expect(rowSubtitle(child, email)).toBe("No email · you answer for them");
+		expect(rowSubtitle(child, { ...email, familyOnList: true })).toBe(
+			"No email · family answers",
+		);
 	});
 });

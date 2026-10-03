@@ -114,6 +114,7 @@ export const paperRouter = {
 				"Bringing",
 				"Answered",
 				"Added by",
+				"Answered by",
 			];
 			const lines = guests.map((g) => [
 				g.name,
@@ -130,6 +131,7 @@ export const paperRouter = {
 					: g.source === "link"
 						? "share link"
 						: "host",
+				g.answeredByName ?? "",
 			]);
 			const csv = [header, ...lines]
 				.map((cells) => cells.map(csvCell).join(","))

@@ -1,4 +1,5 @@
 import type { Db } from "@rsvp-site/db";
+import { relativesOnEvent } from "@rsvp-site/db/families";
 import { firstNameOf } from "@rsvp-site/db/names";
 
 import {
@@ -25,17 +26,21 @@ export async function invitePayload(
 	const row = access.event;
 	// The card says the viewer's own name, which is the caller's: so the
 	// layout needs nothing from the other reads and runs beside them.
-	const [guests, potluck, hosts, card] = await Promise.all([
+	const [guests, potluck, hosts, card, relatives] = await Promise.all([
 		guestsOf(db, row.id),
 		row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
 		hostsOf(db, row.id),
 		designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
+		access.guest ? relativesOnEvent(db, row.id, access.guest.userId) : [],
 	]);
 	const totals = tally(guests);
 	const mine = access.guest;
 	const myFriends = mine
 		? guests.filter((g) => g.source === "guest" && g.addedBy === mine.userId)
 		: [];
+	// The relatives this guest may answer for, as the guest list has them.
+	const childOf = new Map(relatives.map((r) => [r.id, r.child]));
+	const myFamily = guests.filter((g) => childOf.has(g.id));
 	const myClaims = mine
 		? (potluck.byGuest.get(mine.id) ?? []).map((c) => c.itemId)
 		: [];
@@ -89,6 +94,13 @@ export async function invitePayload(
 						name: g.name,
 						email: g.email,
 						response: g.response,
+					})),
+					family: myFamily.map((g) => ({
+						guestId: g.id,
+						name: g.name,
+						child: childOf.get(g.id) === true,
+						response: g.response,
+						answeredByName: g.answeredByName,
 					})),
 					// Asked here rather than on the page, so the form shows only when
 					// the API would take it: the same rule `guests.inviteFriend` applies.

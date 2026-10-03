@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { built, rawBatch } from "@rsvp-site/db/batch";
+import { relativesOnEvent } from "@rsvp-site/db/families";
 import {
 	eventGuest,
 	GUEST_RESPONSES,
@@ -10,7 +11,7 @@ import { and, eq, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { type Access, requireOpen } from "./events";
-import { clampParty } from "./headcount";
+import { clampParty, relativeParty } from "./headcount";
 import { idSchema } from "./inputs";
 import { alertHosts } from "./mail";
 
@@ -22,6 +23,11 @@ export const answerInput = z.object({
 	dietary: z.string().trim().max(300).default(""),
 	note: z.string().trim().max(1000).default(""),
 	claims: z.array(idSchema).max(40).default([]),
+	/** Answers for relatives on the same list (see `relativesOnEvent`). */
+	family: z
+		.array(z.object({ guestId: idSchema, response: z.enum(GUEST_RESPONSES) }))
+		.max(20)
+		.default([]),
 });
 
 /**
@@ -30,6 +36,12 @@ export const answerInput = z.object({
  * stored. Answers stay open until the party starts: the deadline is the
  * host's request, not a lock. Signed in (guests.respond) or holding a
  * printed card (paper.respond), the rules are these.
+ *
+ * A guest may also answer for relatives on the same list (`input.family`).
+ * Those answers are written in the same batch, stamped with who gave them
+ * (`answered_by`), and only for people `relativesOnEvent` says are theirs:
+ * any other id is ignored. A relative's party is fixed by `relativeParty`,
+ * not by what the request says. The hosts get one alert for the lot.
  *
  * Potluck claims are guarded in the INSERT itself -- it only writes while
  * the item still has room -- so two guests taking the last slot at once
@@ -61,15 +73,31 @@ export async function answer(
 	// What this guest already holds: a claim insert that changes nothing
 	// is either "you have it" or "it's full", and only this tells them
 	// apart without a read per item.
-	const held = new Set(
-		(
-			await db
-				.select({ itemId: potluckClaim.itemId })
-				.from(potluckClaim)
-				.where(eq(potluckClaim.guestId, guest.id))
-				.all()
-		).map((c) => c.itemId),
-	);
+	const [heldRows, relatives] = await Promise.all([
+		db
+			.select({ itemId: potluckClaim.itemId })
+			.from(potluckClaim)
+			.where(eq(potluckClaim.guestId, guest.id))
+			.all(),
+		input.family.length
+			? relativesOnEvent(db, row.id, guest.userId)
+			: Promise.resolve([]),
+	]);
+	const held = new Set(heldRows.map((c) => c.itemId));
+	// Last entry per id wins; an id that is not a relative is dropped
+	// silently, and one that would change nothing is not rewritten (or
+	// announced to the hosts).
+	const asked = new Map(input.family.map((f) => [f.guestId, f.response]));
+	const kept = relatives.flatMap((rel) => {
+		const response = asked.get(rel.id);
+		if (!response) return [];
+		const theirs = relativeParty(rel.child, row.askKids);
+		const same =
+			rel.response === response &&
+			rel.adults === theirs.adults &&
+			rel.kids === theirs.kids;
+		return same ? [] : [{ rel, response, party: theirs }];
+	});
 	// One batch (atomic on D1): the answer, the dropped claims and each
 	// guarded claim land together or not at all.
 	const results = await rawBatch(db.$client, [
@@ -82,6 +110,7 @@ export async function answer(
 					dietary: row.askDietary ? input.dietary : "",
 					note: row.askNote ? input.note : "",
 					respondedAt: new Date(),
+					answeredBy: null,
 				})
 				.where(eq(eventGuest.id, guest.id)),
 		),
@@ -115,6 +144,29 @@ export async function answer(
 				on conflict do nothing
 			`),
 		),
+		// After the claims: `results[i + 2]` below indexes only those.
+		...kept.flatMap(({ rel, response, party: theirs }) => [
+			built(
+				db
+					.update(eventGuest)
+					.set({
+						response,
+						...theirs,
+						respondedAt: new Date(),
+						answeredBy: who.id,
+					})
+					.where(
+						and(eq(eventGuest.id, rel.id), eq(eventGuest.eventId, row.id)),
+					),
+			),
+			...(response === "no"
+				? [
+						built(
+							db.delete(potluckClaim).where(eq(potluckClaim.guestId, rel.id)),
+						),
+					]
+				: []),
+		]),
 	]);
 	const full = wanted.filter(
 		(itemId, i) => results[i + 2]?.meta.changes !== 1 && !held.has(itemId),
@@ -124,7 +176,7 @@ export async function answer(
 		guest.response !== input.response ||
 		guest.adults !== party.adults ||
 		guest.kids !== party.kids;
-	if (changed) {
+	if (changed || kept.length > 0) {
 		await alertHosts(
 			db,
 			row,
@@ -134,6 +186,12 @@ export async function answer(
 				adults: party.adults,
 				kids: party.kids,
 				note: row.askNote ? input.note : "",
+				self: changed,
+				for: kept.map((k) => ({
+					name: k.rel.name,
+					response: k.response,
+					...k.party,
+				})),
 			},
 			who.id,
 		);

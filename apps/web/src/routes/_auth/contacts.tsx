@@ -280,7 +280,9 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 	// The server's rule (`canEditDetails`), said the way it applies here.
 	const reason = p.claimed
 		? "They've signed in, so their details are theirs to change."
-		: "Only they or an admin can change a host's details.";
+		: p.inFamily
+			? "They're in a family, so the site's admins keep their details."
+			: "Only they or an admin can change a host's details.";
 	const saveDetails = (patch: DetailsPatch) =>
 		update.mutateAsync({ userId: p.userId, ...patch });
 	const saveEmail = (email: string) =>
@@ -311,7 +313,7 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 						className="text-[13px] text-haze"
 						display={
 							p.noEmail
-								? "No email · paper only"
+								? "No email"
 								: `${p.email}${p.unsubscribed ? " · no email" : ""}`
 						}
 						inputs={[

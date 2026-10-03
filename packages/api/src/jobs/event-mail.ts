@@ -30,6 +30,7 @@ import {
 	lt,
 	or,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { cleanTheme, type EventRow, guestCountsOf, hostIdsOf } from "../events";
 import { eventFacts, hostTotals, sendToList } from "../mail";
@@ -218,6 +219,8 @@ async function digestFor(
 	since: Date,
 	slot: Date,
 ): Promise<MailOutcome> {
+	// Who answered for somebody else, named in the digest line.
+	const answerer = alias(user, "answerer");
 	const replies = await db
 		.select({
 			name: user.name,
@@ -225,9 +228,11 @@ async function digestFor(
 			adults: eventGuest.adults,
 			kids: eventGuest.kids,
 			note: eventGuest.note,
+			answeredBy: answerer.name,
 		})
 		.from(eventGuest)
 		.innerJoin(user, eq(user.id, eventGuest.userId))
+		.leftJoin(answerer, eq(answerer.id, eventGuest.answeredBy))
 		.where(
 			and(
 				eq(eventGuest.eventId, row.id),
@@ -238,7 +243,9 @@ async function digestFor(
 		.orderBy(asc(eventGuest.respondedAt))
 		.all();
 	const lines = replies.flatMap((r) =>
-		r.response ? [{ ...r, response: r.response }] : [],
+		r.response
+			? [{ ...r, response: r.response, answeredBy: r.answeredBy ?? undefined }]
+			: [],
 	);
 	if (lines.length === 0) {
 		return {

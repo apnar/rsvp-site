@@ -8,27 +8,71 @@ import { useId, useMemo, useState } from "react";
 import { matchesPerson } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
-/** Contact groups as toggle chips: "King Farm Swim Team · 64". */
+type ChipMember = { id: string; name: string; tag?: string };
+type Chip = {
+	key: string;
+	label: string;
+	tag?: string;
+	members: ChipMember[];
+};
+
+/**
+ * Every chip the host can open: their own groups, groups an admin shared,
+ * and families. Keys are prefixed because the three kinds have separate id
+ * spaces and `GuestPick.chips` holds them in one list.
+ */
+function useChips(): Chip[] {
+	const book = useQuery(orpc.contacts.book.queryOptions());
+	const shared = useQuery(orpc.contacts.shared.queryOptions());
+	return useMemo(() => {
+		const own = (book.data?.groups ?? []).map((g) => ({
+			key: `g:${g.id}`,
+			label: g.name,
+			members: (book.data?.people ?? [])
+				.filter((p) => p.groupIds.includes(g.id))
+				.map((p) => ({ id: p.userId, name: p.name })),
+		}));
+		const groups = (shared.data?.groups ?? []).map((g) => ({
+			key: `s:${g.id}`,
+			label: g.name,
+			tag: `shared by ${g.ownerName}`,
+			members: g.members,
+		}));
+		const families = (shared.data?.families ?? []).map((f) => ({
+			key: `f:${f.id}`,
+			label: f.name,
+			tag: "family",
+			members: f.members.map((m) => ({
+				id: m.id,
+				name: m.name,
+				tag: m.child ? "kid" : m.noEmail ? "no email" : undefined,
+			})),
+		}));
+		return [...own, ...groups, ...families];
+	}, [book.data, shared.data]);
+}
+
+/** Groups and families as toggle chips: "King Farm Swim Team · 64". */
 function GroupChips({
-	selected,
+	chips,
+	open,
 	onToggle,
 }: {
-	selected: string[];
-	onToggle: (id: string) => void;
+	chips: Chip[];
+	open: string[];
+	onToggle: (chip: Chip) => void;
 }) {
-	const book = useQuery(orpc.contacts.book.queryOptions());
-	if (!book.data) return null;
-	if (book.data.groups.length === 0) return null;
+	if (chips.length === 0) return null;
 	return (
 		<div className="flex flex-wrap gap-2">
-			{book.data.groups.map((g) => {
-				const on = selected.includes(g.id);
+			{chips.map((c) => {
+				const on = open.includes(c.key);
 				return (
 					<button
-						key={g.id}
+						key={c.key}
 						type="button"
 						aria-pressed={on}
-						onClick={() => onToggle(g.id)}
+						onClick={() => onToggle(c)}
 						className={cn(
 							"inline-flex cursor-pointer items-center gap-2 rounded-full border px-3.5 py-2 font-bold text-[14px] transition-colors",
 							on
@@ -36,12 +80,66 @@ function GroupChips({
 								: "border-line-strong text-soft hover:border-haze hover:text-ink",
 						)}
 					>
-						{g.name} · {g.count}
+						{c.label} · {c.members.length}
+						{c.tag ? (
+							<span className="font-semibold text-[12px] text-haze">
+								{c.tag}
+							</span>
+						) : null}
 						{on ? <span className="text-haze">×</span> : null}
 					</button>
 				);
 			})}
 		</div>
+	);
+}
+
+/** An open chip's members as ticked checkboxes, so one can be left out. */
+function OpenChip({
+	chip,
+	selected,
+	onToggle,
+	exclude,
+}: {
+	chip: Chip;
+	selected: string[];
+	onToggle: (id: string) => void;
+	exclude?: ReadonlySet<string>;
+}) {
+	const members = chip.members.filter((m) => !exclude?.has(m.id));
+	const left = chip.members.length - members.length;
+	return (
+		<fieldset className="m-0 flex flex-col gap-1 rounded-[18px] border border-line p-3">
+			<legend className="px-1 font-bold text-[13px] text-soft">
+				{chip.label}
+			</legend>
+			{members.map((m) => (
+				<label
+					key={m.id}
+					className="flex cursor-pointer items-center gap-3 rounded-[12px] px-2 py-1.5 hover:bg-panel-2"
+				>
+					<input
+						type="checkbox"
+						checked={selected.includes(m.id)}
+						onChange={() => onToggle(m.id)}
+						className="size-4 accent-lime"
+					/>
+					<span className="min-w-0 flex-1 truncate">
+						<b className="text-[14px]">{m.name}</b>
+						{m.tag ? (
+							<span className="ml-2 rounded-full border border-line px-2 py-0.5 text-[11px] text-haze">
+								{m.tag}
+							</span>
+						) : null}
+					</span>
+				</label>
+			))}
+			{left > 0 ? (
+				<span className="px-2 text-[12px] text-haze">
+					{left} already on the list.
+				</span>
+			) : null}
+		</fieldset>
 	);
 }
 
@@ -122,7 +220,7 @@ function BookPicker({
 									<span className="min-w-0 flex-1 truncate">
 										<b className="text-[14px]">{p.name}</b>{" "}
 										<span className="text-[13px] text-haze">
-											{p.noEmail ? "paper only" : p.email}
+											{p.noEmail ? "no email" : p.email}
 										</span>
 									</span>
 								</label>
@@ -138,14 +236,15 @@ function BookPicker({
 /** Who to put on a list: typed addresses, contact groups, address-book picks. */
 export type GuestPick = {
 	emails: string;
-	groupIds: string[];
 	userIds: string[];
+	/** UI only, never sent: keys of the open chips, so NO_PICK closes them. */
+	chips: string[];
 };
 
-export const NO_PICK: GuestPick = { emails: "", groupIds: [], userIds: [] };
+export const NO_PICK: GuestPick = { emails: "", userIds: [], chips: [] };
 
 export const hasPick = (v: GuestPick) =>
-	v.emails.trim().length > 0 || v.groupIds.length > 0 || v.userIds.length > 0;
+	v.emails.trim().length > 0 || v.userIds.length > 0;
 
 /**
  * The one way a host chooses guests, for a new event and for one already
@@ -166,6 +265,44 @@ export function GuestPicker({
 	exclude?: ReadonlySet<string>;
 }) {
 	const emailsId = useId();
+	const chips = useChips();
+	const openChips = chips.filter((c) => value.chips.includes(c.key));
+	// Choosing a chip ticks its members; the ticks are the real pick
+	// (`userIds`), so the server never has to expand a group. Closing a chip
+	// unticks its members except any another open chip also holds.
+	const toggleChip = (chip: Chip) => {
+		if (!value.chips.includes(chip.key)) {
+			const add = chip.members
+				.map((m) => m.id)
+				.filter((id) => !exclude?.has(id) && !value.userIds.includes(id));
+			onChange({
+				...value,
+				chips: [...value.chips, chip.key],
+				userIds: [...value.userIds, ...add],
+			});
+			return;
+		}
+		const kept = new Set(
+			openChips
+				.filter((c) => c.key !== chip.key)
+				.flatMap((c) => c.members.map((m) => m.id)),
+		);
+		const drop = new Set(
+			chip.members.map((m) => m.id).filter((id) => !kept.has(id)),
+		);
+		onChange({
+			...value,
+			chips: value.chips.filter((k) => k !== chip.key),
+			userIds: value.userIds.filter((id) => !drop.has(id)),
+		});
+	};
+	const toggleUser = (id: string) =>
+		onChange({
+			...value,
+			userIds: value.userIds.includes(id)
+				? value.userIds.filter((x) => x !== id)
+				: [...value.userIds, id],
+		});
 	return (
 		<>
 			<BookPicker
@@ -173,17 +310,16 @@ export function GuestPicker({
 				onChange={(userIds) => onChange({ ...value, userIds })}
 				exclude={exclude}
 			/>
-			<GroupChips
-				selected={value.groupIds}
-				onToggle={(id) =>
-					onChange({
-						...value,
-						groupIds: value.groupIds.includes(id)
-							? value.groupIds.filter((x) => x !== id)
-							: [...value.groupIds, id],
-					})
-				}
-			/>
+			<GroupChips chips={chips} open={value.chips} onToggle={toggleChip} />
+			{openChips.map((c) => (
+				<OpenChip
+					key={c.key}
+					chip={c}
+					selected={value.userIds}
+					onToggle={toggleUser}
+					exclude={exclude}
+				/>
+			))}
 			<label htmlFor={emailsId} className="sr-only">
 				Guests to invite
 			</label>
