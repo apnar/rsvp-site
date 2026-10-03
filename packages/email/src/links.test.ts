@@ -30,9 +30,21 @@ describe("coverUrl", () => {
 
 describe("safeReturnPath", () => {
 	it("keeps paths on this site", () => {
-		for (const path of ["/", "/events", "/e/abc?a=yes", "/admin/email"]) {
+		for (const path of [
+			"/",
+			"/events",
+			"/e/abc?a=yes",
+			"/admin/email",
+			"/#rsvp",
+		]) {
 			expect(safeReturnPath(path)).toBe(path);
 		}
+	});
+
+	it("keeps a smuggled tab or newline from leaving the site", () => {
+		expect(safeReturnPath("/a\nb")).toBe("/ab");
+		// Arrives already decoded once; a literal "%09" left is just a path.
+		expect(safeReturnPath("/%09/evil.com")).toBe("/%09/evil.com");
 	});
 
 	it("sends everything else to the home page", () => {
@@ -40,8 +52,11 @@ describe("safeReturnPath", () => {
 			"//evil.com",
 			"/\\evil.com",
 			"https://evil.com",
-			"/a\nb",
-			"/a\rb",
+			"/\t/evil.com",
+			"/\n/evil.com",
+			"/\r/evil.com",
+			"\t//evil.com",
+			"/\\\\evil.com",
 			"schedule",
 			"",
 			undefined,

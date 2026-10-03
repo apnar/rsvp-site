@@ -54,13 +54,22 @@ export function cardUrl(siteUrl: string, cardKey: string): string {
 
 /**
  * Where a sign-in link may drop someone: somewhere on this site, never off
- * it. Anything clever ("//evil.com", "https://evil.com", a smuggled newline)
- * lands on the home page instead.
+ * it. The path is resolved the way a browser would resolve it and only kept
+ * if it stays on the site, because string checks lose to the URL parser's
+ * own quirks: it drops tabs and newlines and reads "\\" as "/", so
+ * "/\t/evil.com" is "//evil.com" by the time anything follows it.
  */
 export function safeReturnPath(to: unknown): string {
-	if (typeof to !== "string") return "/";
-	if (!to.startsWith("/")) return "/";
-	if (to.startsWith("//") || to.startsWith("/\\")) return "/";
-	if (to.includes("://") || to.includes("\n") || to.includes("\r")) return "/";
-	return to;
+	if (typeof to !== "string" || !to.startsWith("/")) return "/";
+	let url: URL;
+	try {
+		url = new URL(to, HOME);
+	} catch {
+		return "/";
+	}
+	if (url.origin !== HOME) return "/";
+	return `${url.pathname}${url.search}${url.hash}`;
 }
+
+/** A stand-in origin to resolve against; only "is it still this one" matters. */
+const HOME = "https://site.invalid";
