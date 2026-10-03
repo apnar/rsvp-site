@@ -150,6 +150,10 @@ function Designer() {
 	// design must never reset work in progress.
 	const [epoch, setEpoch] = useState(0);
 	const copied = useRef(new Map<string, Placed>());
+	// The newest version this visit has saved. An editor made by "Start
+	// over" must carry on from it, or its first save looks like it is
+	// overwriting somebody else's.
+	const savedHere = useRef(0);
 	// A saved design that arrives after the page did (a refetch) opens, as
 	// long as nothing has been picked yet.
 	useEffect(() => {
@@ -189,11 +193,14 @@ function Designer() {
 					faces={faces}
 					values={values}
 					initial={first}
-					version={saved.version}
+					version={Math.max(saved.version, savedHere.current)}
 					designOn={saved.version === 0 ? true : saved.designOn}
 					images={saved.images}
 					unsaved={first !== start}
 					onStartOver={() => setPicking(true)}
+					onSaved={(v) => {
+						savedHere.current = Math.max(savedHere.current, v);
+					}}
 				/>
 			)}
 		</div>
@@ -463,6 +470,7 @@ function Editor({
 	images: startImages,
 	unsaved,
 	onStartOver,
+	onSaved,
 }: {
 	eventId: string;
 	title: string;
@@ -476,6 +484,7 @@ function Editor({
 	images: string[];
 	unsaved: boolean;
 	onStartOver: () => void;
+	onSaved: (version: number) => void;
 }) {
 	const queryClient = useQueryClient();
 	const [state, dispatch] = useReducer(reducer, initial, initialState);
@@ -582,8 +591,18 @@ function Editor({
 				designOn,
 			});
 			setVersion(r.version);
+			onSaved(r.version);
 			setSavedDoc(doc);
 			setSavedOn(designOn);
+			// What was saved is now what the server has; keep the cached copy
+			// in step at once, not after a refetch that could lose a race.
+			queryClient.setQueryData(
+				orpc.designs.get.queryKey({ input: { eventId } }),
+				(old) =>
+					old
+						? { ...old, doc: parsed.design, version: r.version, designOn }
+						: old,
+			);
 			// The picture emails and link previews show, from what was saved.
 			refreshCard(eventId).catch(() =>
 				toast.error(
@@ -595,12 +614,20 @@ function Editor({
 					? "Saved. Guests see this card."
 					: "Saved. Guests still see the plain invitation.",
 			);
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: orpc.events.key() }),
-				queryClient.invalidateQueries({ queryKey: orpc.designs.key() }),
-			]);
+			await queryClient.invalidateQueries({ queryKey: orpc.events.key() });
 		} catch (error) {
-			toast.error((error as Error).message);
+			const conflict = (error as { code?: string }).code === "CONFLICT";
+			toast.error(
+				(error as Error).message,
+				conflict
+					? {
+							action: {
+								label: "Reload",
+								onClick: () => window.location.reload(),
+							},
+						}
+					: undefined,
+			);
 		} finally {
 			setSaving(false);
 		}

@@ -320,9 +320,18 @@ export const designsRouter = {
 							)
 							.run();
 			if (claimed.meta.changes !== 1) {
+				// Say who: a host's own second tab is the usual culprit, and
+				// "someone else" sends them looking for a co-host who isn't there.
+				const now = await context.db
+					.select({ updatedBy: eventDesign.updatedBy })
+					.from(eventDesign)
+					.where(eq(eventDesign.eventId, row.id))
+					.get();
 				throw new ORPCError("CONFLICT", {
 					message:
-						"Someone else saved this design while you were editing. Reload to see theirs.",
+						now?.updatedBy === context.me.id
+							? "You saved this design from another tab or window since this one opened. Reload to carry on from there."
+							: "A co-host saved this design while you were editing. Reload to see theirs.",
 				});
 			}
 
