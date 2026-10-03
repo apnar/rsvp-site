@@ -93,6 +93,7 @@ function valuesOf(
 		title: string;
 		location: string;
 		hostLine: string;
+		details: string;
 	},
 	labels: {
 		dateLabel: string | null;
@@ -107,6 +108,7 @@ function valuesOf(
 		location: event.location || SAMPLE_VALUES.location,
 		host: event.hostLine || SAMPLE_VALUES.host,
 		rsvpBy: labels.deadlineLabel ?? SAMPLE_VALUES.rsvpBy,
+		details: event.details || SAMPLE_VALUES.details,
 		guest: SAMPLE_VALUES.guest,
 	};
 }
@@ -118,6 +120,7 @@ const RAW_VALUES: Values = {
 	location: "{location}",
 	host: "{host}",
 	rsvpBy: "{rsvp by}",
+	details: "{details}",
 	guest: "{guest}",
 };
 

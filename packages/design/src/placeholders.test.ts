@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { fill, SAMPLE_VALUES, usesPlaceholder } from "./placeholders";
 
 describe("fill", () => {
-	it("fills all seven", () => {
+	it("fills all eight", () => {
 		expect(
 			fill(
-				"{title}|{date}|{time}|{location}|{host}|{rsvp by}|{guest}",
+				"{title}|{date}|{time}|{location}|{host}|{rsvp by}|{details}|{guest}",
 				SAMPLE_VALUES,
 			),
 		).toBe(
-			"Ava turns nine|Saturday, October 24|5:00 – 8:00 PM|12 Linden Street|The Parkers|Oct 17|The Nguyens",
+			`Ava turns nine|Saturday, October 24|5:00 – 8:00 PM|12 Linden Street|The Parkers|Oct 17|${SAMPLE_VALUES.details}|The Nguyens`,
 		);
 	});
 
@@ -51,5 +51,15 @@ describe("basisOf", () => {
 		expect(basisOf(3, { ...SAMPLE_VALUES, guest: "Someone else" })).toBe(a);
 		expect(basisOf(4, SAMPLE_VALUES)).not.toBe(a);
 		expect(basisOf(3, { ...SAMPLE_VALUES, date: "Sunday" })).not.toBe(a);
+	});
+});
+
+describe("{details}", () => {
+	it("is a placeholder like the rest, and counts toward the card's basis", async () => {
+		const { basisOf } = await import("./basis");
+		expect(usesPlaceholder("{ Details }", "details")).toBe(true);
+		expect(basisOf(1, { ...SAMPLE_VALUES, details: "Other" })).not.toBe(
+			basisOf(1, SAMPLE_VALUES),
+		);
 	});
 });

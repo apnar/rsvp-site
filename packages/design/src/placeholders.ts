@@ -11,6 +11,7 @@ export const PLACEHOLDERS = [
 	"location",
 	"host",
 	"rsvp by",
+	"details",
 	"guest",
 ] as const;
 
@@ -23,6 +24,11 @@ export type Values = {
 	location: string;
 	host: string;
 	rsvpBy: string;
+	/**
+	 * The event's details: the ones that go everywhere, never the extra,
+	 * page-only ones, since the card is printed and emailed.
+	 */
+	details: string;
 	/** The addressee on paper, the signed-in guest on the page. */
 	guest: string;
 };
@@ -34,10 +40,12 @@ const KEY: Record<Placeholder, keyof Values> = {
 	location: "location",
 	host: "host",
 	"rsvp by": "rsvpBy",
+	details: "details",
 	guest: "guest",
 };
 
-const PATTERN = /\{\s*(title|date|time|location|host|rsvp\s*by|guest)\s*\}/gi;
+const PATTERN =
+	/\{\s*(title|date|time|location|host|rsvp\s*by|details|guest)\s*\}/gi;
 
 function keyOf(raw: string): keyof Values {
 	return KEY[raw.toLowerCase().replace(/\s+/g, " ") as Placeholder];
@@ -63,6 +71,8 @@ export const SAMPLE_VALUES: Values = {
 	location: "12 Linden Street",
 	host: "The Parkers",
 	rsvpBy: "Oct 17",
+	details:
+		"Bring a blanket and a camp chair. Popcorn bar, then the movie under the stars.",
 	guest: "The Nguyens",
 };
 
@@ -73,5 +83,6 @@ export const BLANK_VALUES: Values = {
 	location: "",
 	host: "",
 	rsvpBy: "",
+	details: "",
 	guest: "",
 };

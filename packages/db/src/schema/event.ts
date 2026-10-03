@@ -56,7 +56,14 @@ export const event = sqliteTable(
 		startTime: text("start_time"),
 		endTime: text("end_time"),
 		location: text("location").notNull().default(""),
+		/** On the invitation everywhere: the page, the emails, the printed card. */
 		details: text("details").notNull().default(""),
+		/**
+		 * Only on the invite page, for guests who have opened it: the gate
+		 * code, parking, the things a host would rather not print or have
+		 * forwarded around in an email.
+		 */
+		extraDetails: text("extra_details").notNull().default(""),
 		/** R2 key of the cover photo, served token-free at /api/covers/<key>. */
 		coverKey: text("cover_key"),
 		/**

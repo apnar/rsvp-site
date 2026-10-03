@@ -326,6 +326,7 @@ export function designValues(row: EventRow, guest: string): Values {
 		location: row.location,
 		host: row.hostLine,
 		rsvpBy: labels.deadlineLabel ?? "",
+		details: row.details,
 		guest,
 	};
 }

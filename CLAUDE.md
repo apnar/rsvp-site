@@ -23,7 +23,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0014 applied |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0015 applied |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
 | Rate limit | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
@@ -233,6 +233,11 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   clients prefetch link targets. The one GET that writes is `/i/$token` for
   somebody already signed in (it joins them), which only a person with a
   session and the link can trigger.
+- Two kinds of details: `details` goes wherever the invitation does (the
+  page, invitation and day-before emails, printed cards, `{details}` on a
+  designed card); `extra_details` is only ever on the invite page, for
+  guests who have opened it. Keep it out of `eventFacts`, `paperInvites`,
+  `designValues` and the share teaser.
 - `headcount.ts` is the only arithmetic for totals; pages and emails must
   not count on their own.
 

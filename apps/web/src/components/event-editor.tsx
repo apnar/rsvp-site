@@ -37,6 +37,7 @@ export type EventForm = {
 	endTime: string;
 	location: string;
 	details: string;
+	extraDetails: string;
 	rsvpDeadline: string;
 	maxPlusOnes: number;
 	askKids: boolean;
@@ -65,6 +66,7 @@ const BLANK: EventForm = {
 	endTime: "",
 	location: "",
 	details: "",
+	extraDetails: "",
 	rsvpDeadline: "",
 	maxPlusOnes: 4,
 	askKids: true,
@@ -93,6 +95,7 @@ function formOf(loaded: Loaded): EventForm {
 		endTime: e.endTime ?? "",
 		location: e.location,
 		details: e.details,
+		extraDetails: e.extraDetails,
 		rsvpDeadline: e.rsvpDeadline ?? "",
 		maxPlusOnes: e.maxPlusOnes,
 		askKids: e.askKids,
@@ -470,7 +473,11 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							onChange={(ev) => set("location", ev.target.value)}
 						/>
 					</Field>
-					<Field label="The details" htmlFor="details">
+					<Field
+						label="The details"
+						htmlFor="details"
+						hint="On the invitation everywhere: the invite page, the emails and printed cards."
+					>
 						<Textarea
 							id="details"
 							value={form.details}
@@ -478,6 +485,20 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 							className="min-h-24"
 							placeholder="What's the plan? What should people bring or wear?"
 							onChange={(ev) => set("details", ev.target.value)}
+						/>
+					</Field>
+					<Field
+						label="More details, on the invite page only"
+						htmlFor="extraDetails"
+						hint="Never emailed or printed: only guests who open their invitation see these."
+					>
+						<Textarea
+							id="extraDetails"
+							value={form.extraDetails}
+							maxLength={5000}
+							className="min-h-20"
+							placeholder="Parking, the gate code, the playlist link..."
+							onChange={(ev) => set("extraDetails", ev.target.value)}
 						/>
 					</Field>
 				</section>
