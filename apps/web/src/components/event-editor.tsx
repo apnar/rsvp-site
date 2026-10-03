@@ -13,7 +13,7 @@ import type { Outputs } from "@/lib/api-types";
 import { coverSrc, plural } from "@/lib/format";
 import { client, orpc } from "@/utils/orpc";
 
-import { AddGuests, GroupChips } from "./add-guests";
+import { AddGuests, BookPicker, GroupChips } from "./add-guests";
 import {
 	AnswerPicker,
 	Field,
@@ -172,6 +172,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 	// New events only: who to put on the list when the draft is first saved.
 	const [emails, setEmails] = useState("");
 	const [groupIds, setGroupIds] = useState<string[]>([]);
+	const [pickedIds, setPickedIds] = useState<string[]>([]);
 	const [busy, setBusy] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
 
@@ -205,7 +206,8 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 			form.endTime !== initial.endTime ||
 			form.location.trim() !== initial.location);
 	const notInvited = loaded?.notInvited ?? 0;
-	const newPeople = emails.trim().length > 0 || groupIds.length > 0;
+	const newPeople =
+		emails.trim().length > 0 || groupIds.length > 0 || pickedIds.length > 0;
 
 	const refresh = () =>
 		queryClient.invalidateQueries({ queryKey: orpc.events.key() });
@@ -239,7 +241,12 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 			});
 		}
 		if (!eventId && newPeople) {
-			await client.guests.add({ eventId: id, emails, groupIds });
+			await client.guests.add({
+				eventId: id,
+				emails,
+				groupIds,
+				userIds: pickedIds,
+			});
 		}
 		if (notified > 0)
 			toast.success(`Told ${plural(notified, "guest")} about the change.`);
@@ -464,11 +471,13 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 								eventId={eventId}
 								published={published}
 								paper={form.paper}
+								onList={new Set(loaded?.guests.map((g) => g.userId))}
 								onAdded={() => refresh()}
 							/>
 						</>
 					) : (
 						<>
+							<BookPicker selected={pickedIds} onChange={setPickedIds} />
 							<GroupChips
 								selected={groupIds}
 								onToggle={(id) =>

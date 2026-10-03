@@ -2,19 +2,21 @@ import { canHost } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
+import { cn } from "@rsvp-site/ui/lib/utils";
 import {
 	useMutation,
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { Avatar } from "@/components/brand";
 import { Field } from "@/components/controls";
 import { Page, PageHead, Panel } from "@/components/page";
 import type { Outputs } from "@/lib/api-types";
-import { plural } from "@/lib/format";
+import { initials, plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/contacts")({
@@ -22,106 +24,200 @@ export const Route = createFileRoute("/_auth/contacts")({
 		if (!canHost(context.session.user)) throw redirect({ to: "/events" });
 	},
 	loader: ({ context }) =>
-		context.queryClient.ensureQueryData(orpc.contacts.list.queryOptions()),
+		context.queryClient.ensureQueryData(orpc.contacts.book.queryOptions()),
 	head: () => ({ meta: [{ title: "Contacts · Botch RSVP" }] }),
 	component: ContactsPage,
 });
 
-type Group = Outputs["contacts"]["list"][number];
-
-function ContactsPage() {
-	const { data } = useSuspenseQuery(orpc.contacts.list.queryOptions());
-	return (
-		<Page>
-			<PageHead kicker="Contacts" title="Your crowds." />
-			<p className="m-0 -mt-4 max-w-[60ch] text-[17px] text-soft">
-				Keep the people you invite again and again in groups, then add a whole
-				group to an event in one tap. Only you see your groups.
-			</p>
-			<NewGroup />
-			<div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] items-start gap-5">
-				{data.map((g) => (
-					<GroupCard key={g.id} group={g} />
-				))}
-			</div>
-		</Page>
-	);
-}
+type Book = Outputs["contacts"]["book"];
+type Group = Book["groups"][number];
+type Person = Book["people"][number];
 
 function useRefresh() {
 	const queryClient = useQueryClient();
 	return () => queryClient.invalidateQueries({ queryKey: orpc.contacts.key() });
 }
 
-function NewGroup() {
-	const refresh = useRefresh();
-	const [name, setName] = useState("");
-	const [emails, setEmails] = useState("");
-	const create = useMutation(
-		orpc.contacts.create.mutationOptions({
-			onSuccess: (r) => {
-				toast.success(
-					`Group made with ${plural(r.added, "person", "people")}.`,
-				);
-				setName("");
-				setEmails("");
-				refresh();
-			},
-			onError: (error: Error) => toast.error(error.message),
-		}),
-	);
+const onError = (error: Error) => toast.error(error.message);
+
+function ContactsPage() {
+	const { data } = useSuspenseQuery(orpc.contacts.book.queryOptions());
 	return (
-		<Panel
-			as="form"
-			className="max-w-[720px]"
-			onSubmit={(e) => {
-				e.preventDefault();
-				create.mutate({ name, emails });
-			}}
-		>
-			<h2 className="m-0 text-[20px]">New group</h2>
-			<Field label="Name" htmlFor="group-name">
+		<Page>
+			<PageHead kicker="Contacts" title="Your people." />
+			<p className="m-0 -mt-4 max-w-[62ch] text-[17px] text-soft">
+				Everyone you invite lands in your address book, so next time it's a pick
+				from the list. Sort them into groups to invite a whole crowd in one tap.
+				Only you see your book and your groups.
+			</p>
+			<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] items-start gap-5">
+				<AddressBook book={data} />
+				<div className="flex flex-col gap-5">
+					<AddPeople />
+					<Groups groups={data.groups} />
+				</div>
+			</div>
+		</Page>
+	);
+}
+
+function AddressBook({ book }: { book: Book }) {
+	const [query, setQuery] = useState("");
+	const [group, setGroup] = useState<string>("all");
+	const shown = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		return book.people.filter(
+			(p) =>
+				(group === "all" || p.groupIds.includes(group)) &&
+				(!q || p.name.toLowerCase().includes(q) || p.email.includes(q)),
+		);
+	}, [book.people, query, group]);
+
+	return (
+		<Panel className="gap-3.5">
+			<div className="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 className="m-0 text-[20px]">Address book</h2>
+				<span className="text-[13px] text-haze">
+					{plural(book.people.length, "person", "people")}
+				</span>
+			</div>
+			<div className="flex flex-wrap gap-2">
+				<label htmlFor="book-find" className="sr-only">
+					Find somebody
+				</label>
 				<Input
-					id="group-name"
-					value={name}
-					maxLength={80}
-					placeholder="King Farm Swim Team"
-					onChange={(e) => setName(e.target.value)}
+					id="book-find"
+					type="search"
+					placeholder="Find somebody"
+					value={query}
+					onChange={(e) => setQuery(e.target.value)}
+					className="min-h-11 flex-[1_1_180px] rounded-full py-2.5"
 				/>
-			</Field>
-			<Field label="People" htmlFor="group-emails">
-				<Textarea
-					id="group-emails"
-					value={emails}
-					placeholder="Paste emails, separated by commas or new lines"
-					onChange={(e) => setEmails(e.target.value)}
-				/>
-			</Field>
-			<Button
-				type="submit"
-				className="self-start"
-				disabled={create.isPending || !name.trim()}
-			>
-				Make the group
-			</Button>
+				{book.groups.length > 0 ? (
+					<>
+						<label htmlFor="book-group" className="sr-only">
+							Show a group
+						</label>
+						<select
+							id="book-group"
+							value={group}
+							onChange={(e) => setGroup(e.target.value)}
+							className="min-h-11 cursor-pointer rounded-full border border-line-strong bg-night px-4 text-[14px] text-ink [color-scheme:dark]"
+						>
+							<option value="all">Everybody</option>
+							{book.groups.map((g) => (
+								<option key={g.id} value={g.id}>
+									{g.name}
+								</option>
+							))}
+						</select>
+					</>
+				) : null}
+			</div>
+			{book.people.length === 0 ? (
+				<p className="m-0 text-soft">
+					Nobody yet. People you invite to an event show up here.
+				</p>
+			) : (
+				<ul className="m-0 flex list-none flex-col p-0">
+					{shown.map((p) => (
+						<BookRow key={p.userId} person={p} groups={book.groups} />
+					))}
+				</ul>
+			)}
 		</Panel>
 	);
 }
 
-function GroupCard({ group }: { group: Group }) {
+/** One person, with a chip per group to put them in or take them out. */
+function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 	const refresh = useRefresh();
-	const [name, setName] = useState(group.name);
-	const [emails, setEmails] = useState("");
 	const [sure, setSure] = useState(false);
-	const onError = (error: Error) => toast.error(error.message);
-	const rename = useMutation(
-		orpc.contacts.rename.mutationOptions({ onSuccess: refresh, onError }),
+	const setMember = useMutation(
+		orpc.contacts.setMember.mutationOptions({ onSuccess: refresh, onError }),
 	);
 	const remove = useMutation(
-		orpc.contacts.remove.mutationOptions({ onSuccess: refresh, onError }),
+		orpc.contacts.removePerson.mutationOptions({
+			onSuccess: refresh,
+			onError,
+		}),
 	);
-	const addMembers = useMutation(
-		orpc.contacts.addMembers.mutationOptions({
+	return (
+		<li className="flex flex-col gap-2 border-line border-t py-3">
+			<div className="flex items-center gap-3">
+				<Avatar initials={initials(p.name)} className="size-9 text-[12px]" />
+				<span className="min-w-0 flex-1">
+					<b className="block truncate">{p.name}</b>
+					<span className="block truncate text-[13px] text-haze">
+						{p.noEmail
+							? "No email · paper only"
+							: `${p.email}${p.unsubscribed ? " · no email" : ""}`}
+					</span>
+				</span>
+				{sure ? (
+					<span className="flex gap-1">
+						<Button
+							variant="destructive"
+							size="xs"
+							onClick={() => remove.mutate({ userId: p.userId })}
+						>
+							Remove
+						</Button>
+						<Button variant="ghost" size="xs" onClick={() => setSure(false)}>
+							Keep
+						</Button>
+					</span>
+				) : (
+					<button
+						type="button"
+						aria-label={`Remove ${p.name} from your address book`}
+						onClick={() => setSure(true)}
+						className="cursor-pointer border-0 bg-transparent px-1 text-haze hover:text-ink"
+					>
+						×
+					</button>
+				)}
+			</div>
+			{groups.length > 0 ? (
+				<div className="flex flex-wrap gap-1.5 pl-12">
+					{groups.map((g) => {
+						const on = p.groupIds.includes(g.id);
+						return (
+							<button
+								key={g.id}
+								type="button"
+								aria-pressed={on}
+								disabled={setMember.isPending}
+								onClick={() =>
+									setMember.mutate({
+										groupId: g.id,
+										userId: p.userId,
+										member: !on,
+									})
+								}
+								className={cn(
+									"cursor-pointer rounded-full border px-2.5 py-1 font-bold text-[12px] transition-colors",
+									on
+										? "border-lime bg-lime/14 text-ink"
+										: "border-line text-haze hover:border-line-strong hover:text-soft",
+								)}
+							>
+								{on ? "✓ " : "+ "}
+								{g.name}
+							</button>
+						);
+					})}
+				</div>
+			) : null}
+		</li>
+	);
+}
+
+function AddPeople() {
+	const refresh = useRefresh();
+	const [emails, setEmails] = useState("");
+	const add = useMutation(
+		orpc.contacts.addPeople.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(`Added ${plural(r.added, "person", "people")}.`);
 				setEmails("");
@@ -130,103 +226,145 @@ function GroupCard({ group }: { group: Group }) {
 			onError,
 		}),
 	);
-	const removeMember = useMutation(
-		orpc.contacts.removeMember.mutationOptions({ onSuccess: refresh, onError }),
-	);
-
 	return (
-		<article className="flex flex-col gap-3.5 rounded-[26px] border border-line bg-panel p-[22px]">
-			<div className="flex items-center gap-2">
-				<label htmlFor={`name-${group.id}`} className="sr-only">
-					Group name
-				</label>
-				<Input
-					id={`name-${group.id}`}
-					value={name}
-					maxLength={80}
-					onChange={(e) => setName(e.target.value)}
-					onBlur={() => {
-						if (name.trim() && name !== group.name) {
-							rename.mutate({ groupId: group.id, name });
-						}
-					}}
-					className="min-h-10 border-transparent bg-transparent px-0 font-bold font-heading text-[20px] hover:border-transparent focus-visible:border-line-strong focus-visible:px-3"
-				/>
-				<span className="flex-none text-[14px] text-haze">
-					{group.members.length}
-				</span>
-			</div>
-			<ul className="m-0 flex max-h-72 list-none flex-col gap-1 overflow-y-auto p-0">
-				{group.members.map((m) => (
-					<li
-						key={m.userId}
-						className="flex items-center gap-2 border-line border-t py-2 text-[14px]"
-					>
-						<span className="min-w-0 flex-1 truncate">
-							<b>{m.name}</b> <span className="text-haze">{m.email}</span>
-						</span>
-						{m.unsubscribed ? (
-							<span className="text-[12px] text-pink-soft">no email</span>
-						) : null}
-						<button
-							type="button"
-							aria-label={`Take ${m.name} out of ${group.name}`}
-							className="cursor-pointer border-0 bg-transparent text-haze hover:text-ink"
-							onClick={() =>
-								removeMember.mutate({ groupId: group.id, userId: m.userId })
-							}
-						>
-							×
-						</button>
-					</li>
-				))}
-			</ul>
-			<form
-				className="flex flex-col gap-2"
-				onSubmit={(e) => {
-					e.preventDefault();
-					addMembers.mutate({ groupId: group.id, emails });
-				}}
+		<Panel
+			as="form"
+			onSubmit={(e) => {
+				e.preventDefault();
+				add.mutate({ emails });
+			}}
+		>
+			<h2 className="m-0 text-[20px]">Add people</h2>
+			<Field
+				label="Emails, separated by commas or new lines"
+				htmlFor="book-add"
 			>
-				<label htmlFor={`add-${group.id}`} className="sr-only">
-					Add people to {group.name}
-				</label>
 				<Textarea
-					id={`add-${group.id}`}
+					id="book-add"
 					value={emails}
-					placeholder="Add emails"
-					className="min-h-12"
+					placeholder='"Linh Nguyen" <linh@example.com>, priya@example.com'
 					onChange={(e) => setEmails(e.target.value)}
 				/>
-				<div className="flex items-center justify-between gap-2">
-					<Button
-						type="submit"
-						variant="light"
-						size="sm"
-						disabled={!emails.trim() || addMembers.isPending}
-					>
-						Add
-					</Button>
-					{sure ? (
-						<span className="flex gap-1.5">
-							<Button
-								variant="destructive"
-								size="sm"
-								onClick={() => remove.mutate({ groupId: group.id })}
-							>
-								Delete group
-							</Button>
-							<Button variant="ghost" size="sm" onClick={() => setSure(false)}>
-								Keep
-							</Button>
-						</span>
-					) : (
-						<Button variant="ghost" size="sm" onClick={() => setSure(true)}>
-							Delete
-						</Button>
-					)}
-				</div>
+			</Field>
+			<p className="m-0 text-[13px] text-haze">
+				Nobody is invited or emailed; they just join your book.
+			</p>
+			<Button
+				type="submit"
+				variant="light"
+				className="self-start"
+				disabled={add.isPending || !emails.trim()}
+			>
+				Add to address book
+			</Button>
+		</Panel>
+	);
+}
+
+function Groups({ groups }: { groups: Group[] }) {
+	const refresh = useRefresh();
+	const [name, setName] = useState("");
+	const create = useMutation(
+		orpc.contacts.create.mutationOptions({
+			onSuccess: () => {
+				toast.success("Group made. Tick people into it in the address book.");
+				setName("");
+				refresh();
+			},
+			onError,
+		}),
+	);
+	return (
+		<Panel className="gap-3">
+			<h2 className="m-0 text-[20px]">Groups</h2>
+			{groups.length === 0 ? (
+				<p className="m-0 text-[14px] text-soft">
+					No groups yet. Make one, then tick people into it in the address book.
+				</p>
+			) : (
+				<ul className="m-0 flex list-none flex-col p-0">
+					{groups.map((g) => (
+						<GroupRow key={g.id} group={g} />
+					))}
+				</ul>
+			)}
+			<form
+				className="flex flex-wrap gap-2"
+				onSubmit={(e) => {
+					e.preventDefault();
+					create.mutate({ name });
+				}}
+			>
+				<label htmlFor="group-name" className="sr-only">
+					New group name
+				</label>
+				<Input
+					id="group-name"
+					value={name}
+					maxLength={80}
+					placeholder="New group, e.g. King Farm Swim Team"
+					onChange={(e) => setName(e.target.value)}
+					className="min-w-0 flex-[1_1_200px]"
+				/>
+				<Button type="submit" disabled={create.isPending || !name.trim()}>
+					Make it
+				</Button>
 			</form>
-		</article>
+		</Panel>
+	);
+}
+
+function GroupRow({ group }: { group: Group }) {
+	const refresh = useRefresh();
+	const [name, setName] = useState(group.name);
+	const [sure, setSure] = useState(false);
+	const rename = useMutation(
+		orpc.contacts.rename.mutationOptions({ onSuccess: refresh, onError }),
+	);
+	const remove = useMutation(
+		orpc.contacts.remove.mutationOptions({ onSuccess: refresh, onError }),
+	);
+	return (
+		<li className="flex items-center gap-2 border-line border-t py-2">
+			<label htmlFor={`group-${group.id}`} className="sr-only">
+				Group name
+			</label>
+			<Input
+				id={`group-${group.id}`}
+				value={name}
+				maxLength={80}
+				onChange={(e) => setName(e.target.value)}
+				onBlur={() => {
+					if (name.trim() && name !== group.name) {
+						rename.mutate({ groupId: group.id, name });
+					}
+				}}
+				className="min-h-9 flex-1 border-transparent bg-transparent px-0 font-bold hover:border-transparent focus-visible:border-line-strong focus-visible:px-3"
+			/>
+			<span className="text-[13px] text-haze">{group.count}</span>
+			{sure ? (
+				<span className="flex gap-1">
+					<Button
+						variant="destructive"
+						size="xs"
+						onClick={() => remove.mutate({ groupId: group.id })}
+					>
+						Delete
+					</Button>
+					<Button variant="ghost" size="xs" onClick={() => setSure(false)}>
+						Keep
+					</Button>
+				</span>
+			) : (
+				<button
+					type="button"
+					aria-label={`Delete the group ${group.name}`}
+					onClick={() => setSure(true)}
+					className="cursor-pointer border-0 bg-transparent px-1 text-haze hover:text-ink"
+				>
+					×
+				</button>
+			)}
+		</li>
 	);
 }

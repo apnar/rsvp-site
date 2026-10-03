@@ -8,11 +8,13 @@ import {
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AddGuests } from "@/components/add-guests";
 import { Avatar } from "@/components/brand";
+import { Stepper } from "@/components/controls";
 import { Page, PageHead } from "@/components/page";
 import { PillTabs } from "@/components/pill-tabs";
 import { AnswerTag, ResponseBar } from "@/components/response-bar";
@@ -172,6 +174,7 @@ function GuestListPage() {
 					eventId={eventId}
 					published={published}
 					paper={e.paper}
+					onList={new Set(data.guests.map((g) => g.userId))}
 					onAdded={() => refresh()}
 				/>
 			) : null}
@@ -357,6 +360,7 @@ function GuestRow({
 	onRemove: () => void;
 }) {
 	const [confirming, setConfirming] = useState(false);
+	const [editing, setEditing] = useState(false);
 	const waiting = g.response === null;
 	const out = g.response === "no";
 	const sub = isYou
@@ -385,8 +389,8 @@ function GuestRow({
 				// One fixed actions column per kind of event, so the tags line up
 				// down the list whatever buttons a row has.
 				paper
-					? "md:grid-cols-[44px_minmax(0,1.3fr)_96px_110px_120px_minmax(0,1fr)_300px]"
-					: "md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_184px]",
+					? "md:grid-cols-[44px_minmax(0,1.3fr)_96px_110px_120px_minmax(0,1fr)_336px]"
+					: "md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_220px]",
 				waiting && "border border-line-strong border-dashed",
 				out && "bg-panel-dim text-haze",
 				!waiting && !out && "bg-panel",
@@ -450,6 +454,16 @@ function GuestRow({
 				{paper ? (
 					<PaperActions eventId={eventId} eventTitle={eventTitle} guest={g} />
 				) : null}
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					aria-label={`Edit ${g.name}'s answer`}
+					aria-expanded={editing}
+					className={editing ? "bg-ink/10 text-ink" : "text-haze"}
+					onClick={() => setEditing((v) => !v)}
+				>
+					<Pencil strokeWidth={1.5} />
+				</Button>
 				{waiting && canNudge && g.invitedAt && !g.unreachable ? (
 					<Button variant="pink" size="sm" disabled={nudging} onClick={onNudge}>
 						Send a nudge
@@ -484,6 +498,13 @@ function GuestRow({
 					</button>
 				)}
 			</span>
+			{editing ? (
+				<AnswerEditor
+					eventId={eventId}
+					guest={g}
+					onDone={() => setEditing(false)}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -776,6 +797,94 @@ function AddEmail({ eventId, guestId }: { eventId: string; guestId: string }) {
 			<Button type="submit" size="sm" disabled={save.isPending}>
 				Save
 			</Button>
+		</form>
+	);
+}
+
+const ANSWERS: { value: "yes" | "maybe" | "no" | "none"; label: string }[] = [
+	{ value: "yes", label: "Yes" },
+	{ value: "maybe", label: "Maybe" },
+	{ value: "no", label: "Can't" },
+	{ value: "none", label: "No reply" },
+];
+
+/**
+ * A host recording a guest's answer -- they called, or they told you at the
+ * pool. Spans the whole row; the guest's own notes and potluck picks stay
+ * theirs.
+ */
+function AnswerEditor({
+	eventId,
+	guest,
+	onDone,
+}: {
+	eventId: string;
+	guest: Guest;
+	onDone: () => void;
+}) {
+	const queryClient = useQueryClient();
+	const [answer, setAnswer] = useState<"yes" | "maybe" | "no" | "none">(
+		guest.response ?? "none",
+	);
+	const [adults, setAdults] = useState(guest.adults);
+	const [kids, setKids] = useState(guest.kids);
+	const save = useMutation(
+		orpc.guests.setAnswer.mutationOptions({
+			onSuccess: () => {
+				toast.success(`Saved ${guest.name}'s answer.`);
+				queryClient.invalidateQueries({ queryKey: orpc.guests.key() });
+				onDone();
+			},
+			onError: (error: Error) => toast.error(error.message),
+		}),
+	);
+	const coming = answer === "yes" || answer === "maybe";
+	return (
+		<form
+			className="col-span-full flex basis-full flex-wrap items-end gap-3 border-line border-t pt-3"
+			onSubmit={(ev) => {
+				ev.preventDefault();
+				save.mutate({
+					eventId,
+					guestId: guest.id,
+					response: answer === "none" ? null : answer,
+					adults,
+					kids,
+				});
+			}}
+		>
+			<PillTabs
+				label={`${guest.name}'s answer`}
+				value={answer}
+				onChange={setAnswer}
+				options={ANSWERS}
+			/>
+			{coming ? (
+				<div className="grid min-w-[300px] flex-1 grid-cols-2 gap-2">
+					<Stepper
+						label="Adults"
+						value={adults}
+						min={1}
+						max={50}
+						onChange={setAdults}
+					/>
+					<Stepper
+						label="Kids"
+						value={kids}
+						min={0}
+						max={50}
+						onChange={setKids}
+					/>
+				</div>
+			) : null}
+			<div className="flex gap-2">
+				<Button type="submit" size="sm" disabled={save.isPending}>
+					Save
+				</Button>
+				<Button variant="ghost" size="sm" onClick={onDone}>
+					Cancel
+				</Button>
+			</div>
 		</form>
 	);
 }

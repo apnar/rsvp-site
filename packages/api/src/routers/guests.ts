@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { inBook, remember } from "@rsvp-site/db/address-book";
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
@@ -72,15 +73,18 @@ export const guestsRouter = {
 	}),
 
 	/**
-	 * Put people on the list: pasted addresses, whole contact groups, or
-	 * both. New addresses become accounts. Nobody is emailed here -- the
-	 * host sends when ready, and the page says how many are waiting.
+	 * Put people on the list: pasted addresses, picks from the address book,
+	 * whole contact groups, or any mix. New addresses become accounts, and
+	 * everybody the host adds goes into their address book. Nobody is
+	 * emailed here -- the host sends when ready.
 	 */
 	add: hostProcedure
 		.input(
 			idInput.extend({
 				emails: z.string().max(20_000).default(""),
 				groupIds: z.array(z.string().min(1)).max(50).default([]),
+				/** People from the caller's address book. Anybody else is ignored. */
+				userIds: z.array(z.string().min(1)).max(1000).default([]),
 			}),
 		)
 		.handler(async ({ context, input }) => {
@@ -128,9 +132,17 @@ export const guestsRouter = {
 					.all();
 			}
 
+			// Picks only count from the caller's own book, so a guessed user id
+			// adds nobody.
+			const picked = await inBook(context.db, context.me.id, input.userIds);
+
 			const usable = people.filter((p) => p.status !== "deactivated");
 			const rows = [
 				...usable.map((p) => ({ userId: p.id, source: "host" as const })),
+				...[...picked].map((userId) => ({
+					userId,
+					source: "host" as const,
+				})),
 				...named.map((p) => ({ userId: p.id, source: "host" as const })),
 				...members.map((m) => ({ userId: m.userId, source: "group" as const })),
 			];
@@ -153,14 +165,70 @@ export const guestsRouter = {
 					.all();
 				added += inserted.length;
 			}
+			// Whoever the host chose is in their book from now on.
+			await remember(
+				context.db,
+				context.me.id,
+				unique.map((r) => r.userId),
+			);
 			return {
 				added,
 				already: unique.length - added,
 				created: people.filter((p) => p.created).length + named.length,
 				refused: people.length - usable.length,
 				invalid:
-					input.emails.trim() && typed.length === 0 && named.length === 0,
+					Boolean(input.emails.trim()) &&
+					typed.length === 0 &&
+					named.length === 0,
 			};
+		}),
+
+	/**
+	 * A host recording an answer for a guest -- "Dana called, they're coming
+	 * with two" -- or putting one back to no reply. Not held to the event's
+	 * plus-one limit: the host is the one who set it. No host alert, and
+	 * potluck claims are left alone (a "no" drops them, as it would for the
+	 * guest).
+	 */
+	setAnswer: hostProcedure
+		.input(
+			idInput.extend({
+				guestId: z.string().min(1),
+				response: z.enum(GUEST_RESPONSES).nullable(),
+				adults: z.number().int().min(1).max(50),
+				kids: z.number().int().min(0).max(50),
+			}),
+		)
+		.handler(async ({ context, input }) => {
+			const { event: row } = await hostAccessTo(
+				context.db,
+				context.me,
+				input.eventId,
+			);
+			if (row.status === "canceled") {
+				throw new ORPCError("BAD_REQUEST", { message: "It's canceled." });
+			}
+			const result = await context.db
+				.update(eventGuest)
+				.set({
+					response: input.response,
+					adults: input.response === "no" ? 1 : input.adults,
+					kids: input.response === "no" ? 0 : input.kids,
+					respondedAt: input.response ? new Date() : null,
+				})
+				.where(
+					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
+				)
+				.run();
+			if (result.meta.changes !== 1) {
+				throw new ORPCError("NOT_FOUND", { message: "No such guest." });
+			}
+			if (input.response === "no") {
+				await context.db
+					.delete(potluckClaim)
+					.where(eq(potluckClaim.guestId, input.guestId));
+			}
+			return { ok: true };
 		}),
 
 	/** Take somebody off the list, and with them their answer and their claims. */
