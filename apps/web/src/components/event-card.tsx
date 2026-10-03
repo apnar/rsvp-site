@@ -1,6 +1,7 @@
 import type { Totals } from "@rsvp-site/api/headcount";
 import { daysBetween } from "@rsvp-site/api/time";
 import { cn } from "@rsvp-site/ui/lib/utils";
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { inDays } from "@/lib/format";
@@ -28,6 +29,11 @@ export function whenShort(e: Pick<CardEvent, "dateLabel" | "timeLabel">) {
 /**
  * One event on a dashboard: cover with a badge, date, title, the response
  * bar and two actions. `actions` is whatever the page wants at the bottom.
+ *
+ * The whole card opens the event -- a draft opens in the editor, since
+ * there is nothing to see yet. The title is the one real link, stretched
+ * over the card, so it reads as a link to a screen reader once rather than
+ * as a card-sized blob; the action buttons sit above it and keep working.
  */
 export function EventCard({
 	event,
@@ -52,7 +58,7 @@ export function EventCard({
 					}
 				: null);
 	return (
-		<article className="flex flex-col overflow-hidden rounded-[26px] border border-line bg-panel">
+		<article className="group relative flex flex-col overflow-hidden rounded-[26px] border border-line bg-panel transition-colors hover:border-line-strong">
 			<div className="relative aspect-[16/10]">
 				<Cover coverKey={event.coverKey} />
 				{chip ? (
@@ -74,12 +80,18 @@ export function EventCard({
 						{whenShort(event)}
 					</span>
 					<h3 className="mt-1.5 mb-0 text-[22px] leading-[1.1]">
-						{event.title}
+						<Link
+							to={event.status === "draft" ? "/e/$eventId/edit" : "/e/$eventId"}
+							params={{ eventId: event.id }}
+							className="text-ink no-underline after:absolute after:inset-0 after:content-[''] hover:text-ink group-hover:underline"
+						>
+							{event.title}
+						</Link>
 					</h3>
 				</div>
 				<ResponseBar totals={event.totals} />
 				<ResponseCounts totals={event.totals} />
-				<div className="mt-auto flex gap-2">{actions}</div>
+				<div className="relative z-10 mt-auto flex gap-2">{actions}</div>
 			</div>
 		</article>
 	);

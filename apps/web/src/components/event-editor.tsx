@@ -3,7 +3,7 @@ import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -173,6 +173,8 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 	const [emails, setEmails] = useState("");
 	const [groupIds, setGroupIds] = useState<string[]>([]);
 	const [pickedIds, setPickedIds] = useState<string[]>([]);
+	// New events only: co-hosts to add once the draft exists.
+	const [cohostEmails, setCohostEmails] = useState<string[]>([]);
 	const [busy, setBusy] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
 
@@ -239,6 +241,17 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 						quantity: i.quantity,
 					})),
 			});
+		}
+		if (!eventId) {
+			// The draft exists now; co-hosts can be added to it. One that is not
+			// a host on the site is reported and the rest still go on.
+			for (const email of cohostEmails) {
+				try {
+					await client.events.addCohost({ eventId: id, email });
+				} catch (error) {
+					toast.error(`${email}: ${(error as Error).message}`);
+				}
+			}
 		}
 		if (!eventId && newPeople) {
 			await client.guests.add({
@@ -423,9 +436,15 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 					</Field>
 				</section>
 
+				<HostsSection
+					loaded={loaded}
+					pending={cohostEmails}
+					onPendingChange={setCohostEmails}
+				/>
+
 				<section className="flex flex-col gap-3.5 rounded-[26px] bg-panel p-[clamp(18px,3vw,28px)]">
 					<StepHeading
-						n={2}
+						n={3}
 						title="Who's invited"
 						aside={
 							eventId ? (
@@ -512,7 +531,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 
 				<section className="flex flex-col rounded-[26px] bg-panel p-[clamp(18px,3vw,28px)]">
 					<div className="mb-2.5">
-						<StepHeading n={3} title="What to ask" />
+						<StepHeading n={4} title="What to ask" />
 					</div>
 					<SettingRow
 						title="Plus-ones"
@@ -632,7 +651,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 
 				<section className="flex flex-col gap-3 rounded-[26px] bg-panel p-[clamp(18px,3vw,28px)]">
 					<StepHeading
-						n={4}
+						n={5}
 						title="Potluck"
 						aside={
 							<Switch
@@ -719,7 +738,7 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 
 				<section className="flex flex-col rounded-[26px] bg-panel p-[clamp(18px,3vw,28px)]">
 					<div className="mb-2.5">
-						<StepHeading n={5} title="Emails and sharing" />
+						<StepHeading n={6} title="Emails and sharing" />
 					</div>
 					<SettingRow
 						title="Day-before reminder"
@@ -801,7 +820,6 @@ export function EventEditor({ loaded }: { loaded?: Loaded }) {
 					{form.shareEnabled && loaded ? (
 						<ShareLink eventId={loaded.event.id} url={loaded.shareUrl} />
 					) : null}
-					{loaded ? <Cohosts loaded={loaded} /> : null}
 				</section>
 
 				<div className="flex flex-wrap justify-end gap-2.5">
@@ -944,8 +962,23 @@ function ShareLink({ eventId, url }: { eventId: string; url: string }) {
 	);
 }
 
-function Cohosts({ loaded }: { loaded: Loaded }) {
+/**
+ * Who runs the event. Co-hosts can edit it, see the whole guest list and
+ * send for it; they must be hosts on the site, which is an admin's call, so
+ * the suggestions are the hosts in the caller's address book. On a new
+ * event the addresses wait in `pending` until the draft is saved.
+ */
+function HostsSection({
+	loaded,
+	pending,
+	onPendingChange,
+}: {
+	loaded?: Loaded;
+	pending: string[];
+	onPendingChange: (emails: string[]) => void;
+}) {
 	const queryClient = useQueryClient();
+	const book = useQuery(orpc.contacts.book.queryOptions());
 	const [email, setEmail] = useState("");
 	const refresh = () =>
 		queryClient.invalidateQueries({ queryKey: orpc.events.key() });
@@ -964,54 +997,113 @@ function Cohosts({ loaded }: { loaded: Loaded }) {
 			onError: (error: Error) => toast.error(error.message),
 		}),
 	);
+	const hostEmails = new Set(loaded?.hosts.map((h) => h.email) ?? []);
+	const suggestions = (book.data?.people ?? []).filter(
+		(p) =>
+			p.canHost &&
+			p.email &&
+			!hostEmails.has(p.email) &&
+			!pending.includes(p.email),
+	);
+	const addEmail = (value: string) => {
+		const clean = value.trim().toLowerCase();
+		if (!clean) return;
+		if (loaded) add.mutate({ eventId: loaded.event.id, email: clean });
+		else {
+			if (!pending.includes(clean)) onPendingChange([...pending, clean]);
+			setEmail("");
+		}
+	};
+	const chip =
+		"inline-flex items-center gap-2 rounded-full border border-line-strong px-3.5 py-2 text-[14px]";
+
 	return (
-		<div className="flex flex-col gap-2.5 border-line border-t pt-3.5">
-			<b className="text-[16px]">Hosts</b>
+		<section className="flex flex-col gap-3.5 rounded-[26px] bg-panel p-[clamp(18px,3vw,28px)]">
+			<StepHeading n={2} title="Hosts" />
 			<div className="flex flex-wrap gap-2">
-				{loaded.hosts.map((h) => (
-					<span
-						key={h.id}
-						className="inline-flex items-center gap-2 rounded-full border border-line-strong px-3.5 py-2 text-[14px]"
-					>
-						{h.name}
-						{h.isOwner ? (
-							<span className="text-haze">owner</span>
-						) : (
-							<button
-								type="button"
-								aria-label={`Remove ${h.name} as a host`}
-								className="cursor-pointer border-0 bg-transparent text-haze hover:text-ink"
-								onClick={() =>
-									remove.mutate({ eventId: loaded.event.id, userId: h.id })
-								}
-							>
-								×
-							</button>
-						)}
+				{loaded ? (
+					loaded.hosts.map((h) => (
+						<span key={h.id} className={chip}>
+							{h.name}
+							{h.isOwner ? (
+								<span className="text-haze">owner</span>
+							) : (
+								<button
+									type="button"
+									aria-label={`Remove ${h.name} as a host`}
+									className="cursor-pointer border-0 bg-transparent text-haze hover:text-ink"
+									onClick={() =>
+										remove.mutate({ eventId: loaded.event.id, userId: h.id })
+									}
+								>
+									×
+								</button>
+							)}
+						</span>
+					))
+				) : (
+					<span className={chip}>
+						You <span className="text-haze">owner</span>
+					</span>
+				)}
+				{pending.map((p) => (
+					<span key={p} className={chip}>
+						{p}
+						<button
+							type="button"
+							aria-label={`Don't add ${p}`}
+							className="cursor-pointer border-0 bg-transparent text-haze hover:text-ink"
+							onClick={() => onPendingChange(pending.filter((x) => x !== p))}
+						>
+							×
+						</button>
 					</span>
 				))}
 			</div>
-			<form
-				className="flex flex-wrap gap-2"
-				onSubmit={(ev) => {
-					ev.preventDefault();
-					add.mutate({ eventId: loaded.event.id, email });
-				}}
-			>
+			{suggestions.length > 0 ? (
+				<div className="flex flex-wrap items-center gap-1.5">
+					<span className="text-[13px] text-haze">Hosts you know:</span>
+					{suggestions.slice(0, 8).map((p) => (
+						<button
+							key={p.userId}
+							type="button"
+							onClick={() => addEmail(p.email)}
+							className="cursor-pointer rounded-full border border-line px-2.5 py-1 font-bold text-[12px] text-soft hover:border-lime hover:text-ink"
+						>
+							+ {p.name}
+						</button>
+					))}
+				</div>
+			) : null}
+			<div className="flex flex-wrap gap-2">
 				<Input
 					type="email"
-					required
 					value={email}
 					aria-label="Co-host's email"
 					placeholder="Add a co-host by email"
 					onChange={(ev) => setEmail(ev.target.value)}
+					onKeyDown={(ev) => {
+						if (ev.key === "Enter") {
+							ev.preventDefault();
+							addEmail(email);
+						}
+					}}
 					className="min-w-0 flex-[1_1_220px]"
 				/>
-				<Button type="submit" variant="outline" disabled={add.isPending}>
+				<Button
+					variant="outline"
+					disabled={add.isPending || !email.trim()}
+					onClick={() => addEmail(email)}
+				>
 					Add co-host
 				</Button>
-			</form>
-		</div>
+			</div>
+			<span className="text-[13px] text-haze">
+				Co-hosts can edit the event, see the whole guest list and send for it.
+				They have to be hosts on the site; an admin can make anyone a host.
+				{loaded ? "" : " They're added when you save."}
+			</span>
+		</section>
 	);
 }
 

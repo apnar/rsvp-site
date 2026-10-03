@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { inBook, remember } from "@rsvp-site/db/address-book";
 import { findOrCreatePeople, parseAddresses } from "@rsvp-site/db/people";
-import { isAdmin } from "@rsvp-site/db/roles";
+import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
 	contact,
@@ -92,6 +92,8 @@ export const contactsRouter = {
 					email: user.email,
 					noEmail: user.noEmail,
 					unsubscribedAt: user.unsubscribedAt,
+					role: user.role,
+					status: user.status,
 				})
 				.from(contact)
 				.innerJoin(user, eq(user.id, contact.userId))
@@ -121,8 +123,10 @@ export const contactsRouter = {
 					.all()
 			: [];
 		return {
-			people: people.map(({ unsubscribedAt, ...p }) => ({
+			people: people.map(({ unsubscribedAt, role, status, ...p }) => ({
 				...p,
+				// Who could be a co-host: hosts and admins who are still in.
+				canHost: canHost({ role }) && status !== "deactivated",
 				// A placeholder address is never shown, not even to its host.
 				email: p.noEmail ? "" : p.email,
 				unsubscribed: unsubscribedAt !== null,
