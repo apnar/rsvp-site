@@ -16,7 +16,7 @@ import {
 	GUEST_RESPONSES,
 	potluckClaim,
 } from "@rsvp-site/db/schema/event";
-import { and, count, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -31,7 +31,7 @@ import { canInviteOthers } from "../guest-invites";
 import { clampParty, headcount, notInvitedCount, tally } from "../headcount";
 import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { hostProcedure, personProcedure } from "../index";
-import { emailSchema, idInput } from "../inputs";
+import { emailSchema, idInput, idSchema } from "../inputs";
 import { alertHosts, sendInvites } from "../mail";
 import { startsAt } from "../schedule";
 
@@ -85,9 +85,9 @@ export const guestsRouter = {
 		.input(
 			idInput.extend({
 				emails: z.string().max(20_000).default(""),
-				groupIds: z.array(z.string().min(1)).max(50).default([]),
+				groupIds: z.array(idSchema).max(50).default([]),
 				/** People from the caller's address book. Anybody else is ignored. */
-				userIds: z.array(z.string().min(1)).max(1000).default([]),
+				userIds: z.array(idSchema).max(1000).default([]),
 			}),
 		)
 		.use(withLiveHostEvent)
@@ -189,7 +189,7 @@ export const guestsRouter = {
 	setAnswer: hostProcedure
 		.input(
 			idInput.extend({
-				guestId: z.string().min(1),
+				guestId: idSchema,
 				response: z.enum(GUEST_RESPONSES).nullable(),
 				adults: z.number().int().min(1).max(50),
 				kids: z.number().int().min(0).max(50),
@@ -239,7 +239,7 @@ export const guestsRouter = {
 
 	/** Take somebody off the list, and with them their answer and their claims. */
 	remove: hostProcedure
-		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.input(idInput.extend({ guestId: idSchema }))
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
@@ -269,7 +269,7 @@ export const guestsRouter = {
 				kids: z.number().int().min(0).max(50).default(0),
 				dietary: z.string().trim().max(300).default(""),
 				note: z.string().trim().max(1000).default(""),
-				claims: z.array(z.string().min(1)).max(40).default([]),
+				claims: z.array(idSchema).max(40).default([]),
 			}),
 		)
 		.handler(async ({ context, input }) => {
@@ -394,7 +394,7 @@ export const guestsRouter = {
 	 * and the next download prints the new one.
 	 */
 	newPaperCode: hostProcedure
-		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.input(idInput.extend({ guestId: idSchema }))
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
@@ -418,7 +418,7 @@ export const guestsRouter = {
 	setEmail: hostProcedure
 		.input(
 			idInput.extend({
-				guestId: z.string().min(1),
+				guestId: idSchema,
 				email: emailSchema,
 			}),
 		)
@@ -455,9 +455,13 @@ export const guestsRouter = {
 	 * can follow -- people a guest adds, and people from the share link, are
 	 * never offered this (see `guest-invites.ts`).
 	 *
-	 * The per-guest cap is checked inside the INSERT, so two quick invites
-	 * cannot both slip under it; a refused insert is then told apart from a
-	 * friend who was already on the list.
+	 * The cap is on invitations ever sent (`invites_sent` on the inviter's
+	 * own row), not on friends who are still listed: taking one back must not
+	 * hand the invitation back, or invite, uninvite, repeat would email any
+	 * address without end. The friend's INSERT is guarded on that counter
+	 * and the counter is bumped in the same atomic batch, so two quick
+	 * invites cannot both slip under it; a refused insert is then told apart
+	 * from a friend who was already on the list.
 	 */
 	inviteFriend: personProcedure
 		.input(
@@ -466,23 +470,23 @@ export const guestsRouter = {
 			}),
 		)
 		.handler(async ({ context, input }) => {
+			// Per person, not per IP: the cap bounds one guest's invitations to
+			// one party, this bounds the attempts (each can mint an account) and
+			// shares AUTH_LIMITER's 10 a minute, which no honest guest reaches.
+			const { success } = await context.env.AUTH_LIMITER.limit({
+				key: `invite:${context.me.id}`,
+			});
+			if (!success) {
+				throw new ORPCError("TOO_MANY_REQUESTS", {
+					message: "Slow down a little, then try again.",
+				});
+			}
 			const access = await accessTo(context.db, context.me, input.eventId);
 			const row = access.event;
 			const guest = requireInviter(access);
 			// Checked before anybody is created, so a guest at their cap can't
 			// keep minting accounts. The guarded INSERT below is the real lock.
-			const used = await context.db
-				.select({ n: count() })
-				.from(eventGuest)
-				.where(
-					and(
-						eq(eventGuest.eventId, row.id),
-						eq(eventGuest.addedBy, guest.userId),
-						eq(eventGuest.source, "guest"),
-					),
-				)
-				.get();
-			if ((used?.n ?? 0) >= row.guestInviteLimit) {
+			if (guest.invitesSent >= row.guestInviteLimit) {
 				throw new ORPCError("BAD_REQUEST", {
 					message: `You've invited ${row.guestInviteLimit}, the most this party allows.`,
 				});
@@ -503,19 +507,25 @@ export const guestsRouter = {
 				});
 			}
 			const id = crypto.randomUUID();
-			// Plain names, not drizzle columns: see the potluck claim above.
-			const result = await context.db.run(sql`
-				insert into event_guest (id, event_id, user_id, source, added_by)
-				select ${id}, ${row.id}, ${friend.id}, 'guest', ${guest.userId}
-				where (
-					select count(*) from event_guest
-					where event_id = ${row.id}
-						and added_by = ${guest.userId}
-						and source = 'guest'
-				) < ${row.guestInviteLimit}
-				on conflict do nothing
-			`);
-			if (result.meta.changes !== 1) {
+			// Plain names, not drizzle columns: see the potluck claim above. The
+			// counter moves only if the friend's row went in, and D1 runs a
+			// batch as one transaction, so the two cannot come apart.
+			const [inserted] = await rawBatch(context.db.$client, [
+				built(sql`
+					insert into event_guest (id, event_id, user_id, source, added_by)
+					select ${id}, ${row.id}, ${friend.id}, 'guest', ${guest.userId}
+					where (
+						select invites_sent from event_guest where id = ${guest.id}
+					) < ${row.guestInviteLimit}
+					on conflict do nothing
+				`),
+				built(sql`
+					update event_guest set invites_sent = invites_sent + 1
+					where id = ${guest.id}
+						and exists (select 1 from event_guest where id = ${id})
+				`),
+			]);
+			if (inserted?.meta.changes !== 1) {
 				const already = await context.db
 					.select({ id: eventGuest.id })
 					.from(eventGuest)
@@ -536,15 +546,17 @@ export const guestsRouter = {
 				onlyGuestIds: [id],
 				invitedBy: context.me.name,
 			});
-			return { ok: true, emailed: sent.sent > 0, created: friend.created };
+			// No `created`: it would tell a guest whether an address has an account.
+			return { ok: true, emailed: sent.sent > 0 };
 		}),
 
 	/**
 	 * Take back an invitation you made, while they have not answered. Once
-	 * they have, they are a guest like any other and only a host removes them.
+	 * they have, they are a guest like any other and only a host removes them. The
+	 * invitation is not given back: `invites_sent` stays where it was.
 	 */
 	uninviteFriend: personProcedure
-		.input(idInput.extend({ guestId: z.string().min(1) }))
+		.input(idInput.extend({ guestId: idSchema }))
 		.handler(async ({ context, input }) => {
 			const access = await accessTo(context.db, context.me, input.eventId);
 			const guest = access.guest;
@@ -587,6 +599,13 @@ function requireInviter(access: Access) {
 	if (!row.guestInvites) {
 		throw new ORPCError("FORBIDDEN", {
 			message: "The hosts aren't taking extra guests for this one.",
+		});
+	}
+	// The friend's invitation goes out by email at once; a paper event holds
+	// all guest email until the hosts release it.
+	if (emailsHeld(row)) {
+		throw new ORPCError("BAD_REQUEST", {
+			message: "Invitations for this one aren't going out by email yet.",
 		});
 	}
 	if (row.status !== "published") {

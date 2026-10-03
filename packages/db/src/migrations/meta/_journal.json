@@ -113,6 +113,13 @@
 			"when": 1791001255946,
 			"tag": "0015_extra_details",
 			"breakpoints": true
+		},
+		{
+			"idx": 16,
+			"version": "6",
+			"when": 1791036107752,
+			"tag": "0016_guest_invites_sent",
+			"breakpoints": true
 		}
 	]
 }

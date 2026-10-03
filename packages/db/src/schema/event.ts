@@ -239,6 +239,12 @@ export const eventGuest = sqliteTable(
 		addedBy: text("added_by").references(() => user.id, {
 			onDelete: "set null",
 		}),
+		/**
+		 * Friends this guest has ever invited, on their own row. Never given
+		 * back when an invitation is taken back: counting the rows that
+		 * remain would let invite, uninvite, repeat email anybody forever.
+		 */
+		invitesSent: integer("invites_sent").notNull().default(0),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},

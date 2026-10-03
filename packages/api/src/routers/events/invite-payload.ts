@@ -3,6 +3,7 @@ import type { Db } from "@rsvp-site/db";
 import {
 	type accessTo,
 	designedCard,
+	emailsHeld,
 	guestsOf,
 	hostsOf,
 	labelsOf,
@@ -93,8 +94,9 @@ export async function invitePayload(
 					canInvite:
 						row.guestInvites &&
 						row.status === "published" &&
+						!emailsHeld(row) &&
 						canInviteOthers(mine.source),
-					invitesLeft: invitesLeft(row.guestInviteLimit, myFriends.length),
+					invitesLeft: invitesLeft(row.guestInviteLimit, mine.invitesSent),
 				}
 			: null,
 		viewerId: me.id,
