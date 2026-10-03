@@ -32,6 +32,23 @@ export const PARAM = {
 	key: "{{ params.key }}",
 } as const;
 
+const ALLOWED = new Set<string>(Object.values(PARAM));
+const TEMPLATE_TAG = /\{\{ params\.\w+ \}\}|\{[{%#]/g;
+
+/**
+ * Brevo runs its template language over the subject and both bodies, so a
+ * title or a guest's note containing "{{" or "{%" would be read as code: at
+ * best garbled, at worst a template error that fails the whole batch. Only
+ * the placeholders this package writes may open a tag; any other brace that
+ * would is written so the engine doesn't see one (an entity in HTML, a space
+ * in plain text and the subject).
+ */
+export function guardTemplateSyntax(value: string, html: boolean): string {
+	return value.replace(TEMPLATE_TAG, (tag) =>
+		ALLOWED.has(tag) ? tag : `${html ? "&#123;" : "{ "}${tag.slice(1)}`,
+	);
+}
+
 const FONT =
 	"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;";
 

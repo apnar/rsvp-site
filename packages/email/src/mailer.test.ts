@@ -35,6 +35,45 @@ describe("createMailer", () => {
 		expect(String(log.mock.calls[0]?.[0])).toContain("Subject: S");
 	});
 
+	it("fails instead of dry-running where dry runs aren't allowed", async () => {
+		const log = vi.fn();
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const mailer = createMailer({
+			apiKey: undefined,
+			allowDryRun: false,
+			sender,
+			log,
+		});
+		expect(mailer.dryRun).toBe(false);
+		const one = await mailer.sendOne({ email: "a@example.com" }, rendered);
+		expect(one.ok).toBe(false);
+		const list = await mailer.sendList(recipients(3), rendered);
+		expect(list.sent).toBe(0);
+		expect(list.failed).toHaveLength(1);
+		expect(log).not.toHaveBeenCalled();
+		error.mockRestore();
+	});
+
+	it("keeps typed braces from reaching Brevo's template engine", async () => {
+		const fetchImpl = vi.fn(
+			async () =>
+				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
+		);
+		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		await mailer.sendList(recipients(1), {
+			subject: "Party {{ dance }}",
+			html: '<p>{% if x %}</p><a href="/?k={{ params.key }}">go</a>',
+			text: "{# hi #} {{ params.unsubscribeUrl }}",
+		});
+		const init = fetchImpl.mock.calls[0]?.[1] as unknown as RequestInit;
+		const sent = JSON.parse(init.body as string);
+		expect(sent.subject).toBe("Party { { dance }}");
+		expect(sent.htmlContent).toBe(
+			'<p>&#123;% if x %}</p><a href="/?k={{ params.key }}">go</a>',
+		);
+		expect(sent.textContent).toBe("{ # hi #} {{ params.unsubscribeUrl }}");
+	});
+
 	it("fills the placeholders in a dry-run log so the link is clickable", async () => {
 		const log = vi.fn();
 		const mailer = createMailer({ apiKey: undefined, sender, log });

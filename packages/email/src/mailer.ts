@@ -9,6 +9,7 @@ import {
 	type SendOutcome,
 	unblockContact,
 } from "./brevo";
+import { guardTemplateSyntax } from "./render";
 
 /** Someone on the list, with the link that takes them off it. */
 export type ListRecipient = {
@@ -50,6 +51,12 @@ export type Mailer = {
 
 export type MailerOptions = {
 	apiKey?: string | undefined;
+	/**
+	 * Whether a missing key may mean "log instead of send". True on a
+	 * developer's machine. In production a missing key is a mistake, and
+	 * the log it would write holds working sign-in links.
+	 */
+	allowDryRun?: boolean;
 	sender: Address;
 	replyTo?: Address;
 	fetch?: typeof fetch;
@@ -70,15 +77,15 @@ function versionsFor(recipients: ListRecipient[]): MessageVersion[] {
 export function createMailer(options: MailerOptions): Mailer {
 	const log = options.log ?? ((line: string) => console.log(line));
 	const apiKey = options.apiKey?.trim();
-	const dryRun = !apiKey;
+	const dryRun = !apiKey && (options.allowDryRun ?? true);
 
 	function base(rendered: Rendered, tags?: string[]): BrevoRequest {
 		return {
 			sender: options.sender,
 			replyTo: options.replyTo,
-			subject: rendered.subject,
-			htmlContent: rendered.html,
-			textContent: rendered.text,
+			subject: guardTemplateSyntax(rendered.subject, false),
+			htmlContent: guardTemplateSyntax(rendered.html, true),
+			textContent: guardTemplateSyntax(rendered.text, false),
 			tags,
 		};
 	}
@@ -107,8 +114,10 @@ export function createMailer(options: MailerOptions): Mailer {
 	}
 
 	async function send(body: BrevoRequest): Promise<SendOutcome> {
-		if (!apiKey) return { ok: true, messageId: "dry-run" };
-		return postBrevo(body, { apiKey, fetch: options.fetch });
+		if (apiKey) return postBrevo(body, { apiKey, fetch: options.fetch });
+		if (dryRun) return { ok: true, messageId: "dry-run" };
+		console.error("[email] BREVO_API_KEY is not set; nothing was sent");
+		return { ok: false, status: 0, error: "Email is not configured." };
 	}
 
 	return {
@@ -160,7 +169,7 @@ export function createMailer(options: MailerOptions): Mailer {
 		},
 
 		async unblock(email) {
-			if (!apiKey) return true;
+			if (!apiKey) return dryRun;
 			const result = await unblockContact(email, {
 				apiKey,
 				fetch: options.fetch,
