@@ -15,7 +15,10 @@ export const getRouter = () => {
 		defaultPreloadStaleTime: 0,
 		context: { orpc, queryClient },
 		defaultPendingComponent: () => <Loader />,
-		defaultNotFoundComponent: () => <NotFound />,
+		// A loader's orNotFound passes the API's own words ("No such event.").
+		defaultNotFoundComponent: ({ data }) => (
+			<NotFound body={typeof data === "string" ? data : undefined} />
+		),
 		defaultErrorComponent: RouteError,
 	});
 

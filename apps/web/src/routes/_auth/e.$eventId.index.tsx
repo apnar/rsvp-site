@@ -22,6 +22,7 @@ import UserMenu from "@/components/user-menu";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { firstName, plural } from "@/lib/format";
+import { orNotFound } from "@/lib/not-found";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/")({
@@ -33,8 +34,10 @@ export const Route = createFileRoute("/_auth/e/$eventId/")({
 		a: z.enum(["yes", "maybe", "no"]).optional().catch(undefined),
 	}),
 	loader: ({ context, params }) =>
-		context.queryClient.ensureQueryData(
-			orpc.events.invite.queryOptions({ input: { eventId: params.eventId } }),
+		orNotFound(
+			context.queryClient.ensureQueryData(
+				orpc.events.invite.queryOptions({ input: { eventId: params.eventId } }),
+			),
 		),
 	head: ({ loaderData }) => ({
 		meta: [

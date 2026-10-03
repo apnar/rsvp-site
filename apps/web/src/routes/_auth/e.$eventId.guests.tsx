@@ -26,6 +26,7 @@ import type { Outputs } from "@/lib/api-types";
 import { refreshCard } from "@/lib/design-card";
 import { messageOf } from "@/lib/errors";
 import { ago, initials, plural, shortDate } from "@/lib/format";
+import { orNotFound } from "@/lib/not-found";
 import {
 	type CardFormat,
 	layoutsFor,
@@ -45,8 +46,10 @@ export const Route = createFileRoute("/_auth/e/$eventId/guests")({
 		show: z.enum(FILTERS).optional().catch(undefined),
 	}),
 	loader: ({ context, params }) =>
-		context.queryClient.ensureQueryData(
-			orpc.guests.list.queryOptions({ input: { eventId: params.eventId } }),
+		orNotFound(
+			context.queryClient.ensureQueryData(
+				orpc.guests.list.queryOptions({ input: { eventId: params.eventId } }),
+			),
 		),
 	head: ({ loaderData }) => ({
 		meta: [

@@ -35,6 +35,7 @@ import { useKeys } from "@/components/design/use-keys";
 import { pageTitle } from "@/content/site";
 import { fontFaceCss } from "@/lib/design-font-css";
 import { messageOf } from "@/lib/errors";
+import { orNotFound } from "@/lib/not-found";
 import { layoutsFor } from "@/lib/paper-sizes";
 import { orpc } from "@/utils/orpc";
 
@@ -53,14 +54,18 @@ export const Route = createFileRoute("/_auth/e/$eventId/design")({
 	gcTime: 0,
 	loader: async ({ context, params }) => {
 		const input = { input: { eventId: params.eventId } };
-		const [design, event, faces] = await Promise.all([
-			context.queryClient.fetchQuery({
-				...orpc.designs.get.queryOptions(input),
-				staleTime: 0,
-			}),
-			context.queryClient.ensureQueryData(orpc.events.get.queryOptions(input)),
-			loadFaces(allFaces()),
-		]);
+		const [design, event, faces] = await orNotFound(
+			Promise.all([
+				context.queryClient.fetchQuery({
+					...orpc.designs.get.queryOptions(input),
+					staleTime: 0,
+				}),
+				context.queryClient.ensureQueryData(
+					orpc.events.get.queryOptions(input),
+				),
+				loadFaces(allFaces()),
+			]),
+		);
 		return { design, event, faces };
 	},
 	head: ({ loaderData }) => ({

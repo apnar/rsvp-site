@@ -8,6 +8,7 @@ import { Wordmark } from "@/components/brand";
 import { EventHero } from "@/components/event-hero";
 import { pageTitle } from "@/content/site";
 import { designSrc } from "@/lib/design-src";
+import { orNotFound } from "@/lib/not-found";
 import { client, orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/i/$token")({
@@ -20,12 +21,16 @@ export const Route = createFileRoute("/i/$token")({
 	 */
 	beforeLoad: async ({ context, params }) => {
 		if (!context.session) return;
-		const { eventId } = await client.events.claimJoin({ token: params.token });
+		const { eventId } = await orNotFound(
+			client.events.claimJoin({ token: params.token }),
+		);
 		throw redirect({ to: "/e/$eventId", params: { eventId } });
 	},
 	loader: ({ context, params }) =>
-		context.queryClient.ensureQueryData(
-			orpc.events.teaser.queryOptions({ input: { token: params.token } }),
+		orNotFound(
+			context.queryClient.ensureQueryData(
+				orpc.events.teaser.queryOptions({ input: { token: params.token } }),
+			),
 		),
 	head: ({ loaderData }) => ({
 		meta: [

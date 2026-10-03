@@ -3,12 +3,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { EventEditor } from "@/components/event-editor";
 import { Page, PageHead } from "@/components/page";
 import { pageTitle } from "@/content/site";
+import { orNotFound } from "@/lib/not-found";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/e/$eventId/edit")({
 	loader: ({ context, params }) =>
-		context.queryClient.ensureQueryData(
-			orpc.events.get.queryOptions({ input: { eventId: params.eventId } }),
+		orNotFound(
+			context.queryClient.ensureQueryData(
+				orpc.events.get.queryOptions({ input: { eventId: params.eventId } }),
+			),
 		),
 	head: ({ loaderData }) => ({
 		meta: [
