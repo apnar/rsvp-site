@@ -102,7 +102,7 @@ export function Segmented<T extends string>({
 				<label
 					key={o.value}
 					className={cn(
-						"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-2.5 text-center font-bold text-[14px] text-soft transition-[background-color,color] hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime sm:px-3",
+						"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-1.5 py-2.5 text-center font-bold text-[13px] text-soft leading-tight transition-[background-color,color] hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime sm:px-3 sm:text-[14px]",
 						value === o.value &&
 							"bg-lime text-on-lime shadow-lime hover:text-on-lime",
 					)}

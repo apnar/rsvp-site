@@ -71,8 +71,8 @@ export function LookPicker({
 					loaded?.event.status === "canceled"
 				}
 				options={[
-					{ value: "photo", label: "Cover photo" },
-					{ value: "card", label: "Your design" },
+					{ value: "photo", label: "Standard design" },
+					{ value: "card", label: "Custom design" },
 				]}
 			/>
 			{look === "card" ? (
