@@ -99,9 +99,12 @@ describe("itemsOf and itemsSig", () => {
 });
 
 describe("sendLabel", () => {
-	it("publishes a paper event, whatever else is true", () => {
+	it("publishes a paper draft, whoever is on the list", () => {
 		expect(sendLabel(true, "draft", 0)).toBe("Publish");
-		expect(sendLabel(true, "published", 4)).toBe("Publish");
+		expect(sendLabel(true, "draft", 4)).toBe("Publish");
+	});
+	it("sends to new guests once a paper event's emails are started", () => {
+		expect(sendLabel(true, "published", 4)).toBe("Send 4 invites");
 	});
 	it("sends the first invites of a draft", () => {
 		expect(sendLabel(false, "draft", 0)).toBe("Send invites");

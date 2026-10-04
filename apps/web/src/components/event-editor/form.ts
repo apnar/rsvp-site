@@ -112,9 +112,13 @@ export const itemsSig = (items: Item[]) =>
 		.map((i) => `${i.id ?? ""}:${i.label.trim()}:${i.quantity}`)
 		.join("|");
 
-/** The send button's words: one place for what was a nested ternary. */
+/**
+ * The send button's words: one place for what was a nested ternary. Only a
+ * paper draft "publishes" (its emails are held); once a paper event's
+ * emails are started, the button emails new guests like any other event's.
+ */
 export function sendLabel(paper: boolean, status: string, sendCount: number) {
-	if (paper) return "Publish";
+	if (paper && status === "draft") return "Publish";
 	if (status === "draft" && sendCount === 0) return "Send invites";
 	return `Send ${plural(sendCount, "invite")}`;
 }
