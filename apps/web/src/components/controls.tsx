@@ -75,7 +75,8 @@ export function AnswerPicker({
 
 /**
  * A choice between a few options, as radios in one pill: the picked one
- * filled lime, like the main action.
+ * filled lime, like the main action. It is named by a hidden legend, or by
+ * a title the page shows (`labelledBy`).
  */
 export function Segmented<T extends string>({
 	legend,
@@ -83,9 +84,11 @@ export function Segmented<T extends string>({
 	options,
 	value,
 	onChange,
+	labelledBy,
 	disabled = false,
 }: {
-	legend: string;
+	legend?: string;
+	labelledBy?: string;
 	name: string;
 	options: { value: T; label: ReactNode }[];
 	value: T;
@@ -95,14 +98,15 @@ export function Segmented<T extends string>({
 	return (
 		<fieldset
 			disabled={disabled}
+			aria-labelledby={labelledBy}
 			className="m-0 flex gap-1 rounded-full border-0 bg-night p-1.5 disabled:opacity-70"
 		>
-			<legend className="sr-only">{legend}</legend>
+			{legend ? <legend className="sr-only">{legend}</legend> : null}
 			{options.map((o) => (
 				<label
 					key={o.value}
 					className={cn(
-						"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-1.5 py-2.5 text-center font-bold text-[13px] text-soft leading-tight transition-[background-color,color] hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime sm:px-3 sm:text-[14px]",
+						"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2.5 text-center font-bold text-[14px] text-soft transition-[background-color,color] hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime",
 						value === o.value &&
 							"bg-lime text-on-lime shadow-lime hover:text-on-lime",
 					)}

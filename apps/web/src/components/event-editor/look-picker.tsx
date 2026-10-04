@@ -1,5 +1,6 @@
 import { Button } from "@rsvp-site/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
+import { useId } from "react";
 
 import { Segmented } from "@/components/controls";
 import { CardSvg } from "@/components/design/card-svg";
@@ -28,6 +29,7 @@ export function LookPicker({
 	draft: EventDraft;
 	save: SaveEvent;
 }) {
+	const titleId = useId();
 	const eventId = loaded?.event.id;
 	const hasDesign = loaded?.hasDesign ?? false;
 
@@ -60,21 +62,26 @@ export function LookPicker({
 
 	return (
 		<div className="flex flex-col gap-3">
-			<Segmented
-				legend="How the invitation looks"
-				name="look"
-				value={look}
-				onChange={choose}
-				disabled={
-					toggleDesign.isPending ||
-					save.busy ||
-					loaded?.event.status === "canceled"
-				}
-				options={[
-					{ value: "photo", label: "Standard design" },
-					{ value: "card", label: "Custom design" },
-				]}
-			/>
+			<div className="flex flex-col gap-1.5">
+				<span id={titleId} className="text-[13px] text-haze">
+					Design
+				</span>
+				<Segmented
+					labelledBy={titleId}
+					name="look"
+					value={look}
+					onChange={choose}
+					disabled={
+						toggleDesign.isPending ||
+						save.busy ||
+						loaded?.event.status === "canceled"
+					}
+					options={[
+						{ value: "photo", label: "Standard" },
+						{ value: "card", label: "Custom" },
+					]}
+				/>
+			</div>
 			{look === "card" ? (
 				<div className="flex flex-wrap items-center gap-4 rounded-[18px] border border-line-strong p-3">
 					{loaded?.card ? (
