@@ -9,6 +9,8 @@ import {
 	openSlots,
 	potluckLines,
 	relativeParty,
+	seenNoReply,
+	seenNoReplyCount,
 	slotsLeftFor,
 	stillComingCount,
 	tally,
@@ -140,6 +142,20 @@ describe("who a change or a nudge reaches", () => {
 				{ invitedAt: at, unreachable: false },
 			]),
 		).toBe(1);
+	});
+
+	it("seenNoReply is opened and silent, and an answer alone is not a view", () => {
+		expect(seenNoReply({ response: null, viewedAt: at })).toBe(true);
+		expect(seenNoReply({ response: "yes", viewedAt: at })).toBe(false);
+		expect(seenNoReply({ response: null, viewedAt: null })).toBe(false);
+		expect(
+			seenNoReplyCount([
+				{ response: null, viewedAt: at },
+				{ response: null, viewedAt: null },
+				{ response: "maybe", viewedAt: at },
+				{ response: null, viewedAt: at },
+			]),
+		).toBe(2);
 	});
 });
 

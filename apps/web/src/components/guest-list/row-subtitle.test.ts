@@ -12,6 +12,7 @@ const base = {
 	invitedAt: null,
 	hasPaper: false,
 	noEmail: false,
+	viewedAt: null,
 } as const;
 
 const email = { isYou: false, paper: false, nowMs };
@@ -49,14 +50,41 @@ describe("rowSubtitle", () => {
 				{ ...base, invitedAt: new Date("2026-09-30T15:00:00Z") },
 				email,
 			),
-		).toBe("linh@example.com · invited Sep 30");
+		).toBe("linh@example.com · invited Sep 30, not opened");
+	});
+	it("says when a silent guest opened it", () => {
+		expect(
+			rowSubtitle(
+				{
+					...base,
+					invitedAt: new Date("2026-09-30T15:00:00Z"),
+					viewedAt: hoursAgo(5),
+				},
+				email,
+			),
+		).toBe("linh@example.com · viewed 5 hours ago");
+		expect(
+			rowSubtitle({ ...base, hasPaper: true, viewedAt: hoursAgo(30) }, paper),
+		).toBe("linh@example.com · viewed yesterday");
+		// Once they answer, the answer is the news.
+		expect(
+			rowSubtitle(
+				{
+					...base,
+					response: "yes",
+					respondedAt: hoursAgo(2),
+					viewedAt: hoursAgo(3),
+				},
+				email,
+			),
+		).toBe("linh@example.com · 2 hours ago");
 	});
 	it("says where a paper guest's card is", () => {
 		expect(rowSubtitle({ ...base, email: "" }, paper)).toBe(
 			"No email · paper invite, not printed yet",
 		);
 		expect(rowSubtitle({ ...base, hasPaper: true }, paper)).toBe(
-			"linh@example.com · paper invite",
+			"linh@example.com · paper invite, not opened",
 		);
 	});
 	it("says an emailed guest is not invited yet", () => {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { answer, answerInput } from "../answers";
 import { type Access, type Addressee, findEvent, notFound } from "../events";
 import { publicProcedure } from "../index";
+import { recordView } from "../views";
 import { invitePayload } from "./events/invite-payload";
 
 const tokenInput = z.object({ token: z.string().min(1).max(64) });
@@ -52,6 +53,19 @@ export const paperRouter = {
 				...page,
 				me: page.me ? { ...page.me, canInvite: false } : null,
 			};
+		}),
+
+	/**
+	 * The card's guest has its page on screen. The key is the only
+	 * authority here, as it is for answering; whoever holds the card is
+	 * taken to be its guest.
+	 */
+	viewed: publicProcedure
+		.input(tokenInput)
+		.handler(async ({ context, input }) => {
+			const { access } = await paperAccess(context.db, input.token);
+			await recordView(context.db, access);
+			return { ok: true as const };
 		}),
 
 	/** Answer the invitation behind a QR code. */

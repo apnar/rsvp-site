@@ -9,6 +9,7 @@ import {
 	openRefusal,
 	planRemoval,
 	rearmFor,
+	viewedGuestId,
 } from "./event-rules";
 import { requireOpen } from "./events";
 import { siteInstant } from "./time";
@@ -236,5 +237,22 @@ describe("planRemoval", () => {
 			now,
 		);
 		expect(started.erase.map((e) => e.id)).toEqual(["today"]);
+	});
+});
+
+describe("viewedGuestId", () => {
+	const guest = { id: "g1" } as Parameters<typeof viewedGuestId>[0]["guest"];
+
+	it("counts a guest's own visit", () => {
+		expect(viewedGuestId({ isHost: false, guest })).toBe("g1");
+	});
+
+	it("never counts a host or an admin, even one on the list", () => {
+		expect(viewedGuestId({ isHost: true, guest })).toBeNull();
+		expect(viewedGuestId({ isHost: true, guest: null })).toBeNull();
+	});
+
+	it("needs an invitation to stamp", () => {
+		expect(viewedGuestId({ isHost: false, guest: null })).toBeNull();
 	});
 });

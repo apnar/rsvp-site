@@ -239,6 +239,15 @@ export const eventGuest = sqliteTable(
 		 */
 		paperToken: text("paper_token").unique(),
 		respondedAt: integer("responded_at", { mode: "timestamp_ms" }),
+		/**
+		 * When the guest themselves first and last had the invite page on
+		 * screen -- recorded by the browser after it renders, never by the
+		 * server's read, so a mail scanner fetching the link counts for
+		 * nothing. An answer doesn't imply one: a host may have recorded it.
+		 * Only hosts see these.
+		 */
+		viewedAt: integer("viewed_at", { mode: "timestamp_ms" }),
+		lastViewedAt: integer("last_viewed_at", { mode: "timestamp_ms" }),
 		nudgedAt: integer("nudged_at", { mode: "timestamp_ms" }),
 		addedBy: text("added_by").references(() => user.id, {
 			onDelete: "set null",

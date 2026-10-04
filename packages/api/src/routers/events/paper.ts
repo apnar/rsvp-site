@@ -113,6 +113,8 @@ export const paperRouter = {
 				"Note",
 				"Bringing",
 				"Answered",
+				"Viewed",
+				"Last viewed",
 				"Added by",
 				"Answered by",
 			];
@@ -126,6 +128,8 @@ export const paperRouter = {
 				g.note,
 				bringing(g.id),
 				g.respondedAt ? g.respondedAt.toISOString() : "",
+				g.viewedAt ? g.viewedAt.toISOString() : "",
+				g.lastViewedAt ? g.lastViewedAt.toISOString() : "",
 				g.source === "guest"
 					? (g.addedByName ?? "a guest")
 					: g.source === "link"

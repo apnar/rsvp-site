@@ -303,6 +303,13 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   clients prefetch link targets. The one GET that writes is `/i/$token` for
   somebody already signed in (it joins them), which only a person with a
   session and the link can trigger.
+- Views (`event_guest.viewed_at` / `last_viewed_at`, hosts only) are
+  stamped by `recordView` (`api/src/views.ts`) through `guests.viewed` and
+  `paper.viewed`, which the page calls from the browser once it is on
+  screen (`use-record-view.ts`), never from `events.invite` or
+  `paper.invite`: those stay reads, so a prefetch counts for nothing.
+  `viewedGuestId` decides who counts (the guest, never a host or admin).
+  Guest-facing payloads pick `guestsOf` fields by hand; keep them out.
 - Two kinds of details: `details` goes wherever the invitation does (the
   page, invitation and day-before emails, printed cards, `{details}` on a
   designed card); `extra_details` is only ever on the invite page, for

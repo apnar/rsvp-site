@@ -234,7 +234,8 @@ const answerer = alias(user, "answerer");
  * `unreachable` means mail cannot reach them (unsubscribed, deactivated, no
  * address); `addedBy` is who put them on the list; `answeredByName` the
  * relative who answered for them; `familyId` their family, if any;
- * `hasPaper` says their printed card has a QR code issued.
+ * `hasPaper` says their printed card has a QR code issued; `viewedAt` is
+ * for hosts only, so guest-facing payloads pick their fields by hand.
  */
 export async function guestsOf(db: Db, eventId: string) {
 	const rows = await db
@@ -251,6 +252,8 @@ export async function guestsOf(db: Db, eventId: string) {
 			note: eventGuest.note,
 			invitedAt: eventGuest.invitedAt,
 			respondedAt: eventGuest.respondedAt,
+			viewedAt: eventGuest.viewedAt,
+			lastViewedAt: eventGuest.lastViewedAt,
 			nudgedAt: eventGuest.nudgedAt,
 			createdAt: eventGuest.createdAt,
 			unsubscribedAt: user.unsubscribedAt,

@@ -1,3 +1,4 @@
+import { seenNoReply } from "@rsvp-site/api/headcount";
 import { formatDate } from "@rsvp-site/api/time";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
@@ -28,7 +29,7 @@ import { orNotFound } from "@/lib/not-found";
 import { saveFile } from "@/lib/save-file";
 import { orpc } from "@/utils/orpc";
 
-const FILTERS = ["yes", "maybe", "no", "waiting"] as const;
+const FILTERS = ["yes", "maybe", "no", "waiting", "seen"] as const;
 
 const guestListQuery = (eventId: string) =>
 	orpc.guests.list.queryOptions({ input: { eventId } });
@@ -110,7 +111,9 @@ function GuestListPage() {
 			if (
 				filter === "waiting"
 					? g.response !== null
-					: filter !== "all" && g.response !== filter
+					: filter === "seen"
+						? !seenNoReply(g)
+						: filter !== "all" && g.response !== filter
 			) {
 				return false;
 			}
@@ -309,6 +312,16 @@ function GuestListPage() {
 								label: ANSWER_LABELS.none,
 								count: t.waiting,
 							},
+							// Nothing to show until somebody has opened it.
+							...(data.seenNoReply > 0 || filter === "seen"
+								? [
+										{
+											value: "seen" as const,
+											label: "Viewed, no reply",
+											count: data.seenNoReply,
+										},
+									]
+								: []),
 						]}
 					/>
 					<label htmlFor="find" className="sr-only">

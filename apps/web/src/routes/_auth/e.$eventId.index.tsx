@@ -5,9 +5,10 @@ import { BringSomeone } from "@/components/invite/bring-someone";
 import { HostPanel } from "@/components/invite/host-panel";
 import { InviteView } from "@/components/invite/invite-view";
 import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
+import { useRecordView } from "@/components/invite/use-record-view";
 import { pageTitle } from "@/content/site";
 import { orNotFound } from "@/lib/not-found";
-import { orpc } from "@/utils/orpc";
+import { client, orpc } from "@/utils/orpc";
 
 const inviteQuery = (eventId: string) =>
 	orpc.events.invite.queryOptions({ input: { eventId } });
@@ -44,6 +45,11 @@ function InvitePage() {
 	const { a } = Route.useSearch();
 	const { data } = useSuspenseQuery(inviteQuery(eventId));
 	const respond = useMutation(orpc.guests.respond.mutationOptions());
+	// The host sees their own page for their own reasons; the server
+	// decides who counts, this only saves it the call.
+	useRecordView(data.me && !data.isHost ? eventId : null, () =>
+		client.guests.viewed({ eventId }),
+	);
 
 	return (
 		<InviteView

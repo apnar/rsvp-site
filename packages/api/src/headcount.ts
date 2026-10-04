@@ -86,6 +86,24 @@ export function notInvitedCount(
 	return guests.filter((g) => g.invitedAt === null && !g.unreachable).length;
 }
 
+/**
+ * Opened the invitation and hasn't answered: the guests a host might
+ * chase in person. The guest list filters with this and counts with
+ * `seenNoReplyCount`, so the pill and the rows agree.
+ */
+export function seenNoReply(g: {
+	response: Answer | null;
+	viewedAt: Date | null;
+}): boolean {
+	return g.response === null && g.viewedAt !== null;
+}
+
+export function seenNoReplyCount(
+	guests: readonly { response: Answer | null; viewedAt: Date | null }[],
+): number {
+	return guests.filter(seenNoReply).length;
+}
+
 export type PotluckLine = {
 	id: string;
 	label: string;

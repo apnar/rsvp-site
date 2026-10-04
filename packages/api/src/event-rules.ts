@@ -3,7 +3,7 @@
  * Pure (no drizzle at runtime), so the tests pin them down.
  */
 
-import type { EventRow } from "./events";
+import type { Access, EventRow } from "./events";
 import { startsAt } from "./schedule";
 import { formatDate, formatTimeRange } from "./time";
 
@@ -112,6 +112,24 @@ export function mayDelete(
 	if (row.status === "draft") return who.isHost;
 	return who.isOwner || who.isAdmin;
 }
+
+/**
+ * The invitation a visit to the invite page counts as viewed, or null.
+ * Only the guest's own: a host or an admin looking at the page as a guest
+ * sees it for their own reasons, and a relative opening theirs hasn't
+ * shown it to the family they answer for.
+ */
+export function viewedGuestId(
+	access: Pick<Access, "isHost" | "guest">,
+): string | null {
+	return access.guest && !access.isHost ? access.guest.id : null;
+}
+
+/**
+ * How stale `last_viewed_at` must be before a visit rewrites it, so tabs
+ * left open and reloads don't each cost a write.
+ */
+export const VIEW_REFRESH_MS = 10 * 60_000;
 
 /**
  * Sent and not started: guests are still expecting it, so deleting it is

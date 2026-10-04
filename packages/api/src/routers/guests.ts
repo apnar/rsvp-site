@@ -28,11 +28,17 @@ import {
 	potluckOf,
 } from "../events";
 import { inviteRefusal } from "../guest-invites";
-import { headcount, notInvitedCount, tally } from "../headcount";
+import {
+	headcount,
+	notInvitedCount,
+	seenNoReplyCount,
+	tally,
+} from "../headcount";
 import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { hostProcedure, personProcedure } from "../index";
 import { emailSchema, idInput, idSchema } from "../inputs";
 import { sendInvites } from "../mail";
+import { recordView } from "../views";
 
 export const guestsRouter = {
 	/** The host's guest list: every row, the totals, and the potluck. */
@@ -64,6 +70,7 @@ export const guestsRouter = {
 				totals,
 				headcount: headcount(totals),
 				notInvited: notInvitedCount(guests),
+				seenNoReply: seenNoReplyCount(guests),
 				potluck: potluck.lines,
 				guests: guests.map((g) => ({
 					...g,
@@ -287,6 +294,13 @@ export const guestsRouter = {
 			const access = await accessTo(context.db, context.me, input.eventId);
 			return answer(context.db, access, context.me, input);
 		}),
+
+	/** The guest has their invite page on screen (see `recordView`). */
+	viewed: personProcedure.input(idInput).handler(async ({ context, input }) => {
+		const access = await accessTo(context.db, context.me, input.eventId);
+		await recordView(context.db, access);
+		return { ok: true as const };
+	}),
 
 	/**
 	 * Replace one guest's QR key: a lost or misprinted card stops working,

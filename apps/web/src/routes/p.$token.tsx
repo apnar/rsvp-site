@@ -2,9 +2,10 @@ import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { InviteView } from "@/components/invite/invite-view";
 import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
+import { useRecordView } from "@/components/invite/use-record-view";
 import { pageTitle } from "@/content/site";
 import { orNotFound } from "@/lib/not-found";
-import { orpc } from "@/utils/orpc";
+import { client, orpc } from "@/utils/orpc";
 
 const paperQuery = (token: string) =>
 	orpc.paper.invite.queryOptions({ input: { token } });
@@ -36,6 +37,7 @@ function PaperInvitePage() {
 	const { token } = Route.useParams();
 	const { data } = useSuspenseQuery(paperQuery(token));
 	const respond = useMutation(orpc.paper.respond.mutationOptions());
+	useRecordView(token, () => client.paper.viewed({ token }));
 
 	return (
 		<InviteView
