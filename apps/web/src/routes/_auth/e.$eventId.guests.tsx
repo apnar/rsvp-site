@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
+import { EventCrumbs, EventTitleLink } from "@/components/event-crumbs";
 import { GuestRow, type RowEvent } from "@/components/guest-list/guest-row";
 import { guestSections } from "@/components/guest-list/sections";
 import { Notice } from "@/components/notice";
@@ -136,16 +137,11 @@ function GuestListPage() {
 
 	return (
 		<Page className="gap-[clamp(28px,4vw,44px)]">
-			<Link
-				to="/events"
-				className="self-start font-bold text-[14px] no-underline"
-			>
-				← All events
-			</Link>
+			<EventCrumbs eventId={eventId} title={e.title} here="Guest list" />
 			<PageHead
 				size="md"
 				kicker={`Guest list${e.date ? ` · ${formatDate(e.date)}` : ""}`}
-				title={e.title}
+				title={<EventTitleLink eventId={eventId} title={e.title} />}
 				actions={
 					<>
 						<Button

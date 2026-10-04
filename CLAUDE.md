@@ -483,7 +483,8 @@ retry would send it twice.
   ~26px radius for panels. Text on an ink fill is `text-on-ink`. Shared
   pieces: `components/page.tsx` (`Page`, `PageHead`, `Panel`),
   `controls.tsx` (answer picker, stepper, switch, field), `response-bar.tsx`,
-  `event-card.tsx`, `event-hero.tsx`, `confirm-action.tsx` (every inline
+  `event-card.tsx`, `event-hero.tsx`, `event-crumbs.tsx` (the way back
+  from an event's sub-pages), `confirm-action.tsx` (every inline
   "are you sure?"; it moves focus), `guest-picker.tsx`, `notice.tsx`,
   `native-select.tsx`. The editor is `components/event-editor/` (a draft
   hook, a save hook, a file per section); the designer's panels and hooks

@@ -1,5 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { EventCrumbs, EventTitleLink } from "@/components/event-crumbs";
 import { EventEditor } from "@/components/event-editor";
 import { Page, PageHead } from "@/components/page";
 import { pageTitle } from "@/content/site";
@@ -43,13 +44,11 @@ function EditEvent() {
 	const { data } = useSuspenseQuery(eventQuery(eventId));
 	return (
 		<Page className="gap-7">
-			<Link
-				to="/events"
-				className="self-start font-bold text-[14px] no-underline"
-			>
-				← All events
-			</Link>
-			<PageHead kicker={STATUS[data.event.status]} title={data.event.title} />
+			<EventCrumbs eventId={eventId} title={data.event.title} here="Edit" />
+			<PageHead
+				kicker={STATUS[data.event.status]}
+				title={<EventTitleLink eventId={eventId} title={data.event.title} />}
+			/>
 			<EventEditor key={data.event.id} loaded={data} />
 		</Page>
 	);
