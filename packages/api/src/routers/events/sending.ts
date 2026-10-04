@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { inChunks } from "@rsvp-site/db/batch";
+import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
 import { nudgeEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
@@ -114,6 +115,27 @@ export const sendingRouter = {
 			if (result.meta.changes !== 1) {
 				return { sent: 0, failed: 0, skipped: 0, dryRun: getMailer().dryRun };
 			}
+			// Whoever answered from the card already has the invitation and is
+			// skipped below; record it, or they would count as still to invite
+			// (a later Send would email them "You're invited") and drop out of
+			// the reminders and notices that go to invited guests.
+			await context.db
+				.update(eventGuest)
+				.set({ invitedAt: now })
+				.where(
+					and(
+						eq(eventGuest.eventId, row.id),
+						isNull(eventGuest.invitedAt),
+						isNotNull(eventGuest.response),
+						inArray(
+							eventGuest.userId,
+							context.db
+								.select({ id: user.id })
+								.from(user)
+								.where(eq(user.noEmail, false)),
+						),
+					),
+				);
 			const outcome = await sendInvites(
 				context.db,
 				{ ...row, emailsReleasedAt: now },
