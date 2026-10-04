@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
 import { GuestRow, type RowEvent } from "@/components/guest-list/guest-row";
+import { guestSections } from "@/components/guest-list/sections";
 import { Notice } from "@/components/notice";
 import { Page, PageHead } from "@/components/page";
 import { PaperPanel } from "@/components/paper/paper-panel";
@@ -120,6 +121,7 @@ function GuestListPage() {
 			return matchesPerson(g, query);
 		});
 	}, [data.guests, filter, query]);
+	const sections = useMemo(() => guestSections(shown), [shown]);
 
 	// What every row shares about the event, so a row takes one object
 	// instead of repeating the event's facts as separate props.
@@ -336,26 +338,39 @@ function GuestListPage() {
 						className="min-h-11 flex-[1_1_200px] rounded-full py-2.5"
 					/>
 				</div>
-				<div className="flex flex-col gap-2">
-					{shown.map((g) => (
-						<GuestRow
-							familyOnList={
-								g.familyId !== null &&
-								data.guests.some(
-									(o) => o.id !== g.id && o.familyId === g.familyId,
-								)
-							}
-							key={g.id}
-							guest={g}
-							isYou={g.userId === session.user.id}
-							event={rowEvent}
-							nudging={nudge.isPending}
-							onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
-							onRemove={() => remove.mutate({ eventId, guestId: g.id })}
-							removing={remove.isPending}
-						/>
-					))}
-				</div>
+				{sections.map((section) => (
+					<section
+						key={section.key}
+						aria-labelledby={`section-${section.key}`}
+						className="flex flex-col gap-2"
+					>
+						<h2
+							id={`section-${section.key}`}
+							className="kicker m-0 mt-2 text-soft"
+						>
+							{section.label}{" "}
+							<span className="tnum text-haze">{section.guests.length}</span>
+						</h2>
+						{section.guests.map((g) => (
+							<GuestRow
+								familyOnList={
+									g.familyId !== null &&
+									data.guests.some(
+										(o) => o.id !== g.id && o.familyId === g.familyId,
+									)
+								}
+								key={g.id}
+								guest={g}
+								isYou={g.userId === session.user.id}
+								event={rowEvent}
+								nudging={nudge.isPending}
+								onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
+								onRemove={() => remove.mutate({ eventId, guestId: g.id })}
+								removing={remove.isPending}
+							/>
+						))}
+					</section>
+				))}
 				<span className="text-[13px] text-haze">
 					Showing {shown.length} of {plural(data.guests.length, "guest")}
 				</span>

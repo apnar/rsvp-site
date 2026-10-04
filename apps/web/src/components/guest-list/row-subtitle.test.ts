@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { rowSubtitle } from "./row-subtitle";
+import { rowSubtitle as parts, subtitleText } from "./row-subtitle";
+
+const rowSubtitle = (...args: Parameters<typeof parts>) =>
+	subtitleText(parts(...args));
 
 const nowMs = Date.parse("2026-10-03T12:00:00Z");
 const hoursAgo = (h: number) => new Date(nowMs - h * 3_600_000);
@@ -19,6 +22,16 @@ const email = { isYou: false, paper: false, nowMs };
 const paper = { isYou: false, paper: true, nowMs };
 
 describe("rowSubtitle", () => {
+	it("keeps the status apart from the address it may be cut from", () => {
+		expect(parts({ ...base, viewedAt: hoursAgo(5) }, email)).toEqual({
+			lead: "linh@example.com",
+			status: "viewed 5 hours ago",
+		});
+		expect(parts({ ...base, response: "no" }, email)).toEqual({
+			lead: "linh@example.com",
+			status: null,
+		});
+	});
 	it("tells the host it is them", () => {
 		expect(rowSubtitle(base, { ...email, isYou: true })).toBe("That's you");
 		expect(
@@ -50,7 +63,7 @@ describe("rowSubtitle", () => {
 				{ ...base, invitedAt: new Date("2026-09-30T15:00:00Z") },
 				email,
 			),
-		).toBe("linh@example.com · invited Sep 30, not opened");
+		).toBe("linh@example.com · invited Sep 30");
 	});
 	it("says when a silent guest opened it", () => {
 		expect(
@@ -84,7 +97,7 @@ describe("rowSubtitle", () => {
 			"No email · paper invite, not printed yet",
 		);
 		expect(rowSubtitle({ ...base, hasPaper: true }, paper)).toBe(
-			"linh@example.com · paper invite, not opened",
+			"linh@example.com · paper invite",
 		);
 	});
 	it("says an emailed guest is not invited yet", () => {

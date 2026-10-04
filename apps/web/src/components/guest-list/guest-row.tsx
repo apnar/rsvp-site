@@ -88,7 +88,12 @@ export function GuestRow({
 			/>
 			<div className="min-w-0 flex-[1_1_200px]">
 				<b className={cn("text-[17px]", out && "text-soft")}>{g.name}</b>
-				<div className="truncate text-[13px] text-haze">{sub}</div>
+				<div className="flex min-w-0 text-[13px] text-haze">
+					<span className="truncate">{sub.lead}</span>
+					{sub.status ? (
+						<span className="shrink-0 whitespace-pre">{` · ${sub.status}`}</span>
+					) : null}
+				</div>
 				{via ? (
 					<div className="truncate text-[12px] text-pink-ink">{via}</div>
 				) : null}
