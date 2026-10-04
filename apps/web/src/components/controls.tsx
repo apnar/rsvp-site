@@ -73,6 +73,55 @@ export function AnswerPicker({
 	);
 }
 
+/**
+ * A choice between a few options, as radios in one pill: the picked one
+ * filled lime, like the main action.
+ */
+export function Segmented<T extends string>({
+	legend,
+	name,
+	options,
+	value,
+	onChange,
+	disabled = false,
+}: {
+	legend: string;
+	name: string;
+	options: { value: T; label: ReactNode }[];
+	value: T;
+	onChange: (value: T) => void;
+	disabled?: boolean;
+}) {
+	return (
+		<fieldset
+			disabled={disabled}
+			className="m-0 flex gap-1 rounded-full border-0 bg-night p-1.5 disabled:opacity-70"
+		>
+			<legend className="sr-only">{legend}</legend>
+			{options.map((o) => (
+				<label
+					key={o.value}
+					className={cn(
+						"flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-2.5 text-center font-bold text-[14px] text-soft transition-[background-color,color] hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime sm:px-3",
+						value === o.value &&
+							"bg-lime text-on-lime shadow-lime hover:text-on-lime",
+					)}
+				>
+					<input
+						type="radio"
+						name={name}
+						value={o.value}
+						checked={value === o.value}
+						onChange={() => onChange(o.value)}
+						className="sr-only"
+					/>
+					{o.label}
+				</label>
+			))}
+		</fieldset>
+	);
+}
+
 /** "Adults 2 [-] [+]" on a dark tile. */
 export function Stepper({
 	label,
