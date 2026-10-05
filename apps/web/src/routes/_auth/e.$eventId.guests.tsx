@@ -133,6 +133,7 @@ function GuestListPage() {
 		id: eventId,
 		title: e.title,
 		paper: e.paper,
+		potluck: e.potluckEnabled,
 		canNudge: published && !e.emailsHeld,
 		nowMs,
 		print,

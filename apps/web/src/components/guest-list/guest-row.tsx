@@ -28,6 +28,7 @@ export type RowEvent = {
 	id: string;
 	title: string;
 	paper: boolean;
+	potluck: boolean;
 	canNudge: boolean;
 	nowMs: number;
 	print: Print;
@@ -54,7 +55,7 @@ export function GuestRow({
 	/** Another guest on this list is in the same family (see `rowSubtitle`). */
 	familyOnList?: boolean;
 }) {
-	const { nowMs, canNudge, paper, print } = event;
+	const { nowMs, canNudge, paper, potluck, print } = event;
 	const eventId = event.id;
 	const [editing, setEditing] = useState(false);
 	const waiting = g.response === null;
@@ -124,17 +125,19 @@ export function GuestRow({
 			>
 				{coming ? party(g) : null}
 			</span>
+			{/* With potluck off the column stays, empty, so the notes line up
+			    with every other event's list. */}
 			<span
 				className={cn(
 					"flex-[0_0_140px] text-[14px] text-soft",
-					!coming && "max-md:hidden",
+					!(coming && potluck) && "max-md:hidden",
 				)}
 			>
-				{coming ? (
+				{coming && potluck ? (
 					g.bringing.length > 0 ? (
 						g.bringing.join(", ")
 					) : (
-						<span className="text-haze">Nothing yet</span>
+						<span className="text-haze">Nothing claimed</span>
 					)
 				) : null}
 			</span>
