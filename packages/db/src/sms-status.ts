@@ -117,3 +117,16 @@ export async function setContactPrefs(
 		.set(set)
 		.where(and(eq(user.id, userId), ne(user.status, "deactivated")));
 }
+
+/**
+ * Texts as well as email, for somebody who has just given a number and
+ * said yes to texts. Without a choice on record, anybody with an address
+ * gets email only, and their yes would never be used. Fills a blank
+ * choice; one they made stands.
+ */
+export async function alsoByText(db: Db, userId: string): Promise<void> {
+	await db
+		.update(user)
+		.set({ contactBy: "both" })
+		.where(and(eq(user.id, userId), isNull(user.contactBy)));
+}

@@ -1,8 +1,10 @@
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { BringSomeone } from "@/components/invite/bring-someone";
+import { ContactAsk } from "@/components/invite/contact-ask";
 import { HostBar } from "@/components/invite/host-bar";
 import { InviteView } from "@/components/invite/invite-view";
 import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
@@ -62,6 +64,7 @@ function previewGuest(data: Invite): NonNullable<Invite["me"]> {
 		family: [],
 		canInvite: data.guestsMayInvite,
 		invitesLeft: data.event.guestInviteLimit,
+		missing: { email: false, phone: false },
 	};
 }
 
@@ -70,6 +73,9 @@ function InvitePage() {
 	const { a } = Route.useSearch();
 	const { data } = useSuspenseQuery(inviteQuery(eventId));
 	const respond = useMutation(orpc.guests.respond.mutationOptions());
+	const addContact = useMutation(orpc.contact.add.mutationOptions());
+	// Opened by an answer, while there is a blank to ask about.
+	const [asking, setAsking] = useState(false);
 	// The host sees their own page for their own reasons; the server
 	// decides who counts, this only saves it the call.
 	useRecordView(data.me && !data.isHost ? eventId : null, () =>
@@ -104,10 +110,26 @@ function InvitePage() {
 							submit={(values, options) =>
 								preview
 									? toast("This is a preview. Guests answer here.")
-									: respond.mutate({ eventId, ...values }, options)
+									: respond.mutate(
+											{ eventId, ...values },
+											{
+												onSuccess: (result) => {
+													options.onSuccess(result);
+													setAsking(true);
+												},
+											},
+										)
 							}
 							pending={respond.isPending}
 						/>
+						{asking && (me.missing.email || me.missing.phone) ? (
+							<ContactAsk
+								missing={me.missing}
+								submit={(values, options) => addContact.mutate(values, options)}
+								pending={addContact.isPending}
+								onClose={() => setAsking(false)}
+							/>
+						) : null}
 						<BringSomeone data={shown} preview={preview} />
 					</div>
 				)

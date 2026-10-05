@@ -1,4 +1,5 @@
 import type { Db } from "@rsvp-site/db";
+import { contactGaps, type FilledBy, NO_GAPS } from "@rsvp-site/db/details";
 import { relativesOnEvent } from "@rsvp-site/db/families";
 import { firstNameOf } from "@rsvp-site/db/names";
 import { answersOf } from "../../answer-words";
@@ -19,22 +20,26 @@ import { startsAt } from "../../schedule";
 
 /**
  * The page a guest sees. Hosts see the same page, as a guest would, and
- * get the controls from the guest list and the editor.
+ * get the controls from the guest list and the editor. `by` is how the
+ * viewer came: signed in, or holding a printed card, which decides which
+ * blanks in their contact details they may be asked to fill.
  */
 export async function invitePayload(
 	db: Db,
 	me: Addressee & { id: string },
 	access: Access,
+	by: FilledBy,
 ) {
 	const row = access.event;
 	// The card says the viewer's own name, which is the caller's: so the
 	// layout needs nothing from the other reads and runs beside them.
-	const [guests, potluck, hosts, card, relatives] = await Promise.all([
+	const [guests, potluck, hosts, card, relatives, missing] = await Promise.all([
 		guestsOf(db, row.id),
 		row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
 		hostsOf(db, row.id),
 		designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
 		access.guest ? relativesOnEvent(db, row.id, access.guest.userId) : [],
+		access.guest ? contactGaps(db, access.guest.userId, by) : NO_GAPS,
 	]);
 	const totals = tally(guests);
 	const mine = access.guest;
@@ -110,6 +115,8 @@ export async function invitePayload(
 					// the API would take it: the same rule `guests.inviteFriend` applies.
 					canInvite: inviteRefusal(row, mine) === null,
 					invitesLeft: invitesLeft(row.guestInviteLimit, mine.invitesSent),
+					/** What to ask for once they've answered. */
+					missing,
 				}
 			: null,
 		viewerId: me.id,

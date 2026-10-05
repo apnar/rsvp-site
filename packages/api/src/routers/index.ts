@@ -1,4 +1,5 @@
 import { accountRouter } from "./account";
+import { contactRouter } from "./contact";
 import { contactsRouter } from "./contacts";
 import { designsRouter } from "./designs";
 import { eventsRouter } from "./events";
@@ -10,6 +11,7 @@ import { peopleRouter } from "./people";
 
 export const appRouter = {
 	account: accountRouter,
+	contact: contactRouter,
 	events: eventsRouter,
 	designs: designsRouter,
 	guests: guestsRouter,

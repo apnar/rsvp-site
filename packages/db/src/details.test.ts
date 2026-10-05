@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canEditDetails } from "./details";
+import { canEditDetails, gapsOf } from "./details";
 
 const host = { id: "h", role: "host" };
 const guest = {
@@ -44,5 +44,26 @@ describe("canEditDetails", () => {
 		expect(canEditDetails({ id: "a", role: "admin" }, claimed, false)).toBe(
 			true,
 		);
+	});
+});
+
+describe("gapsOf", () => {
+	it("asks a name-only guest for an address and anybody numberless for a number", () => {
+		expect(gapsOf({ noEmail: true, phone: "+13015550100" })).toEqual({
+			email: true,
+			phone: false,
+		});
+		expect(gapsOf({ noEmail: false, phone: null })).toEqual({
+			email: false,
+			phone: true,
+		});
+		expect(gapsOf({ noEmail: true, phone: null })).toEqual({
+			email: true,
+			phone: true,
+		});
+		expect(gapsOf({ noEmail: false, phone: "+13015550100" })).toEqual({
+			email: false,
+			phone: false,
+		});
 	});
 });

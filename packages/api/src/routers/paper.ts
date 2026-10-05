@@ -1,8 +1,9 @@
+import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { findPaperInvite } from "@rsvp-site/db/paper";
 import { z } from "zod";
-
 import { answer, answerInput } from "../answers";
+import { contactInput, fillContact } from "../contact-ask";
 import { type Access, type Addressee, findEvent, notFound } from "../events";
 import { publicProcedure } from "../index";
 import { recordView } from "../views";
@@ -46,7 +47,7 @@ export const paperRouter = {
 		.input(tokenInput)
 		.handler(async ({ context, input }) => {
 			const { access, who } = await paperAccess(context.db, input.token);
-			const page = await invitePayload(context.db, who, access);
+			const page = await invitePayload(context.db, who, access, "card");
 			// Inviting a friend sends email in the guest's name and needs
 			// them signed in; the card only answers.
 			return {
@@ -74,5 +75,44 @@ export const paperRouter = {
 		.handler(async ({ context, input }) => {
 			const { access, who } = await paperAccess(context.db, input.token);
 			return answer(context.db, access, who, input, "paper");
+		}),
+
+	/**
+	 * Fill the blanks on the card's guest: only those a host could fill,
+	 * on a record nobody has signed in to (`contactGaps` with "card"). A
+	 * yes to texts counts as the word of whoever put them on the list.
+	 */
+	addContact: publicProcedure
+		.input(tokenInput.merge(contactInput))
+		.handler(async ({ context, input }) => {
+			// Anybody holding a card can try an address, and each try sends
+			// an email, so the same limit as the sign-in doors, per caller.
+			const ip = context.headers.get("cf-connecting-ip") ?? "local";
+			const { success } = await context.env.AUTH_LIMITER.limit({
+				key: `contact:${ip}`,
+			});
+			if (!success) {
+				throw new ORPCError("TOO_MANY_REQUESTS", {
+					message: "Slow down a little, then try again.",
+				});
+			}
+			const { access, who } = await paperAccess(context.db, input.token);
+			if (access.event.status === "canceled") throw notFound();
+			const { token: _, ...details } = input;
+			// A host's own adds carry their id; a friend a guest invited
+			// carries the guest's, whose word is not a host's.
+			const guest = access.guest;
+			const voucher =
+				guest && (guest.source === "host" || guest.source === "group")
+					? (guest.addedBy ?? access.event.createdBy)
+					: access.event.createdBy;
+			return fillContact(
+				context.db,
+				context.env.BETTER_AUTH_SECRET,
+				who.id,
+				details,
+				"card",
+				voucher,
+			);
 		}),
 };

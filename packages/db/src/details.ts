@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, type SQL, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 
 import { normalizeEmail } from "./addresses";
 import { batchAll } from "./batch";
@@ -258,4 +258,129 @@ export async function markClaimed(db: Db, id: string): Promise<void> {
 		.update(user)
 		.set({ claimedAt: new Date() })
 		.where(and(eq(user.id, id), isNull(user.claimedAt)));
+}
+
+/** What somebody answering could still give us: an address, a number. */
+export type ContactGaps = { email: boolean; phone: boolean };
+
+export const NO_GAPS: ContactGaps = { email: false, phone: false };
+
+/**
+ * Who is filling in the blanks. A signed-in guest fills their own record.
+ * A printed card's holder is taken to be its guest, but the key is one the
+ * host printed, so a card fills only what that host could: blanks on a
+ * plain record nobody has signed in to.
+ */
+export type FilledBy = "self" | "card";
+
+export function gapsOf(row: {
+	noEmail: boolean;
+	phone: string | null;
+}): ContactGaps {
+	return { email: row.noEmail, phone: row.phone === null };
+}
+
+/** Where a blank may be filled. Never a deactivated row, like every self-service write. */
+function fillable(id: string, by: FilledBy): SQL | undefined {
+	return and(editable(id, by === "card"), ne(user.status, "deactivated"));
+}
+
+/** The blanks this caller may fill on somebody's record; none if they may fill nothing. */
+export async function contactGaps(
+	db: Db,
+	id: string,
+	by: FilledBy,
+): Promise<ContactGaps> {
+	const row = await db
+		.select({ noEmail: user.noEmail, phone: user.phone })
+		.from(user)
+		.where(fillable(id, by))
+		.get();
+	return row ? gapsOf(row) : NO_GAPS;
+}
+
+/**
+ * Give somebody with no number one. A host's word that they expect texts
+ * was about whatever number there was, if any, so it goes, as it does in
+ * `updateDetails`; their own switch stays. False when there was a number
+ * already, or the record is no longer this caller's to fill.
+ */
+export async function fillPhone(
+	db: Db,
+	id: string,
+	phone: string,
+	by: FilledBy,
+): Promise<boolean> {
+	const row = await db
+		.select({ textsOkBy: user.textsOkBy })
+		.from(user)
+		.where(eq(user.id, id))
+		.get();
+	if (!row) return false;
+	const result = await db
+		.update(user)
+		.set({
+			phone,
+			...(row.textsOkBy !== id ? { textsOkAt: null, textsOkBy: null } : {}),
+		})
+		.where(and(fillable(id, by), isNull(user.phone)))
+		.run();
+	return result.meta.changes === 1;
+}
+
+/**
+ * Give a name-only record the address its owner confirmed, by pressing
+ * the button behind a link sent there. Unlike `changeEmail` the tokens
+ * stay: nothing ever went to a placeholder, and the sign-in links already
+ * texted to this person copy the current one. The address is verified,
+ * having been clicked, and somebody who was getting texts keeps getting
+ * them beside the email rather than finding their invitations moved.
+ * "taken" when the address is somebody else's: merging is never guessed at.
+ */
+export async function claimEmail(
+	db: Db,
+	id: string,
+	raw: string,
+	by: FilledBy,
+): Promise<"ok" | "taken" | "refused"> {
+	const email = normalizeEmail(raw);
+	const owner = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(eq(user.email, email))
+		.get();
+	// A second press of the same button.
+	if (owner) return owner.id === id ? "ok" : "taken";
+	const row = await db
+		.select({
+			firstName: user.firstName,
+			lastName: user.lastName,
+			contactBy: user.contactBy,
+			textsOkAt: user.textsOkAt,
+			textsOffAt: user.textsOffAt,
+		})
+		.from(user)
+		.where(eq(user.id, id))
+		.get();
+	if (!row) return "refused";
+	const texted = row.textsOkAt !== null && row.textsOffAt === null;
+	try {
+		const result = await db
+			.update(user)
+			.set({
+				email,
+				noEmail: false,
+				emailVerified: true,
+				name: nameFor(row.firstName, row.lastName, email),
+				...(texted && row.contactBy === null
+					? { contactBy: "both" as const }
+					: {}),
+			})
+			.where(and(fillable(id, by), eq(user.noEmail, true)))
+			.run();
+		return result.meta.changes === 1 ? "ok" : "refused";
+	} catch (error) {
+		if (isUniqueViolation(error)) return "taken";
+		throw error;
+	}
 }

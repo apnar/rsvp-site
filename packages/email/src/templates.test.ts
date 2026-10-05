@@ -10,6 +10,7 @@ import {
 } from "./render";
 import {
 	cancelEmail,
+	confirmEmailEmail,
 	dayBeforeEmail,
 	deadlineReminderEmail,
 	type EventFacts,
@@ -494,5 +495,21 @@ describe("words people type", () => {
 		for (const part of [r.subject, r.html, r.text]) {
 			expect(stray(part)).not.toMatch(/\{\{|\{%|\{#/);
 		}
+	});
+});
+
+describe("confirm email", () => {
+	const url = `${site}/confirm-email?k=body.mac`;
+	const confirm = confirmEmailEmail({ url });
+
+	it("carries a concrete link and no list footer", () => {
+		expect(confirm.text).toContain(url);
+		expect(confirm.html).toContain(escapeHtml(url));
+		expect(confirm.html).not.toContain("{{ params");
+		expect(confirm.text).not.toContain(PARAM.unsubscribeUrl);
+	});
+
+	it("tells a stranger that ignoring it changes nothing", () => {
+		expect(confirm.text).toContain("Not you? Ignore this");
 	});
 });

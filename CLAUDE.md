@@ -296,6 +296,13 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   blank the address. PDFs are built client-side (`lib/paper-pdf-core.ts` is
   the pure layout, renderable from Node to check it; `lib/paper-sizes.ts`
   keeps pdf-lib out of the page bundle).
+- After answering, a guest with no address or no number is asked for it
+  (`me.missing`, from `contactGaps`; `api/src/contact-ask.ts`). A number
+  is written at once; an address only gets a link, signed and stateless
+  (`email-claim.ts`), and is added by the button on `/confirm-email`
+  (`claimEmail`, which keeps the tokens: texted links copy them). A card
+  (`paper.addContact`) fills only blanks a host could, on a record nobody
+  has signed in to, and its yes to texts is recorded as the adding host's.
 - Guests inviting guests: only `source` host/group may (`canInviteOthers`
   in `api/src/guest-invites.ts`), only when the event's `guest_invites` is
   on, up to `guest_invite_limit` each, counted in the INSERT. Their friends

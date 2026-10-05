@@ -1,5 +1,7 @@
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { ContactAsk } from "@/components/invite/contact-ask";
 import { InviteView } from "@/components/invite/invite-view";
 import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
 import { useRecordView } from "@/components/invite/use-record-view";
@@ -37,6 +39,8 @@ function PaperInvitePage() {
 	const { token } = Route.useParams();
 	const { data } = useSuspenseQuery(paperQuery(token));
 	const respond = useMutation(orpc.paper.respond.mutationOptions());
+	const addContact = useMutation(orpc.paper.addContact.mutationOptions());
+	const [asking, setAsking] = useState(false);
 	useRecordView(token, () => client.paper.viewed({ token }));
 
 	return (
@@ -49,10 +53,28 @@ function PaperInvitePage() {
 							data={data}
 							initial={initialRsvp(data.me, data.answers, null)}
 							submit={(values, options) =>
-								respond.mutate({ token, ...values }, options)
+								respond.mutate(
+									{ token, ...values },
+									{
+										onSuccess: (result) => {
+											options.onSuccess(result);
+											setAsking(true);
+										},
+									},
+								)
 							}
 							pending={respond.isPending}
 						/>
+						{asking && (data.me.missing.email || data.me.missing.phone) ? (
+							<ContactAsk
+								missing={data.me.missing}
+								submit={(values, options) =>
+									addContact.mutate({ token, ...values }, options)
+								}
+								pending={addContact.isPending}
+								onClose={() => setAsking(false)}
+							/>
+						) : null}
 						<p className="m-0 text-[14px] text-haze">
 							This card answers for {data.me.name}
 							{data.me.family.length > 0

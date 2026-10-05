@@ -151,6 +151,6 @@ export const dashboardRouter = {
 	/** The invitation page: for guests, and for hosts seeing it as a guest. */
 	invite: personProcedure.input(idInput).handler(async ({ context, input }) => {
 		const access = await accessTo(context.db, context.me, input.eventId);
-		return invitePayload(context.db, context.me, access);
+		return invitePayload(context.db, context.me, access, "self");
 	}),
 };
