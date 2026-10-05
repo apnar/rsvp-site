@@ -8,19 +8,34 @@ const DAY = 24 * HOUR;
 
 describe("countdownTile", () => {
 	it("counts days from a day out", () => {
-		expect(countdownTile(DAY)).toEqual({ value: "1", label: "day" });
+		expect(countdownTile(DAY)).toEqual({
+			value: "1",
+			label: "day until event",
+		});
 		expect(countdownTile(22 * DAY + 5 * HOUR)).toEqual({
 			value: "22",
-			label: "days",
+			label: "days until event",
 		});
 	});
 	it("counts hours inside a day", () => {
-		expect(countdownTile(DAY - 1)).toEqual({ value: "23", label: "hours" });
-		expect(countdownTile(HOUR)).toEqual({ value: "1", label: "hour" });
+		expect(countdownTile(DAY - 1)).toEqual({
+			value: "23",
+			label: "hours until event",
+		});
+		expect(countdownTile(HOUR)).toEqual({
+			value: "1",
+			label: "hour until event",
+		});
 	});
 	it("counts minutes inside an hour, never showing zero", () => {
-		expect(countdownTile(HOUR - 1)).toEqual({ value: "59", label: "minutes" });
-		expect(countdownTile(30 * 1000)).toEqual({ value: "1", label: "minutes" });
+		expect(countdownTile(HOUR - 1)).toEqual({
+			value: "59",
+			label: "minutes until event",
+		});
+		expect(countdownTile(30 * 1000)).toEqual({
+			value: "1",
+			label: "minutes until event",
+		});
 	});
 	it("says now once it has started", () => {
 		expect(countdownTile(0)).toEqual({ value: "Now", label: "party on" });

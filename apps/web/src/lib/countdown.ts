@@ -15,15 +15,21 @@ export function countdownTile(remainingMs: number): {
 	if (remainingMs <= 0) return { value: "Now", label: "party on" };
 	if (remainingMs >= DAY) {
 		const days = Math.floor(remainingMs / DAY);
-		return { value: String(days), label: days === 1 ? "day" : "days" };
+		return {
+			value: String(days),
+			label: days === 1 ? "day until event" : "days until event",
+		};
 	}
 	if (remainingMs >= HOUR) {
 		const hours = Math.floor(remainingMs / HOUR);
-		return { value: String(hours), label: hours === 1 ? "hour" : "hours" };
+		return {
+			value: String(hours),
+			label: hours === 1 ? "hour until event" : "hours until event",
+		};
 	}
 	return {
 		value: String(Math.max(1, Math.floor(remainingMs / MINUTE))),
-		label: "minutes",
+		label: "minutes until event",
 	};
 }
 

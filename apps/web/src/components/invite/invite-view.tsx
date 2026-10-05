@@ -65,7 +65,6 @@ export function InviteView({
 						nowIso={data.now}
 						startsAtIso={data.startsAt}
 						tiles={[
-							{ value: data.totals.yes, label: "said yes" },
 							{ value: data.headcount, label: "coming" },
 							...(e.potluckEnabled
 								? [
