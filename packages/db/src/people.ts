@@ -4,18 +4,22 @@ import {
 	count,
 	eq,
 	inArray,
+	isNotNull,
 	isNull,
 	ne,
 	or,
 	type SQL,
+	sql,
 } from "drizzle-orm";
 
+import { bookByPhone } from "./address-book";
 import { normalizeEmail } from "./addresses";
 import { batchAll, insertChunks, mapChunks } from "./batch";
 import { detailColumns, fillBlanks } from "./details";
 import { isUniqueViolation } from "./errors";
 import type { Db } from "./index";
 import { displayName, nameFor } from "./names";
+import { textablePhone } from "./phone";
 import { roleOf } from "./roles";
 import { NO_EMAIL_DOMAIN, type PersonSource, user } from "./schema/auth";
 import { newToken } from "./tokens";
@@ -43,6 +47,25 @@ export function mailableWhere() {
 		notDeactivated(),
 		isNull(user.unsubscribedAt),
 		eq(user.noEmail, false),
+	);
+}
+
+/**
+ * Somebody a text may go to: not deactivated, a US mobile-shaped number,
+ * the consent on record, texts not switched off, and the number not
+ * blocked. The block is matched by hand-qualified names on purpose: drizzle
+ * leaves a single-table query's columns unqualified, and inside the
+ * subquery `"phone"` would mean sms_block's own.
+ */
+export function textableWhere() {
+	return and(
+		notDeactivated(),
+		// The shape, loosely: D1 refuses a GLOB spelling out every digit as
+		// "too complex", and `listTextable` checks the number exactly.
+		sql`"user"."phone" like '+1%' and length("user"."phone") = 12`,
+		isNotNull(user.textsOkAt),
+		isNull(user.textsOffAt),
+		sql`not exists (select 1 from "sms_block" "b" where "b"."phone" = "user"."phone")`,
 	);
 }
 
@@ -80,6 +103,43 @@ export async function createNameOnlyPeople(
 		insertChunks(user, rows).map((slice) => db.insert(user).values(slice)),
 	);
 	return rows.map((r) => ({ id: r.id, name: r.name }));
+}
+
+/**
+ * People a host typed with a name and no address: somebody already in the
+ * host's book with that number is that person (texting the same phone as
+ * two guests helps nobody), and the rest are new name-only people.
+ */
+export async function nameOnlyFromBook(
+	db: Db,
+	ownerId: string,
+	people: readonly Typed[],
+	source: PersonSource,
+): Promise<{ id: string; name: string; phone: string | null }[]> {
+	const known = await bookByPhone(
+		db,
+		ownerId,
+		people.flatMap((p) => (p.phone ? [p.phone] : [])),
+	);
+	const fresh = people.filter((p) => !(p.phone && known.has(p.phone)));
+	const made = await createNameOnlyPeople(db, fresh, source);
+	const madeOut = made.map((m, i) => ({
+		...m,
+		phone: fresh[i]?.phone ?? null,
+	}));
+	const reused = people.flatMap((p) => {
+		const id = p.phone ? known.get(p.phone) : undefined;
+		return id && p.phone
+			? [
+					{
+						id,
+						name: displayName(p.firstName ?? "", p.lastName ?? ""),
+						phone: p.phone,
+					},
+				]
+			: [];
+	});
+	return [...reused, ...madeOut];
 }
 
 /**
@@ -129,6 +189,10 @@ const personColumns = {
 	unsubscribedAt: user.unsubscribedAt,
 	unsubscribeReason: user.unsubscribeReason,
 	noEmail: user.noEmail,
+	contactBy: user.contactBy,
+	alertsBy: user.alertsBy,
+	textsOkAt: user.textsOkAt,
+	textsOffAt: user.textsOffAt,
 	linkSentAt: user.linkSentAt,
 	createdAt: user.createdAt,
 };
@@ -205,6 +269,41 @@ export async function listRecipients(
 	return mapChunks(onlyIds, (ids) =>
 		read(and(mailableWhere(), inArray(user.id, ids))),
 	);
+}
+
+const textableColumns = {
+	id: user.id,
+	name: user.name,
+	firstName: user.firstName,
+	phone: user.phone,
+	linkToken: user.linkToken,
+};
+
+export type TextRecipient = Pick<
+	typeof user.$inferSelect,
+	keyof typeof textableColumns
+> & { phone: string };
+
+/**
+ * `listRecipients` for texts: these people, those of them a text may go to
+ * (`textableWhere`). Whether they want one is `channelsFor`'s question.
+ */
+export async function listTextable(
+	db: Db,
+	ids: readonly string[],
+): Promise<TextRecipient[]> {
+	const rows = await mapChunks(ids, (slice) =>
+		db
+			.select(textableColumns)
+			.from(user)
+			.where(and(textableWhere(), inArray(user.id, slice)))
+			.orderBy(asc(user.createdAt))
+			.all(),
+	);
+	return rows.flatMap((r) => {
+		const phone = textablePhone(r.phone);
+		return phone ? [{ ...r, phone }] : [];
+	});
 }
 
 /** How many people a send to everybody would reach, without reading them. */

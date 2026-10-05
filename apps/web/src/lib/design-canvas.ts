@@ -21,8 +21,10 @@ import {
 import { type Design, refsOf } from "@rsvp-site/design/schema";
 import { FONT_FILES } from "./design-fonts.gen";
 import { designSrc } from "./design-src";
+import { MMS_MAX_BYTES } from "./shrink-image";
 
 const WIDTH = 1200;
+const MMS_WIDTH = 640;
 
 async function loadFonts(scene: Scene) {
 	const faces = new Map<string, SceneNode & { k: "text" }>();
@@ -224,11 +226,16 @@ function drawNode(
 	ctx.restore();
 }
 
-/** The shared card image for a design and the event's facts. */
+/**
+ * The shared card image for a design and the event's facts, and a small
+ * copy of it for picture texts (carriers refuse over ~1 MB). The copy is the
+ * same canvas scaled down, never a second layout; it is null if the browser
+ * can't make one, and the card goes up without it.
+ */
 export async function renderCard(
 	design: Design,
 	values: Values,
-): Promise<Blob> {
+): Promise<{ blob: Blob; mms: Blob | null }> {
 	const faces = await loadFaces(facesOf(design));
 	const scene = layoutCard(design, {
 		values: { ...values, guest: "", guestFirst: "", guestLast: "" },
@@ -262,5 +269,23 @@ export async function renderCard(
 		canvas.toBlob(resolve, "image/jpeg", 0.9),
 	);
 	if (!blob) throw new Error("The card image didn't draw.");
-	return blob;
+	let mms: Blob | null = null;
+	try {
+		const small = document.createElement("canvas");
+		small.width = MMS_WIDTH;
+		small.height = Math.max(1, Math.round((canvas.height * MMS_WIDTH) / WIDTH));
+		const sctx = small.getContext("2d");
+		if (sctx) {
+			sctx.imageSmoothingQuality = "high";
+			sctx.drawImage(canvas, 0, 0, small.width, small.height);
+			const made = await new Promise<Blob | null>((resolve) =>
+				small.toBlob(resolve, "image/jpeg", 0.8),
+			);
+			// The server refuses one over 600 KB, which would sink the card too.
+			mms = made && made.size <= MMS_MAX_BYTES ? made : null;
+		}
+	} catch {
+		mms = null;
+	}
+	return { blob, mms };
 }

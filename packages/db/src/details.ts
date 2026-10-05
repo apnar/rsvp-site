@@ -111,11 +111,20 @@ export async function updateDetails(
 			noEmail: user.noEmail,
 			firstName: user.firstName,
 			lastName: user.lastName,
+			phone: user.phone,
+			textsOkBy: user.textsOkBy,
 		})
 		.from(user)
 		.where(eq(user.id, id))
 		.get();
 	if (!row) return false;
+	// A host's word that somebody expects texts was about the number the
+	// host typed. A new number needs its own; the person's own switch,
+	// being about them rather than a number, stays.
+	const newNumber =
+		patch.phone !== undefined &&
+		patch.phone !== row.phone &&
+		row.textsOkBy !== id;
 	const firstName = patch.firstName ?? row.firstName;
 	const lastName = patch.lastName ?? row.lastName;
 	const named = patch.firstName !== undefined || patch.lastName !== undefined;
@@ -123,6 +132,7 @@ export async function updateDetails(
 		.update(user)
 		.set({
 			...patch,
+			...(newNumber ? { textsOkAt: null, textsOkBy: null } : {}),
 			...(named
 				? {
 						firstName,

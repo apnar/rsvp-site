@@ -25,11 +25,17 @@ function RequestLink() {
 	const [email, setEmail] = useState("");
 	const [asked, setAsked] = useState(false);
 
+	const onSuccess = () => setAsked(true);
 	const request = useMutation(
-		orpc.people.requestLink.mutationOptions({
-			onSuccess: () => setAsked(true),
-		}),
+		orpc.people.requestLink.mutationOptions({ onSuccess }),
 	);
+	const requestText = useMutation(
+		orpc.people.requestTextLink.mutationOptions({ onSuccess }),
+	);
+	// Anything without an "@" and with a phone's worth of digits is a number;
+	// the server still decides whether it is one we can text.
+	const isPhone = !email.includes("@") && email.replace(/\D/g, "").length >= 10;
+	const pending = request.isPending || requestText.isPending;
 
 	return (
 		<div className="flex flex-col gap-4 rounded-[28px] bg-lime p-[clamp(20px,3vw,32px)] text-on-lime">
@@ -42,7 +48,9 @@ function RequestLink() {
 			</p>
 			{asked ? (
 				<p className="m-0 font-bold text-[16px]">
-					If that address is on the site, a link is on its way.
+					{isPhone
+						? "If that number is on file, we just texted you a link."
+						: "If that address is on the site, a link is on its way."}
 				</p>
 			) : (
 				<form
@@ -57,16 +65,17 @@ function RequestLink() {
 					</label>
 					<Input
 						id="link-email"
-						type="email"
+						type="text"
+						inputMode="email"
 						required
-						autoComplete="email"
-						placeholder="you@example.com"
+						autoComplete="username"
+						placeholder="Email or mobile number"
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
 						className="min-w-[200px] flex-1 border-night/30 bg-ink text-on-ink placeholder:text-on-ink/50 hover:border-night focus-visible:border-night"
 					/>
-					<Button type="submit" variant="night" disabled={request.isPending}>
-						{request.isPending ? "Sending..." : "Send it"}
+					<Button type="submit" variant="night" disabled={pending}>
+						{pending ? "Sending..." : "Send it"}
 					</Button>
 				</form>
 			)}

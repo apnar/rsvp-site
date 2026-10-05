@@ -8,6 +8,7 @@ import type { Db } from "@rsvp-site/db";
 import { mapChunks } from "@rsvp-site/db/batch";
 import { firstNameOf } from "@rsvp-site/db/names";
 import type { Person } from "@rsvp-site/db/people";
+import { textablePhone } from "@rsvp-site/db/phone";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
@@ -19,6 +20,7 @@ import {
 	potluckItem,
 } from "@rsvp-site/db/schema/event";
 import { familyMember } from "@rsvp-site/db/schema/family";
+import { type SmsStatus, smsBlock, smsSend } from "@rsvp-site/db/schema/sms";
 import { facesOf, loadFaces } from "@rsvp-site/design/faces";
 import type { Values } from "@rsvp-site/design/placeholders";
 import { layoutCard, type Mode, type Scene } from "@rsvp-site/design/scene";
@@ -28,9 +30,11 @@ import {
 	FORMAT_IDS,
 	type Format,
 } from "@rsvp-site/design/schema";
+import { describeCode } from "@rsvp-site/sms";
 import {
 	and,
 	asc,
+	desc,
 	eq,
 	inArray,
 	isNotNull,
@@ -232,8 +236,9 @@ const answerer = alias(user, "answerer");
 
 /**
  * Everybody on an event's list, with the person behind each row.
- * `unreachable` means mail cannot reach them (unsubscribed, deactivated, no
- * address); `addedBy` is who put them on the list; `answeredByName` the
+ * `mailable` and `textable` say which channels can reach them (as
+ * `mailableWhere` and `textableWhere` do), and `unreachable` that neither
+ * can; `lastText` is how the latest text to them about this event fared; `addedBy` is who put them on the list; `answeredByName` the
  * relative who answered for them; `familyId` their family, if any;
  * `hasPaper` says their printed card has a QR code issued; `viewedAt` is
  * for hosts only, so guest-facing payloads pick their fields by hand.
@@ -266,23 +271,93 @@ export async function guestsOf(db: Db, eventId: string) {
 			familyId: familyMember.familyId,
 			noEmail: user.noEmail,
 			paperToken: eventGuest.paperToken,
+			invitedVia: eventGuest.invitedVia,
+			phone: user.phone,
+			textsOkAt: user.textsOkAt,
+			textsOffAt: user.textsOffAt,
+			claimedAt: user.claimedAt,
+			textBlock: smsBlock.reason,
 		})
 		.from(eventGuest)
 		.innerJoin(user, eq(user.id, eventGuest.userId))
+		.leftJoin(smsBlock, eq(smsBlock.phone, user.phone))
 		.leftJoin(adder, eq(adder.id, eventGuest.addedBy))
 		.leftJoin(answerer, eq(answerer.id, eventGuest.answeredBy))
 		.leftJoin(familyMember, eq(familyMember.userId, eventGuest.userId))
 		.where(eq(eventGuest.eventId, eventId))
 		.orderBy(asc(eventGuest.createdAt))
 		.all();
-	return rows.map(({ unsubscribedAt, status, paperToken, ...row }) => ({
-		...row,
-		// A placeholder address is never shown, not even to the host.
-		email: row.noEmail ? "" : row.email,
-		hasPaper: paperToken !== null,
-		unreachable:
-			unsubscribedAt !== null || status === "deactivated" || row.noEmail,
-	}));
+	const texts = await lastTexts(db, eventId);
+	return rows.map(
+		({
+			unsubscribedAt,
+			status,
+			paperToken,
+			textsOkAt,
+			textsOffAt,
+			claimedAt,
+			...row
+		}) => {
+			const active = status !== "deactivated";
+			const mailable = active && unsubscribedAt === null && !row.noEmail;
+			const phoneOk = textablePhone(row.phone) !== null;
+			const textable =
+				active &&
+				phoneOk &&
+				textsOkAt !== null &&
+				textsOffAt === null &&
+				row.textBlock === null;
+			return {
+				...row,
+				// A placeholder address is never shown, not even to the host.
+				email: row.noEmail ? "" : row.email,
+				hasPaper: paperToken !== null,
+				emailOff: unsubscribedAt !== null,
+				textsOff: textsOffAt !== null,
+				mailable,
+				textable,
+				unreachable: !mailable && !textable,
+				// What a host's "they expect a text from me" would switch on:
+				// only a blank, on a record nobody has claimed.
+				canVouch:
+					active &&
+					phoneOk &&
+					textsOkAt === null &&
+					textsOffAt === null &&
+					claimedAt === null &&
+					row.textBlock === null,
+				lastText: texts.get(row.userId) ?? null,
+			};
+		},
+	);
+}
+
+/** The latest text to each person about one event, newest wins. */
+async function lastTexts(db: Db, eventId: string) {
+	const rows = await db
+		.select({
+			userId: smsSend.userId,
+			status: smsSend.status,
+			errorCode: smsSend.errorCode,
+			createdAt: smsSend.createdAt,
+		})
+		.from(smsSend)
+		.where(eq(smsSend.eventId, eventId))
+		.orderBy(desc(smsSend.createdAt))
+		.all();
+	const out = new Map<
+		string,
+		{ status: SmsStatus; reason: string | null; at: Date }
+	>();
+	for (const r of rows) {
+		if (!r.userId || out.has(r.userId)) continue;
+		out.set(r.userId, {
+			status: r.status,
+			reason: r.status === "failed" ? describeCode(r.errorCode) : null,
+			at: r.createdAt,
+		});
+	}
+	return out;
 }
 
 /** Rows under their key, in the order they came. */

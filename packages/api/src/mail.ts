@@ -3,11 +3,19 @@ import { inChunks, mapChunks } from "@rsvp-site/db/batch";
 import {
 	countRecipients,
 	listRecipients,
+	listTextable,
 	markLinkSent,
+	type Recipient,
+	type TextRecipient,
 } from "@rsvp-site/db/people";
 import { NO_EMAIL_DOMAIN, user } from "@rsvp-site/db/schema/auth";
-import { type EmailKind, emailSend } from "@rsvp-site/db/schema/email";
+import {
+	type EmailAudience,
+	type EmailKind,
+	emailSend,
+} from "@rsvp-site/db/schema/email";
 import { eventGuest } from "@rsvp-site/db/schema/event";
+import type { SmsKind } from "@rsvp-site/db/schema/sms";
 import { ensureLinkToken, ensureUnsubscribeToken } from "@rsvp-site/db/tokens";
 import { emailLook } from "@rsvp-site/design/theme";
 import type {
@@ -27,9 +35,11 @@ import {
 	welcomeEmail,
 } from "@rsvp-site/email";
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
+import { hostAlertText, inviteText } from "@rsvp-site/sms";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { answersOf } from "./answer-words";
+import { channelsFor, type Purpose, type Via, viaOf } from "./channels";
 import {
 	type EventRow,
 	guestCountsOf,
@@ -38,6 +48,7 @@ import {
 	labelsOf,
 } from "./events";
 import { type GuestCounts, headcount, tally } from "./headcount";
+import { hostNameOf, mmsUrlOf, sendTexts, textFactsOf } from "./texting";
 
 export type { EmailKind };
 
@@ -125,7 +136,28 @@ export async function sendToList(
 ): Promise<ListSendResult | null> {
 	const people = await listRecipients(db, opts.onlyPersonIds);
 	if (people.length === 0) return null;
+	return sendEmails(db, people, {
+		...opts,
+		audience: HOST_KINDS.has(opts.kind)
+			? "hosts"
+			: opts.onlyPersonIds
+				? "guests"
+				: "everyone",
+	});
+}
 
+/** One list send to people `listRecipients` returned, logged in `email_send`. */
+async function sendEmails(
+	db: Db,
+	people: readonly Recipient[],
+	opts: {
+		kind: EmailKind;
+		eventId?: string | null;
+		rendered: Rendered;
+		sentBy?: string | null;
+		audience: EmailAudience;
+	},
+): Promise<ListSendResult> {
 	const recipients: ListRecipient[] = people.map((p) => ({
 		email: p.email,
 		name: p.name,
@@ -145,11 +177,7 @@ export async function sendToList(
 			kind: opts.kind,
 			eventId: opts.eventId ?? null,
 			subject: opts.rendered.subject,
-			audience: HOST_KINDS.has(opts.kind)
-				? "hosts"
-				: opts.onlyPersonIds
-					? "guests"
-					: "everyone",
+			audience: opts.audience,
 			recipientCount: result.attempted,
 			failedCount: result.attempted - result.sent,
 			messageIds: JSON.stringify(result.messageIds),
@@ -160,6 +188,118 @@ export async function sendToList(
 		console.error("email_send row not written", opts.kind, sendId, error);
 	}
 	return { ...result, sendId };
+}
+
+/** What an event send did, person by person rather than address by address. */
+export type Delivery = {
+	/** People it went to by at least one channel. */
+	attempted: number;
+	/** Of those, the people at least one channel reached. */
+	sent: number;
+	/** People every one of whose channels failed. */
+	failedIds: string[];
+	/** How it went to each person tried. */
+	via: Map<string, Via>;
+};
+
+/**
+ * Send one event message to these people, each by the channels
+ * `channelsFor` picks for them: the email as one list send, the text
+ * one per person with their own `/t/` link to `path`. Returns null when
+ * nobody can be reached by either -- the same "nobody" `sendToList` meant.
+ * Every guest- and host-facing event message goes through here; the
+ * one-off sends (sign-in links, the admin's message) stay email-only.
+ */
+export async function deliver(
+	db: Db,
+	opts: {
+		kind: EmailKind & SmsKind;
+		eventId: string;
+		people: readonly string[];
+		purpose?: Purpose;
+		rendered: Rendered;
+		/** The text, given the person's link; null sends email only. */
+		text: ((link: string) => string) | null;
+		path: string;
+		mediaUrl?: string | null;
+		sentBy?: string | null;
+	},
+): Promise<Delivery | null> {
+	const ids = [...new Set(opts.people)];
+	if (ids.length === 0) return null;
+	const purpose = opts.purpose ?? "guest";
+	const [mailable, textable, prefs] = await Promise.all([
+		listRecipients(db, ids),
+		opts.text ? listTextable(db, ids) : Promise.resolve([]),
+		mapChunks(ids, (slice) =>
+			db
+				.select({
+					id: user.id,
+					contactBy: user.contactBy,
+					alertsBy: user.alertsBy,
+				})
+				.from(user)
+				.where(inArray(user.id, slice))
+				.all(),
+		),
+	]);
+	const byMail = new Map(mailable.map((p) => [p.id, p]));
+	const byText = new Map(textable.map((p) => [p.id, p]));
+	const via = new Map<string, Via>();
+	const toMail: Recipient[] = [];
+	const toText: TextRecipient[] = [];
+	for (const p of prefs) {
+		const mail = byMail.get(p.id);
+		const text = byText.get(p.id);
+		const c = channelsFor(
+			{
+				mailable: mail !== undefined,
+				textable: text !== undefined,
+				contactBy: p.contactBy,
+				alertsBy: p.alertsBy,
+			},
+			purpose,
+		);
+		const v = viaOf(c);
+		if (!v) continue;
+		via.set(p.id, v);
+		if (c.email && mail) toMail.push(mail);
+		if (c.text && text) toText.push(text);
+	}
+	if (via.size === 0) return null;
+
+	// Who each channel actually reached; a person is lost only when none did.
+	const reached = new Set<string>();
+	if (toMail.length > 0) {
+		const result = await sendEmails(db, toMail, {
+			kind: opts.kind,
+			eventId: opts.eventId,
+			rendered: opts.rendered,
+			sentBy: opts.sentBy,
+			audience: HOST_KINDS.has(opts.kind) ? "hosts" : "guests",
+		});
+		const refused = new Set(result.failed.flatMap((f) => f.emails));
+		for (const p of toMail) if (!refused.has(p.email)) reached.add(p.id);
+	}
+	if (toText.length > 0 && opts.text) {
+		const write = opts.text;
+		const result = await sendTexts(db, toText, {
+			kind: opts.kind,
+			eventId: opts.eventId,
+			path: opts.path,
+			mediaUrl: opts.mediaUrl,
+			body: (link) => write(link),
+		});
+		const refused = new Set(result.failedIds);
+		for (const p of toText) if (!refused.has(p.id)) reached.add(p.id);
+	}
+	const lost = [...via.keys()].filter((id) => !reached.has(id));
+	return {
+		attempted: via.size,
+		sent: via.size - lost.length,
+		failedIds: lost,
+		via,
+	};
 }
 
 export type InviteOutcome = { sent: number; failed: number; skipped: number };
@@ -213,14 +353,22 @@ export async function sendInvites(
 	}
 	if (claimed.length === 0) return { sent: 0, failed: 0, skipped };
 
-	let result: ListSendResult | null;
+	let result: Delivery | null;
 	try {
-		result = await sendToList(db, {
+		const [hostName, picture] = await Promise.all([
+			hostNameOf(db, row),
+			mmsUrlOf(row),
+		]);
+		const facts = textFactsOf(row, hostName);
+		result = await deliver(db, {
 			kind: "invite",
 			eventId: row.id,
+			people: claimed,
 			rendered: inviteEmail(eventFacts(row), opts.invitedBy ?? null),
+			text: (link) => inviteText(facts, link, opts.invitedBy ?? null),
+			path: `/e/${row.id}`,
+			mediaUrl: picture,
 			sentBy,
-			onlyPersonIds: claimed,
 		});
 	} catch (error) {
 		await releaseInvites(db, row.id, now);
@@ -230,29 +378,45 @@ export async function sendInvites(
 		await releaseInvites(db, row.id, now);
 		return { sent: 0, failed: result?.attempted ?? 0, skipped };
 	}
-	// A batch Brevo refused never reached those people: give back exactly
-	// their rows, so the next Send tries them and nobody else.
-	const refused = result.failed.flatMap((f) => f.emails);
-	if (refused.length > 0) {
-		const ids = await mapChunks(refused, (slice) =>
-			db
-				.select({ id: user.id })
-				.from(user)
-				.where(inArray(user.email, slice))
-				.all(),
-		);
-		await releaseInvites(
-			db,
-			row.id,
-			now,
-			ids.map((r) => r.id),
-		);
+	// Somebody no channel reached gets their row back, so the next Send
+	// tries them and nobody else.
+	if (result.failedIds.length > 0) {
+		await releaseInvites(db, row.id, now, result.failedIds);
 	}
+	await stampVia(db, row.id, now, result);
 	return {
 		sent: result.sent,
 		failed: result.attempted - result.sent,
 		skipped,
 	};
+}
+
+/** Record how each invitation went, on the rows this send claimed. */
+async function stampVia(
+	db: Db,
+	eventId: string,
+	stamp: Date,
+	result: Delivery,
+) {
+	const lost = new Set(result.failedIds);
+	const byVia = new Map<Via, string[]>();
+	for (const [id, v] of result.via) {
+		if (!lost.has(id)) byVia.set(v, [...(byVia.get(v) ?? []), id]);
+	}
+	for (const [v, ids] of byVia) {
+		for (const slice of inChunks(ids)) {
+			await db
+				.update(eventGuest)
+				.set({ invitedVia: v })
+				.where(
+					and(
+						eq(eventGuest.eventId, eventId),
+						eq(eventGuest.invitedAt, stamp),
+						inArray(eventGuest.userId, slice),
+					),
+				);
+		}
+	}
 }
 
 async function releaseInvites(
@@ -297,15 +461,44 @@ export async function alertHosts(
 		);
 		if (hostIds.length === 0) return;
 		const totals = hostTotals(await guestCountsOf(db, row.id));
-		await sendToList(db, {
+		const words = answersOf(row).words;
+		const lines = [
+			...(reply.self === false ? [] : [reply]),
+			...(reply.for ?? []),
+		];
+		const first = lines[0] ?? reply;
+		await deliver(db, {
 			kind: "host_alert",
 			eventId: row.id,
+			people: hostIds,
+			purpose: "alerts",
 			rendered: hostAlertEmail(eventFacts(row), reply, totals),
-			onlyPersonIds: hostIds,
+			text: (link) =>
+				hostAlertText(
+					{
+						title: row.title,
+						guestName:
+							lines.length > 1
+								? `${first.name} +${lines.length - 1}`
+								: first.name,
+						answer: words[first.response].pick,
+						party: first.response === "no" ? null : partyLabel(first),
+					},
+					link,
+				),
+			path: `/e/${row.id}/guests`,
 		});
 	} catch (error) {
 		console.error("host alert failed", error);
 	}
+}
+
+/** "2 adults, 1 kid" -- and never "0 adults" for a child answered for. */
+export function partyLabel(p: { adults: number; kids: number }): string | null {
+	const part = (n: number, one: string) =>
+		n > 0 ? [`${n} ${one}${n === 1 ? "" : "s"}`] : [];
+	const words = [...part(p.adults, "adult"), ...part(p.kids, "kid")];
+	return words.length > 0 ? words.join(", ") : null;
 }
 
 /**

@@ -10,8 +10,8 @@ import {
 	sharedGroups,
 } from "@rsvp-site/db/families";
 import {
-	createNameOnlyPeople,
 	findOrCreatePeople,
+	nameOnlyFromBook,
 	notDeactivated,
 	type Person,
 } from "@rsvp-site/db/people";
@@ -24,6 +24,7 @@ import {
 	contactGroupShare,
 } from "@rsvp-site/db/schema/contact";
 import { familyMember } from "@rsvp-site/db/schema/family";
+import { vouchForTexts } from "@rsvp-site/db/sms-status";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
@@ -67,6 +68,7 @@ async function addToBook(
 	context: { db: Db },
 	ownerId: string,
 	raw: string,
+	textsOk = false,
 ): Promise<string[]> {
 	const typed = parseGuests(raw);
 	if (typed.length > 500) {
@@ -78,13 +80,25 @@ async function addToBook(
 	const people = (await findOrCreatePeople(context.db, emailed, "host")).filter(
 		(p) => p.status !== "deactivated",
 	);
-	const named = await createNameOnlyPeople(
+	const named = await nameOnlyFromBook(
 		context.db,
+		ownerId,
 		typed.filter((t) => !t.email),
 		"host",
 	);
 	const ids = [...people, ...named].map((p) => p.id);
 	await remember(context.db, ownerId, ids);
+	if (textsOk) {
+		const phoned = new Set(emailed.flatMap((t) => (t.phone ? [t.email] : [])));
+		await vouchForTexts(
+			context.db,
+			[
+				...people.filter((p) => phoned.has(p.email)).map((p) => p.id),
+				...named.filter((p) => p.phone).map((p) => p.id),
+			],
+			ownerId,
+		);
+	}
 	return ids.filter((id) => id !== ownerId);
 }
 
@@ -237,9 +251,20 @@ export const contactsRouter = {
 
 	/** Add people to the book by address, without inviting them to anything. */
 	addPeople: hostProcedure
-		.input(z.object({ emails: emailsSchema.min(1) }))
+		.input(
+			z.object({
+				emails: emailsSchema.min(1),
+				/** As on `guests.add`: they expect texts from this host. */
+				textsOk: z.boolean().default(false),
+			}),
+		)
 		.handler(async ({ context, input }) => {
-			const ids = await addToBook(context, context.me.id, input.emails);
+			const ids = await addToBook(
+				context,
+				context.me.id,
+				input.emails,
+				input.textsOk,
+			);
 			return { added: ids.length };
 		}),
 

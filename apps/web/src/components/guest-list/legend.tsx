@@ -1,6 +1,15 @@
 import type { Guest } from "./types";
 
-type Legendable = Pick<Guest, "userId" | "source" | "dietary" | "note">;
+type Legendable = Pick<
+	Guest,
+	| "userId"
+	| "source"
+	| "dietary"
+	| "note"
+	| "emailOff"
+	| "textsOff"
+	| "textBlock"
+>;
 
 /**
  * What the pink on the rows means. Pink is otherwise "maybe" and "send",
@@ -34,6 +43,11 @@ export function GuestLegend({
 		guests.some((g) => g.source === "guest" || g.source === "link") ? (
 			<span key="via" className="text-pink-ink">
 				Added by a guest or the share link
+			</span>
+		) : null,
+		guests.some((g) => g.emailOff || g.textsOff || g.textBlock === "stop") ? (
+			<span key="off" className="text-pink-ink">
+				Email or texts turned off
 			</span>
 		) : null,
 	].filter(Boolean);

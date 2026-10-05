@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseGuests } from "./addresses";
 import { displayName, firstNameOf, nameFor, splitName } from "./names";
-import { formatPhone, normalizePhone } from "./phone";
+import { formatPhone, normalizePhone, textablePhone } from "./phone";
 
 const emails = (raw: string) => parseGuests(raw).map((g) => g.email);
 const guest = (
@@ -150,5 +150,15 @@ describe("phones", () => {
 		expect(formatPhone("+13015551212")).toBe("(301) 555-1212");
 		expect(formatPhone("+442079460958")).toBe("+442079460958");
 		expect(formatPhone(null)).toBe("");
+	});
+});
+
+describe("textablePhone", () => {
+	it("takes US numbers only", () => {
+		expect(textablePhone("+13015551212")).toBe("+13015551212");
+		expect(textablePhone("+447700900123")).toBeNull();
+		expect(textablePhone("+11015551212")).toBeNull();
+		expect(textablePhone("5551212")).toBeNull();
+		expect(textablePhone(null)).toBeNull();
 	});
 });

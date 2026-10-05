@@ -21,3 +21,12 @@ export function formatPhone(stored: string | null): string {
 	const us = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(stored);
 	return us ? `(${us[1]}) ${us[2]}-${us[3]}` : stored;
 }
+
+/**
+ * The stored number when this site can text it, else null. Only US
+ * numbers: the Telnyx profile sends nowhere else, and a US area code never
+ * starts with 0 or 1.
+ */
+export function textablePhone(stored: string | null): string | null {
+	return stored && /^\+1[2-9]\d{9}$/.test(stored) ? stored : null;
+}

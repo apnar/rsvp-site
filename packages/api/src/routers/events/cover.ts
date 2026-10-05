@@ -6,7 +6,7 @@ import { withLiveHostEvent } from "../../host-event";
 import { sniffImage } from "../../image-type";
 import { hostProcedure } from "../../index";
 import { idInput } from "../../inputs";
-import { fileBytes, imageFile, putImage } from "../../media";
+import { fileBytes, imageFile, mmsImage, putImage } from "../../media";
 
 export const coverRouter = {
 	/**
@@ -15,7 +15,7 @@ export const coverRouter = {
 	 * after the new one is in place, never before.
 	 */
 	uploadCover: hostProcedure
-		.input(idInput.extend({ file: imageFile }))
+		.input(idInput.extend({ file: imageFile, mms: mmsImage.optional() }))
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
@@ -31,11 +31,25 @@ export const coverRouter = {
 				eventId: row.id,
 				uploadedBy: context.me.id,
 			});
+			// Optional, and dropped rather than refused if it isn't a JPEG: the
+			// sender falls back to the cover itself when that is small enough.
+			let mmsKey: string | null = null;
+			if (input.mms) {
+				const small = await fileBytes(input.mms);
+				if (sniffImage(small) === "image/jpeg") {
+					mmsKey = key.replace(/\.[a-z]+$/, "-mms.jpg");
+					await context.env.MEDIA.put(mmsKey, small, {
+						httpMetadata: { contentType: "image/jpeg" },
+						customMetadata: { eventId: row.id, uploadedBy: context.me.id },
+					});
+				}
+			}
 			await context.db
 				.update(event)
-				.set({ coverKey: key })
+				.set({ coverKey: key, coverMmsKey: mmsKey })
 				.where(eq(event.id, row.id));
 			if (row.coverKey) await context.env.MEDIA.delete(row.coverKey);
+			if (row.coverMmsKey) await context.env.MEDIA.delete(row.coverMmsKey);
 			return { coverKey: key };
 		}),
 
@@ -46,9 +60,10 @@ export const coverRouter = {
 			const row = context.event;
 			await context.db
 				.update(event)
-				.set({ coverKey: null })
+				.set({ coverKey: null, coverMmsKey: null })
 				.where(eq(event.id, row.id));
 			if (row.coverKey) await context.env.MEDIA.delete(row.coverKey);
+			if (row.coverMmsKey) await context.env.MEDIA.delete(row.coverMmsKey);
 			return { ok: true };
 		}),
 };

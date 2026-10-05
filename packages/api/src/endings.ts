@@ -10,12 +10,14 @@ import { canHost } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventHost } from "@rsvp-site/db/schema/event";
 import { cancelEmail } from "@rsvp-site/email";
+import { cancelText } from "@rsvp-site/sms";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
 import { type OwnedEvent, planRemoval } from "./event-rules";
 import { type EventRow, emailsHeld, stillComing } from "./events";
-import { eventFacts, sendToList } from "./mail";
+import { deliver, eventFacts } from "./mail";
 import { deleteDesignMedia, type Env } from "./media";
+import { hostNameOf, textFactsOf } from "./texting";
 
 /**
  * Cancel a sent event, and tell everybody still coming if asked. Returns how
@@ -38,12 +40,15 @@ export async function callOff(
 	// and can tell them.
 	if (!opts.notify || emailsHeld(row)) return 0;
 	const shown = opts.pictures ? row : { ...row, coverKey: null, cardKey: null };
-	const sent = await sendToList(db, {
+	const facts = textFactsOf(row, await hostNameOf(db, row));
+	const sent = await deliver(db, {
 		kind: "cancel",
 		eventId: row.id,
+		people: await stillComing(db, row.id),
 		rendered: cancelEmail(eventFacts(shown), opts.note),
+		text: (link) => cancelText(facts, opts.note, link),
+		path: `/e/${row.id}`,
 		sentBy: opts.sentBy,
-		onlyPersonIds: await stillComing(db, row.id),
 	});
 	return sent?.sent ?? 0;
 }
@@ -51,13 +56,14 @@ export async function callOff(
 /** An erased event's pictures: the cover, and everything under its designs. */
 export async function deleteEventMedia(
 	env: Env,
-	row: Pick<EventRow, "id" | "coverKey">,
+	row: Pick<EventRow, "id" | "coverKey" | "coverMmsKey">,
 ) {
 	if (row.coverKey) await env.MEDIA.delete(row.coverKey);
+	if (row.coverMmsKey) await env.MEDIA.delete(row.coverMmsKey);
 	await deleteDesignMedia(env, row.id);
 }
 
-type Owned = OwnedEvent & Pick<EventRow, "coverKey">;
+type Owned = OwnedEvent & Pick<EventRow, "coverKey" | "coverMmsKey">;
 
 /**
  * The events a person owns, each with its heir: the co-host who has hosted
@@ -78,6 +84,7 @@ async function ownedEvents(db: Db, userId: string): Promise<Owned[]> {
 				date: event.date,
 				startTime: event.startTime,
 				coverKey: event.coverKey,
+				coverMmsKey: event.coverMmsKey,
 			})
 			.from(event)
 			.where(inArray(event.id, mine))

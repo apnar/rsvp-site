@@ -9,6 +9,7 @@ import {
 	findReachablePersonByEmail,
 	listPeople,
 } from "@rsvp-site/db/people";
+import { normalizePhone, textablePhone } from "@rsvp-site/db/phone";
 import { ROLES } from "@rsvp-site/db/schema/auth";
 import { eventGuest, eventHost } from "@rsvp-site/db/schema/event";
 import { deactivate, reactivate, setRole } from "@rsvp-site/db/status";
@@ -24,6 +25,7 @@ import { adminProcedure, publicProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
 import { sendWelcome } from "../mail";
 import { avatarFile } from "../media";
+import { textSignIn } from "../texting";
 
 const nameSchema = z.string().trim().max(60, "Shorter name, please.");
 const reasonSchema = z.string().trim().max(200, "Keep it short.").optional();
@@ -290,6 +292,39 @@ export const peopleRouter = {
 				});
 			}
 			await reactivate(context.db, input.userId);
+			return { ok: true };
+		}),
+
+	/**
+	 * "Text me my link", the same door by phone: the same answer whether or
+	 * not the number is ours, the same per-caller limit, and a ten-minute
+	 * cooldown per number (`textSignIn`), since every text costs money and
+	 * lands on somebody's lock screen.
+	 */
+	requestTextLink: publicProcedure
+		.input(z.object({ phone: z.string().trim().max(40) }))
+		.handler(async ({ context, input }) => {
+			const phone = textablePhone(normalizePhone(input.phone));
+			if (!phone) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "That doesn't look like a US mobile number.",
+				});
+			}
+			const ip = context.headers.get("cf-connecting-ip") ?? "local";
+			const { success } = await context.env.AUTH_LIMITER.limit({
+				key: `request-link:${ip}`,
+			});
+			if (!success) {
+				throw new ORPCError("TOO_MANY_REQUESTS", {
+					message: "Too many tries. Wait a minute and try again.",
+				});
+			}
+			const db = context.db;
+			waitUntil(
+				textSignIn(db, phone).catch((error) =>
+					console.error("sign-in text failed", error),
+				),
+			);
 			return { ok: true };
 		}),
 

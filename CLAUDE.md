@@ -23,13 +23,14 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0021 applied (CI applies new ones on push) |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0022 applied (CI applies new ones on push) |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/`, profile pictures under `avatars/` |
 | Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` sign-in and "email me my link", and per person on guests inviting friends |
-| Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
+| Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY`, `TELNYX_API_KEY` |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
 | Sender | `"Botch RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
 | Brevo webhook | id 2217340, posting to `https://rsvp.botch.com/api/brevo/webhook` |
+| Texts | Telnyx, number +1 301-279-8944 on messaging profile "RSVP" (`4001a103-...`), webhook `https://rsvp.botch.com/api/telnyx/webhook`, signed with the account's Ed25519 key (`TELNYX_PUBLIC_KEY` in `wrangler.jsonc` vars). Sole-proprietor 10DLC; until the campaign is approved every send fails with 40010 |
 | Replies | Cloudflare Email Routing on the `rsvp.botch.com` subdomain; `info@` forwards to `jlukens@fastmail.com`, the inbox `jlukens@botch.com` itself forwards to |
 
 The Cloudflare account (`b38725df...`) is shared with pickup-bball and other
@@ -39,7 +40,7 @@ silence the other.
 
 Private local files in `~/.config/rsvp-site/` (mode 600, never commit or
 print them): `brevo-webhook-secret` (the value set on the Worker),
-`admin-link` (the first admin's sign-in link) and `brevo-key`. Read them into
+`admin-link` (the first admin's sign-in link), `brevo-key` and `telnyx-key`. Read them into
 commands with `$(cat ...)` and never echo them. A secret the user types goes
 in from a real terminal or a web UI: the `!` prefix has no TTY, so a hidden
 prompt there reads nothing.
@@ -180,6 +181,10 @@ libraries; only `apps/web` builds):
   `src/jobs/event-mail.ts`. Routers never import each other.
 - `packages/email` — pure template/Brevo code (`src/index.ts`) plus
   `src/worker.ts`, the only file there that touches the Worker env.
+- `packages/sms` — the same shape for Telnyx: request shaping and error
+  codes (`telnyx.ts`), the text templates, GSM-7 segments, the webhook's
+  signature check and parsing, the texter (dry run on localhost), and
+  `worker.ts` for the env.
 - `packages/design` — invitation designs, pure: the zod schema
   (`schema.ts`), the curated fonts (`fonts.ts`) and their generated
   metrics (`metrics/`), placeholders, text layout (`text.ts`), the scene
@@ -461,6 +466,31 @@ recolour finished HTML.
 Brevo POSTs are retried only on 429 and 503, which mean nothing was sent. A
 timeout or another 5xx may come after Brevo accepted a 99-person batch, and a
 retry would send it twice.
+
+### Texts
+
+- `deliver` in `api/src/mail.ts` sends every event message (invite, nudge,
+  reminders, update, cancel, host alert, digest): email and/or text per
+  person by `channelsFor` (`api/src/channels.ts`, pure, tested). Don't call
+  `sendToList` for an event message; it is for the admin's broadcast.
+  `deliver` returns null when nobody is reachable, like `sendToList` did,
+  and `failedIds` are the people no channel reached (the claims to give back).
+- `listTextable` / `textableWhere` sit beside `listRecipients` /
+  `mailableWhere`: consent (`texts_ok_at`), texts on, a US number, not in
+  `sms_block`. D1 refuses a long GLOB as "too complex", so the SQL checks
+  the number's shape loosely and `textablePhone` exactly.
+- Consent is the host's tick ("they expect a text from me") or the person's
+  own switch, written only by `sms-status.ts`. A host's word only fills a
+  blank on an unclaimed record and is cleared when the number changes
+  (`updateDetails`).
+- `sms_block` is per number, because STOP is: Telnyx blocks the number
+  across the profile. Only START (`unblockNumber`) lifts a `stop`.
+- `text_link` codes are bearer credentials like `link_token`, which they
+  copy; `redeemTextLink` requires the copy to match, so `rotateLinkToken`
+  retires them. `/t/<code>` is served in `server.ts` before TanStack and
+  redirects to `/api/auth/link`. Never log one.
+- `emailsHeld` holds texts too: every `deliver` call sits behind it.
+- Log phones as their last four digits, never whole.
 
 ### D1 limits
 

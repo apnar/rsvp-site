@@ -1,3 +1,5 @@
+import { formatPhone } from "@rsvp-site/db/phone";
+import { canHost } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import {
@@ -14,7 +16,7 @@ import { type ChangeEvent, useState } from "react";
 import { toast } from "sonner";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { ConfirmAction } from "@/components/confirm-action";
-import { Field, SettingRow, Switch } from "@/components/controls";
+import { Field, Segmented, SettingRow, Switch } from "@/components/controls";
 import { Page, PageHead, Panel } from "@/components/page";
 import {
 	changedDetails,
@@ -59,7 +61,7 @@ function AccountPage() {
 			<div className="grid max-w-[1000px] grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-5">
 				<NameAndEmail />
 				<div className="flex flex-col gap-5">
-					<EmailPrefs />
+					<ReachPrefs />
 					<PasswordPanel />
 					<SignOutEverywhere />
 				</div>
@@ -182,9 +184,21 @@ function NameAndEmail() {
 	);
 }
 
-function EmailPrefs() {
+type Channel = "email" | "text" | "both";
+const CHANNEL_LABEL: Record<Channel, string> = {
+	email: "Email",
+	text: "Text",
+	both: "Both",
+};
+
+/**
+ * Email and texts are separate permissions (a STOP reply must not touch
+ * email, an unsubscribe must not touch texts), and the choice of which one
+ * carries invitations is a third thing, so each gets its own row.
+ */
+function ReachPrefs() {
 	const { data: me } = useSuspenseQuery(meQuery());
-	const on = me.unsubscribedAt === null;
+	const emailOn = Boolean(me.email) && me.unsubscribedAt === null;
 	const setEmail = useMutation(
 		orpc.account.setEmail.mutationOptions({
 			onSuccess: (r) => {
@@ -192,25 +206,124 @@ function EmailPrefs() {
 			},
 		}),
 	);
-	// Somebody invited on paper by name alone: there is nothing to switch.
-	if (!me.email) return null;
+	const setTexts = useMutation(
+		orpc.account.setTexts.mutationOptions({
+			onSuccess: (r) => {
+				toast.success(r?.textsOn ? "Texts are on." : "No more texts.");
+			},
+		}),
+	);
+	const setPrefs = useMutation(orpc.account.setContactPrefs.mutationOptions());
+
+	const blocked = me.textBlock !== null;
+	const textsOn = me.textsOn && !blocked;
+	const textsHint = !me.textablePhone
+		? "Add a US mobile number above to get texts."
+		: me.textBlock === "stop"
+			? `You replied STOP from this phone. Text START to ${me.textingFrom} to turn texts back on.`
+			: blocked
+				? "Carriers say this number can't get texts."
+				: textsOn
+					? "On. Below says which messages come this way."
+					: "Off. Invitations still show up on the site.";
+
+	// A channel is offered only if it can work; the one already chosen stays
+	// on the list so the picker never shows nothing selected.
+	const contactBy: Channel = me.contactBy ?? (emailOn ? "email" : "text");
+	const canUse = (c: Channel) =>
+		c === contactBy ||
+		(c === "email" ? emailOn : c === "text" ? textsOn : emailOn && textsOn);
+	const channels = (["email", "text", "both"] as const).filter(canUse);
+	const isHost = canHost(me);
+	const alertsBy = me.alertsBy ?? "same";
+
 	return (
 		<Panel className="gap-1">
-			<h2 className="m-0 mb-2 text-[20px]">Email</h2>
+			<h2 className="m-0 mb-2 text-[20px]">How we reach you</h2>
+			{/* Somebody invited on paper by name alone has no email to switch. */}
+			{me.email ? (
+				<SettingRow
+					title="Email"
+					hint={
+						emailOn
+							? "Invitations, reminders and changes land in your inbox."
+							: `${me.unsubscribeReason ? REASON[me.unsubscribeReason] : "Off."} Invitations still show up on the site.`
+					}
+				>
+					<Switch
+						label="Invitations by email"
+						checked={emailOn}
+						onChange={(value) => setEmail.mutate({ on: value })}
+					/>
+				</SettingRow>
+			) : null}
 			<SettingRow
-				title="Invitations by email"
-				hint={
-					on
-						? "Invitations, reminders and changes land in your inbox."
-						: `${me.unsubscribeReason ? REASON[me.unsubscribeReason] : "Off."} Invitations still show up on the site.`
+				title={
+					me.phone && me.textablePhone
+						? `Texts to ${formatPhone(me.phone)}`
+						: "Texts"
 				}
+				hint={textsHint}
 			>
 				<Switch
-					label="Invitations by email"
-					checked={on}
-					onChange={(value) => setEmail.mutate({ on: value })}
+					label="Invitations by text"
+					checked={textsOn}
+					disabled={!me.textablePhone || blocked || setTexts.isPending}
+					onChange={(value) => setTexts.mutate({ on: value })}
 				/>
 			</SettingRow>
+			{channels.length > 1 ? (
+				<SettingRow
+					title="Invitations and reminders by"
+					hint={
+						me.contactBy === null ? "Our pick for you, for now." : undefined
+					}
+				>
+					<div className="w-full sm:w-auto sm:min-w-[260px]">
+						<Segmented
+							legend="Invitations and reminders by"
+							name="contact-by"
+							options={channels.map((c) => ({
+								value: c,
+								label: CHANNEL_LABEL[c],
+							}))}
+							value={contactBy}
+							onChange={(value) => setPrefs.mutate({ contactBy: value })}
+							disabled={setPrefs.isPending}
+						/>
+					</div>
+				</SettingRow>
+			) : null}
+			{isHost ? (
+				<SettingRow
+					title="Reply alerts by"
+					hint="When a guest answers an event you host. Same follows your choice above."
+				>
+					<div className="w-full sm:w-auto sm:min-w-[340px]">
+						<Segmented
+							legend="Reply alerts by"
+							name="alerts-by"
+							options={[
+								{ value: "same", label: "Same" },
+								...(["email", "text", "both"] as const).map((c) => ({
+									value: c,
+									label: CHANNEL_LABEL[c],
+								})),
+							]}
+							value={alertsBy}
+							onChange={(value) =>
+								setPrefs.mutate({ alertsBy: value === "same" ? null : value })
+							}
+							disabled={setPrefs.isPending}
+						/>
+					</div>
+				</SettingRow>
+			) : null}
+			<p className="m-0 border-line border-t pt-3.5 text-[12px] text-haze">
+				Texts come from {me.textingFrom}. Message and data rates may apply.
+				Reply STOP to stop, HELP for help. See our <a href="/terms">terms</a>{" "}
+				and <a href="/privacy">privacy policy</a>.
+			</p>
 		</Panel>
 	);
 }

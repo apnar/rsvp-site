@@ -8,7 +8,9 @@ import { DRY_RUN_SUFFIX } from "@/content/site";
 import { refreshCard } from "@/lib/design-card";
 import { messageOf } from "@/lib/errors";
 import { plural } from "@/lib/format";
+import { shrinkCoverForText } from "@/lib/shrink-image";
 import { client, orpc } from "@/utils/orpc";
+import { textsUnconfirmed } from "../guest-picker";
 
 import { fieldsOf, type Loaded } from "./form";
 import type { EventDraft } from "./use-event-draft";
@@ -56,6 +58,11 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 		} = draft;
 		const fields = fieldsOf(form);
 		if (!fields.title) throw new Error("Give it a name.");
+		if (!eventId && newPeople && textsUnconfirmed(pick, form.paper)) {
+			throw new Error(
+				"Tick the box about texts, or take out the phone numbers.",
+			);
+		}
 		const words = answerWordsInput.safeParse(fields.answerWords);
 		if (!words.success) {
 			throw new Error(
@@ -71,7 +78,12 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 			notified = (await client.events.update({ eventId: id, fields })).notified;
 		}
 		if (coverFile) {
-			await client.events.uploadCover({ eventId: id, file: coverFile });
+			const mms = await shrinkCoverForText(coverFile);
+			await client.events.uploadCover({
+				eventId: id,
+				file: coverFile,
+				...(mms ? { mms } : {}),
+			});
 		} else if (dropCover && loaded?.event.coverKey) {
 			await client.events.removeCover({ eventId: id });
 		}
@@ -103,6 +115,7 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 				eventId: id,
 				emails: pick.emails,
 				userIds: pick.userIds,
+				textsOk: pick.textsOk,
 			});
 		}
 		if (loaded?.hasDesign) {

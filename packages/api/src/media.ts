@@ -25,6 +25,12 @@ export const imageFile = z
 	.max(5 * 1024 * 1024, "Under 5 MB, please.")
 	.mime([...IMAGE_TYPES], "A JPEG, PNG or WebP, please.");
 
+/** The small JPEG a picture text carries; carriers want it under ~600 KB. */
+export const mmsImage = z
+	.file()
+	.max(600 * 1024, "The text-message picture is too large.")
+	.mime(["image/jpeg"], "The text-message picture must be a JPEG.");
+
 /**
  * A profile picture. The browser crops and renders it to a 512px JPEG
  * itself, so anything bigger or of another type did not come from our page.
@@ -40,7 +46,10 @@ export const avatarFile = z
  * not a conversion.
  */
 export function fileBytes(
-	file: z.output<typeof imageFile> | z.output<typeof avatarFile>,
+	file:
+		| z.output<typeof imageFile>
+		| z.output<typeof avatarFile>
+		| z.output<typeof mmsImage>,
 ): Promise<ArrayBuffer> {
 	return (file as unknown as Blob).arrayBuffer();
 }

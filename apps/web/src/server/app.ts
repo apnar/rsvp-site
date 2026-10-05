@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 
 import { brevoWebhook } from "./brevo-webhook";
+import { telnyxWebhook } from "./telnyx-webhook";
 import { unsubscribe } from "./unsubscribe";
 
 const rpcHandler = new RPCHandler(appRouter, {
@@ -137,7 +138,7 @@ app.get("/designs/:eventId/:name", async (c) => {
 	const { eventId, name } = c.req.param();
 	if (
 		!/^[0-9a-f-]{36}$/.test(eventId) ||
-		!/^(card-)?[0-9a-f-]{36}\.(jpg|png|webp)$/.test(name)
+		!/^(card-)?[0-9a-f-]{36}(-mms)?\.(jpg|png|webp)$/.test(name)
 	) {
 		return c.text("No such image.", 404);
 	}
@@ -155,5 +156,6 @@ app.get("/avatars/:name", async (c) => {
 
 app.route("/unsubscribe", unsubscribe);
 app.route("/brevo/webhook", brevoWebhook);
+app.route("/telnyx/webhook", telnyxWebhook);
 
 app.get("/health", (c) => c.text("OK"));

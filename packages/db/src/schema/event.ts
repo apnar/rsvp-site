@@ -82,6 +82,14 @@ export const event = sqliteTable(
 		cardKey: text("card_key"),
 		cardBasis: text("card_basis"),
 		/**
+		 * Small renditions of the card and the cover for picture texts: a
+		 * carrier refuses an MMS much over 600 KB, and the full-size ones
+		 * can be bigger. Drawn by the browser beside the originals; null on
+		 * pictures from before, when the original goes if it is small enough.
+		 */
+		cardMmsKey: text("card_mms_key"),
+		coverMmsKey: text("cover_mms_key"),
+		/**
 		 * The design's page theme, copied out of the document: mail, the
 		 * share page and the dashboard need its colours and none of the
 		 * rest, and every read of an event row would otherwise drag the
@@ -214,6 +222,10 @@ export const eventHost = sqliteTable(
 export const GUEST_SOURCES = ["host", "group", "guest", "link"] as const;
 export type GuestSource = (typeof GUEST_SOURCES)[number];
 
+/** The channels an invitation went by; the same words as CONTACT_CHANNELS. */
+export const INVITE_CHANNELS = ["email", "text", "both"] as const;
+export type InviteChannel = (typeof INVITE_CHANNELS)[number];
+
 /** What a guest said. No row value at all (null) is "hasn't answered". */
 export const GUEST_RESPONSES = ["yes", "maybe", "no"] as const;
 export type GuestResponse = (typeof GUEST_RESPONSES)[number];
@@ -243,8 +255,10 @@ export const eventGuest = sqliteTable(
 		kids: integer("kids").notNull().default(0),
 		dietary: text("dietary").notNull().default(""),
 		note: text("note").notNull().default(""),
-		/** When the invitation email went out. Null: not sent yet. */
+		/** When the invitation went out. Null: not sent yet. */
 		invitedAt: integer("invited_at", { mode: "timestamp_ms" }),
+		/** How it went: by email, by text, or both. */
+		invitedVia: text("invited_via", { enum: INVITE_CHANNELS }),
 		/**
 		 * The key in this guest's printed QR code. Separate from their
 		 * `link_token` on purpose: the host holds it (it is in the PDF), so it

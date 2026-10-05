@@ -14,6 +14,7 @@ import { z } from "zod";
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
+import { phoneLines } from "@/components/guest-picker";
 import { NativeSelect } from "@/components/native-select";
 import { Page, PageHead, Panel } from "@/components/page";
 import {
@@ -421,11 +422,14 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 
 function AddPeople() {
 	const [emails, setEmails] = useState("");
+	const [textsOk, setTextsOk] = useState(false);
+	const phones = phoneLines(emails);
 	const add = useMutation(
 		orpc.contacts.addPeople.mutationOptions({
 			onSuccess: (r) => {
 				toast.success(`Added ${plural(r.added, "person", "people")}.`);
 				setEmails("");
+				setTextsOk(false);
 			},
 		}),
 	);
@@ -434,7 +438,7 @@ function AddPeople() {
 			as="form"
 			onSubmit={(e) => {
 				e.preventDefault();
-				add.mutate({ emails });
+				add.mutate({ emails, textsOk });
 			}}
 		>
 			<h2 className="m-0 text-[20px]">Add people</h2>
@@ -443,11 +447,22 @@ function AddPeople() {
 					id="book-add"
 					value={emails}
 					placeholder={
-						"Linh Nguyen <linh@example.com> 301-555-1212\nPriya Shah"
+						"Linh Nguyen <linh@example.com> 301-555-1212\nPat Smith 301-555-0101\nPriya Shah"
 					}
 					onChange={(e) => setEmails(e.target.value)}
 				/>
 			</Field>
+			{phones.any ? (
+				<label className="flex cursor-pointer items-start gap-3 text-[14px] text-soft">
+					<input
+						type="checkbox"
+						checked={textsOk}
+						onChange={(e) => setTextsOk(e.target.checked)}
+						className="mt-1 size-4 accent-lime"
+					/>
+					The people whose numbers I added expect a text from me about this.
+				</label>
+			) : null}
 			<p className="m-0 text-[13px] text-haze">
 				Name, email and phone, one person per line. A name alone is fine for
 				paper invitations. Nobody is invited or emailed; they just join your
@@ -457,7 +472,9 @@ function AddPeople() {
 				type="submit"
 				variant="light"
 				className="self-start"
-				disabled={add.isPending || !emails.trim()}
+				disabled={
+					add.isPending || !emails.trim() || (phones.phoneOnly && !textsOk)
+				}
 			>
 				Add to address book
 			</Button>

@@ -1,5 +1,6 @@
 import { runEventMail } from "@rsvp-site/api/jobs/event-mail";
 import { createDb } from "@rsvp-site/db";
+import { redeemTextLink } from "@rsvp-site/db/text-links";
 import { env } from "@rsvp-site/env/server";
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 
@@ -22,9 +23,35 @@ const entry = createServerEntry({
 			url.host = canonical.host;
 			return Response.redirect(url.toString(), 301);
 		}
+		const code = /^\/t\/([0-9A-Za-z]{12})\/?$/.exec(url.pathname)?.[1];
+		if (code && request.method === "GET") {
+			return withSecurityHeaders(await textLink(request, code));
+		}
 		return withSecurityHeaders(await handler.fetch(request, requestOpts));
 	},
 });
+
+/**
+ * A `/t/<code>` link from a text: the short stand-in for an email's
+ * `/api/auth/link?k=...&to=...`, which is where it sends the browser, so
+ * signing in, the deactivated check and `safeReturnPath` are that door's
+ * alone. A code is as good as the sign-in token, so guessing at them is
+ * throttled like the other doors, and one minted under a token that has
+ * since been replaced opens nothing.
+ */
+async function textLink(request: Request, code: string): Promise<Response> {
+	const ip = request.headers.get("cf-connecting-ip") ?? "local";
+	const { success } = await env.AUTH_LIMITER.limit({ key: `/t:${ip}` });
+	if (!success) return new Response("Too many tries.", { status: 429 });
+	const found = await redeemTextLink(createDb(), code);
+	const to = found
+		? `/api/auth/link?k=${found.linkToken}&to=${encodeURIComponent(found.path)}`
+		: "/login?error=link";
+	return new Response(null, {
+		status: 302,
+		headers: { location: to, "cache-control": "no-store" },
+	});
+}
 
 /**
  * Nothing here is meant to be framed (the RSVP buttons and the admin pages

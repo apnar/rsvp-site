@@ -63,6 +63,32 @@ export async function shrinkCover(file: File, max = 1600): Promise<File> {
 	}
 }
 
+/** What the server takes for a picture text's image. */
+export const MMS_MAX_BYTES = 600 * 1024;
+
+/**
+ * The small copy of a cover for picture texts (carriers refuse over ~1 MB).
+ * Null if the browser can't make one: it is optional on the server.
+ */
+export async function shrinkCoverForText(
+	file: File,
+	max = 800,
+): Promise<File | null> {
+	try {
+		const { blob } = await scaleImage(file, {
+			max,
+			type: "image/jpeg",
+			quality: 0.8,
+		});
+		// The server refuses one over 600 KB, which would sink the cover too.
+		return blob.size <= MMS_MAX_BYTES
+			? new File([blob], "cover-mms.jpg", { type: "image/jpeg" })
+			: null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * An image for a design, scaled down in the browser before it goes up, and
  * its size, which the design records so a crop can be worked out anywhere.

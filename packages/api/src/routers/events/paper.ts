@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { firstNameOf } from "@rsvp-site/db/names";
+import { formatPhone } from "@rsvp-site/db/phone";
 import { user } from "@rsvp-site/db/schema/auth";
 import { eventGuest } from "@rsvp-site/db/schema/event";
 import { paperCardUrl } from "@rsvp-site/email/links";
@@ -111,6 +112,7 @@ export const paperRouter = {
 			const header = [
 				"Name",
 				"Email",
+				"Phone",
 				"Answer",
 				"Adults",
 				"Kids",
@@ -126,6 +128,7 @@ export const paperRouter = {
 			const lines = guests.map((g) => [
 				g.name,
 				g.email,
+				formatPhone(g.phone),
 				pickWord(words, g.response),
 				g.response === "yes" ? String(g.adults) : "",
 				g.response === "yes" ? String(g.kids) : "",

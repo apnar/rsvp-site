@@ -20,6 +20,7 @@
 		"@rsvp-site/design": "workspace:*",
 		"@rsvp-site/email": "workspace:*",
 		"@rsvp-site/env": "workspace:*",
+		"@rsvp-site/sms": "workspace:*",
 		"drizzle-orm": "catalog:",
 		"zod": "catalog:"
 	},

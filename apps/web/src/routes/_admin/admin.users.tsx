@@ -1,3 +1,4 @@
+import { formatPhone } from "@rsvp-site/db/phone";
 import type { Role } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
@@ -249,6 +250,16 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 					{p.email}
 					{isYou ? " · you" : ""}
 				</div>
+				{p.phone ? (
+					<div className="truncate text-[13px] text-haze">
+						{formatPhone(p.phone)} ·{" "}
+						{p.textsOffAt
+							? "texts off"
+							: p.textsOkAt
+								? "texts on"
+								: "texts not agreed"}
+					</div>
+				) : null}
 			</div>
 			<span className="flex-[0_0_150px] text-[13px] text-soft">
 				Hosting {p.hosting} · invited {p.invited}

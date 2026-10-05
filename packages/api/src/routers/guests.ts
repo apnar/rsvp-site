@@ -4,8 +4,8 @@ import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import { pickable } from "@rsvp-site/db/families";
 import {
-	createNameOnlyPeople,
 	findOrCreatePeople,
+	nameOnlyFromBook,
 	setRealEmail,
 } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
@@ -15,6 +15,7 @@ import {
 	GUEST_RESPONSES,
 	potluckClaim,
 } from "@rsvp-site/db/schema/event";
+import { vouchForTexts } from "@rsvp-site/db/sms-status";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { answersOf } from "../answer-words";
@@ -94,18 +95,29 @@ export const guestsRouter = {
 				groupIds: z.array(idSchema).max(50).default([]),
 				/** People the caller can see: book, families, own or shared groups. Anybody else is ignored. */
 				userIds: z.array(idSchema).max(1000).default([]),
+				/**
+				 * The host's word that the people whose numbers they typed
+				 * expect a text from them: the consent carriers ask about.
+				 */
+				textsOk: z.boolean().default(false),
 			}),
 		)
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
-			// A paper event may also take bare names, one per line: people
-			// with no address who will only ever have the card.
+			// Lines with a name and no address: on a paper event anybody (the
+			// card is their invitation), elsewhere only with a phone to text.
 			const parsed = parseGuests(input.emails);
 			const typed = parsed.flatMap((t) =>
 				t.email ? [{ ...t, email: t.email }] : [],
 			);
-			const names = row.paper ? parsed.filter((t) => !t.email) : [];
+			const names = parsed.filter((t) => !t.email && (row.paper || t.phone));
+			if (!row.paper && names.length > 0 && !input.textsOk) {
+				throw new ORPCError("BAD_REQUEST", {
+					message:
+						"People added by phone get the invitation by text. Tick the box to say they expect one from you.",
+				});
+			}
 
 			// Groups only count if they are the caller's own -- or anybody's, for
 			// an admin -- so a guessed group id reveals and adds nothing.
@@ -146,7 +158,12 @@ export const guestsRouter = {
 				});
 			}
 			const people = await findOrCreatePeople(context.db, typed, "host");
-			const named = await createNameOnlyPeople(context.db, names, "host");
+			const named = await nameOnlyFromBook(
+				context.db,
+				context.me.id,
+				names,
+				"host",
+			);
 
 			const usable = people.filter((p) => p.status !== "deactivated");
 			const rows = [
@@ -184,6 +201,19 @@ export const guestsRouter = {
 				context.me.id,
 				unique.map((r) => r.userId),
 			);
+			if (input.textsOk) {
+				const phoned = new Set(
+					typed.flatMap((t) => (t.phone ? [t.email] : [])),
+				);
+				await vouchForTexts(
+					context.db,
+					[
+						...usable.filter((p) => phoned.has(p.email)).map((p) => p.id),
+						...named.filter((p) => p.phone).map((p) => p.id),
+					],
+					context.me.id,
+				);
+			}
 			return {
 				added,
 				already: unique.length - added,
@@ -337,6 +367,41 @@ export const guestsRouter = {
 			if (outcome === "not-placeholder") {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "They already have an email address.",
+				});
+			}
+			return { ok: true };
+		}),
+
+	/**
+	 * The host's word, after the fact, that a guest with a phone expects a
+	 * text from them. Only fills a blank on a record nobody has claimed
+	 * (`vouchForTexts`): somebody who switched texts off, or signed in and
+	 * speaks for themselves, is left alone.
+	 */
+	allowTexts: hostProcedure
+		.input(idInput.extend({ guestId: idSchema }))
+		.use(withLiveHostEvent)
+		.handler(async ({ context, input }) => {
+			const guest = await context.db
+				.select({ userId: eventGuest.userId })
+				.from(eventGuest)
+				.where(
+					and(
+						eq(eventGuest.id, input.guestId),
+						eq(eventGuest.eventId, context.event.id),
+					),
+				)
+				.get();
+			if (!guest)
+				throw new ORPCError("NOT_FOUND", { message: "No such guest." });
+			const done = await vouchForTexts(
+				context.db,
+				[guest.userId],
+				context.me.id,
+			);
+			if (done.length === 0) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "They decide about texts themselves now.",
 				});
 			}
 			return { ok: true };

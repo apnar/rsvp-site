@@ -14,10 +14,13 @@ export async function refreshCard(
 	const inputs = await client.designs.cardInputs({ eventId });
 	if (!inputs || (onlyIfStale && !inputs.stale)) return;
 	const { renderCard } = await import("./design-canvas");
-	const blob = await renderCard(inputs.doc, inputs.values);
+	const { blob, mms } = await renderCard(inputs.doc, inputs.values);
 	await client.designs.uploadCard({
 		eventId,
 		card: new File([blob], "card.jpg", { type: "image/jpeg" }),
+		...(mms
+			? { mms: new File([mms], "card-mms.jpg", { type: "image/jpeg" }) }
+			: {}),
 		basis: inputs.basis,
 	});
 }

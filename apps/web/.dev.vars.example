@@ -8,3 +8,10 @@ BREVO_API_KEY=
 # Bearer token for the Brevo transactional webhook (/api/brevo/webhook).
 # See README "Email". Leave empty locally unless you are testing the webhook.
 BREVO_WEBHOOK_SECRET=
+# Telnyx API key. Leave empty to log texts to the console instead of sending.
+TELNYX_API_KEY=
+# The number texts come from (E.164).
+TELNYX_FROM=+13012798944
+# Base64 Ed25519 public key that signs Telnyx webhooks. Leave empty locally
+# unless you are testing /api/telnyx/webhook with a key pair of your own.
+TELNYX_PUBLIC_KEY=

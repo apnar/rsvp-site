@@ -1,7 +1,8 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 
 import { batchAll, inChunks, insertChunks, mapChunks } from "./batch";
 import type { Db } from "./index";
+import { user } from "./schema/auth";
 import { contact, contactGroup, contactGroupMember } from "./schema/contact";
 
 /**
@@ -39,6 +40,41 @@ export async function inBook(
 			.all(),
 	);
 	return new Set(rows.map((r) => r.userId));
+}
+
+/**
+ * The people in the host's book behind these numbers, where exactly one
+ * person there has it. Only the book: matching a number site-wide would
+ * show a host the name and address of whoever else owns it.
+ */
+export async function bookByPhone(
+	db: Db,
+	ownerId: string,
+	phones: readonly string[],
+): Promise<Map<string, string>> {
+	const rows = await mapChunks([...new Set(phones)], (slice) =>
+		db
+			.select({ phone: user.phone, id: user.id })
+			.from(contact)
+			.innerJoin(user, eq(user.id, contact.userId))
+			.where(
+				and(
+					eq(contact.ownerId, ownerId),
+					inArray(user.phone, slice),
+					ne(user.status, "deactivated"),
+				),
+			)
+			.all(),
+	);
+	const ids = new Map<string, string[]>();
+	for (const r of rows) {
+		if (r.phone) ids.set(r.phone, [...(ids.get(r.phone) ?? []), r.id]);
+	}
+	return new Map(
+		[...ids].flatMap(([phone, found]) =>
+			found.length === 1 && found[0] ? [[phone, found[0]] as const] : [],
+		),
+	);
 }
 
 /**

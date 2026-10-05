@@ -1,0 +1,6 @@
+{
+	"extends": "@rsvp-site/config/tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true
+	}
+}

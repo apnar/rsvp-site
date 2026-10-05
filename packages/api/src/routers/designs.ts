@@ -18,7 +18,14 @@ import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { sniffImage } from "../image-type";
 import { hostProcedure } from "../index";
 import { idInput } from "../inputs";
-import { type Env, fileBytes, imageFile, listPrefix, putImage } from "../media";
+import {
+	type Env,
+	fileBytes,
+	imageFile,
+	listPrefix,
+	mmsImage,
+	putImage,
+} from "../media";
 
 /** Uploads an event may hold at once, card images aside. */
 const MAX_IMAGES = 20;
@@ -53,6 +60,19 @@ function isCard(key: string, prefix: string): boolean {
 }
 
 /**
+ * The small picture-text twin of a card is `card-<uuid>-mms.jpg`, so it is
+ * a card to every rule here (pruned with the others, never mistaken for an
+ * unused upload) but not one more card to count: it follows its original.
+ */
+const MMS_SUFFIX = "-mms.jpg";
+function isMms(key: string): boolean {
+	return key.endsWith(MMS_SUFFIX);
+}
+function mmsTwin(key: string): string {
+	return key.replace(/\.[a-z]+$/, MMS_SUFFIX);
+}
+
+/**
  * Delete uploads no design uses (once they are old enough that nobody is
  * mid-edit with them) and card images beyond the newest few.
  */
@@ -65,9 +85,19 @@ async function prune(env: Env, eventId: string, keep: Set<string>) {
 		.filter((o) => !keep.has(o.key) && o.uploaded.getTime() < cutoff)
 		.map((o) => o.key);
 	const cards = objects
-		.filter((o) => isCard(o.key, prefix) && !keep.has(o.key))
+		.filter((o) => isCard(o.key, prefix) && !isMms(o.key) && !keep.has(o.key))
 		.sort((a, b) => b.uploaded.getTime() - a.uploaded.getTime());
-	drop.push(...cards.slice(MAX_CARDS - 1).map((o) => o.key));
+	for (const o of cards.slice(MAX_CARDS - 1)) {
+		drop.push(o.key, mmsTwin(o.key));
+	}
+	// A twin whose card is gone (or was never kept) goes too, unless live.
+	const have = new Set(objects.map((o) => o.key));
+	for (const o of objects) {
+		if (isMms(o.key) && !keep.has(o.key)) {
+			const original = [...have].find((k) => !isMms(k) && mmsTwin(k) === o.key);
+			if (!original) drop.push(o.key);
+		}
+	}
 	if (drop.length > 0) await env.MEDIA.delete(drop);
 }
 
@@ -77,8 +107,8 @@ async function makeRoomForCard(
 	current: string | null,
 ) {
 	const prefix = designPrefix(eventId);
-	const cards = (await listPrefix(env, prefix)).filter((o) =>
-		isCard(o.key, prefix),
+	const cards = (await listPrefix(env, prefix)).filter(
+		(o) => isCard(o.key, prefix) && !isMms(o.key),
 	);
 	if (cards.length < MAX_CARD_FILES) return;
 	const cutoff = Date.now() - CARD_KEEP_MS;
@@ -93,7 +123,9 @@ async function makeRoomForCard(
 			message: "This event has as many card pictures as it can keep.",
 		});
 	}
-	if (old.length > 0) await env.MEDIA.delete(old);
+	if (old.length > 0) {
+		await env.MEDIA.delete(old.flatMap((k) => [k, mmsTwin(k)]));
+	}
 }
 
 /**
@@ -336,7 +368,11 @@ export const designsRouter = {
 			await prune(
 				context.env,
 				row.id,
-				new Set([...refs, ...(row.cardKey ? [row.cardKey] : [])]),
+				new Set([
+					...refs,
+					...(row.cardKey ? [row.cardKey] : []),
+					...(row.cardMmsKey ? [row.cardMmsKey] : []),
+				]),
 			);
 			return { version };
 		}),
@@ -369,7 +405,7 @@ export const designsRouter = {
 	 * was reworded). `basis` is what it was drawn from.
 	 */
 	uploadCard: hostProcedure
-		.input(idInput.extend({ card: cardFile, basis }))
+		.input(idInput.extend({ card: cardFile, mms: mmsImage.optional(), basis }))
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
@@ -388,9 +424,22 @@ export const designsRouter = {
 				{ eventId: row.id, uploadedBy: context.me.id },
 				"card-",
 			);
+			// The rendition is a courtesy: one that doesn't pass is dropped, and
+			// the sender falls back to the card itself if that is small enough.
+			let mmsKey: string | null = null;
+			if (input.mms) {
+				const small = await fileBytes(input.mms);
+				if (sniffImage(small) === "image/jpeg") {
+					mmsKey = mmsTwin(key);
+					await context.env.MEDIA.put(mmsKey, small, {
+						httpMetadata: { contentType: "image/jpeg" },
+						customMetadata: { eventId: row.id, uploadedBy: context.me.id },
+					});
+				}
+			}
 			await context.db
 				.update(event)
-				.set({ cardKey: key, cardBasis: input.basis })
+				.set({ cardKey: key, cardMmsKey: mmsKey, cardBasis: input.basis })
 				.where(eq(event.id, row.id));
 			return { cardKey: key };
 		}),

@@ -19,6 +19,11 @@ import {
 	type Rendered,
 } from "@rsvp-site/email";
 import {
+	dayBeforeText,
+	deadlineReminderText,
+	hostDigestText,
+} from "@rsvp-site/sms";
+import {
 	and,
 	asc,
 	eq,
@@ -31,10 +36,11 @@ import {
 	or,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-
+import { answersOf } from "../answer-words";
 import { cleanTheme, type EventRow, guestCountsOf, hostIdsOf } from "../events";
-import { eventFacts, hostTotals, sendToList } from "../mail";
+import { deliver, eventFacts, hostTotals } from "../mail";
 import { type Due, digestSince, dueEmails } from "../schedule";
+import { hostNameOf, textFactsOf } from "../texting";
 import { addDays, todayOnSite } from "../time";
 
 export type MailOutcome = {
@@ -96,6 +102,7 @@ async function sendStamped(
 	row: EventRow,
 	kind: "deadline_reminder" | "day_before",
 	rendered: Rendered,
+	text: (link: string) => string,
 	to: string[],
 	now: Date,
 ): Promise<MailOutcome> {
@@ -103,13 +110,15 @@ async function sendStamped(
 	if (!(await claim(db, row.id, column, now))) {
 		return { eventId: row.id, kind, sent: 0, failed: 0, quiet: "Taken." };
 	}
-	let result: Awaited<ReturnType<typeof sendToList>>;
+	let result: Awaited<ReturnType<typeof deliver>>;
 	try {
-		result = await sendToList(db, {
+		result = await deliver(db, {
 			kind,
 			eventId: row.id,
+			people: to,
 			rendered,
-			onlyPersonIds: to,
+			text,
+			path: `/e/${row.id}`,
 		});
 	} catch (error) {
 		await release(db, row.id, column);
@@ -157,6 +166,11 @@ async function runDue(
 		due.kind === "deadline_reminder"
 			? deadlineReminderEmail(facts)
 			: dayBeforeEmail(facts);
+	const said = textFactsOf(row, await hostNameOf(db, row));
+	const text =
+		due.kind === "deadline_reminder"
+			? (link: string) => deadlineReminderText(said, link)
+			: (link: string) => dayBeforeText(said, link);
 	if (to.length === 0) {
 		await claim(db, row.id, column, now);
 		return {
@@ -167,7 +181,7 @@ async function runDue(
 			quiet: "Nobody.",
 		};
 	}
-	return sendStamped(db, row, due.kind, rendered, to, now);
+	return sendStamped(db, row, due.kind, rendered, text, to, now);
 }
 
 /**
@@ -257,11 +271,23 @@ async function digestFor(
 		};
 	}
 	const totals = hostTotals(await guestCountsOf(db, row.id));
-	const sent = await sendToList(db, {
+	const words = answersOf(row).words;
+	const sent = await deliver(db, {
 		kind: "host_digest",
 		eventId: row.id,
+		people: await hostIdsOf(db, row.id),
+		purpose: "alerts",
 		rendered: hostDigestEmail(eventFacts(row), lines, totals),
-		onlyPersonIds: await hostIdsOf(db, row.id),
+		text: (link) =>
+			hostDigestText(
+				{
+					title: row.title,
+					lines: lines.map((l) => `${l.name}: ${words[l.response].pick}`),
+					more: 0,
+				},
+				link,
+			),
+		path: `/e/${row.id}/guests`,
 	});
 	return {
 		eventId: row.id,

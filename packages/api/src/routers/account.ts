@@ -1,11 +1,15 @@
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import { APIError } from "@rsvp-site/auth/errors";
-import { findPerson } from "@rsvp-site/db/people";
-import { account } from "@rsvp-site/db/schema/auth";
+import type { Db } from "@rsvp-site/db";
+import { findPerson, type Person } from "@rsvp-site/db/people";
+import { formatPhone, textablePhone } from "@rsvp-site/db/phone";
+import { account, CONTACT_CHANNELS } from "@rsvp-site/db/schema/auth";
+import { blockOf, setContactPrefs, setTexts } from "@rsvp-site/db/sms-status";
 import { resubscribe, unsubscribe } from "@rsvp-site/db/status";
 import { rotateLinkToken } from "@rsvp-site/db/tokens";
 import { getMailer } from "@rsvp-site/email/worker";
+import { textingFrom } from "@rsvp-site/sms/worker";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
@@ -13,6 +17,21 @@ import { removePicture, setPicture } from "../avatar";
 import { detailsPatch, saveDetails } from "../details";
 import { personProcedure } from "../index";
 import { avatarFile } from "../media";
+
+/** Where the account page's texting settings stand. */
+async function textingOf(db: Db, me: Person) {
+	const phone = textablePhone(me.phone);
+	return {
+		contactBy: me.contactBy,
+		alertsBy: me.alertsBy,
+		/** Their number is one this site can text. */
+		textablePhone: phone !== null,
+		textsOn: me.textsOkAt !== null && me.textsOffAt === null,
+		textBlock: await blockOf(db, phone),
+		/** The number to text START to, after a STOP. */
+		textingFrom: formatPhone(textingFrom()),
+	};
+}
 
 /**
  * Somebody's own account. Passwords are optional here: the emailed links are
@@ -40,6 +59,7 @@ export const accountRouter = {
 			role: me.role,
 			unsubscribedAt: me.unsubscribedAt,
 			unsubscribeReason: me.unsubscribeReason,
+			...(await textingOf(context.db, me)),
 		};
 	}),
 
@@ -87,6 +107,36 @@ export const accountRouter = {
 			}
 			const me = await findPerson(context.db, context.me.id);
 			return { unsubscribedAt: me?.unsubscribedAt ?? null };
+		}),
+
+	/**
+	 * Texts on or off. On is the person's own consent, recorded as theirs;
+	 * a STOP from the phone is the number's and only START lifts it.
+	 */
+	setTexts: personProcedure
+		.input(z.object({ on: z.boolean() }))
+		.handler(async ({ context, input }) => {
+			if (input.on && !textablePhone(context.me.phone)) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Add a US mobile number first.",
+				});
+			}
+			await setTexts(context.db, context.me.id, input.on);
+			const me = await findPerson(context.db, context.me.id);
+			return me ? textingOf(context.db, me) : null;
+		}),
+
+	/** How invitations and reminders reach them, and (for hosts) reply alerts. */
+	setContactPrefs: personProcedure
+		.input(
+			z.object({
+				contactBy: z.enum(CONTACT_CHANNELS).nullable().optional(),
+				alertsBy: z.enum(CONTACT_CHANNELS).nullable().optional(),
+			}),
+		)
+		.handler(async ({ context, input }) => {
+			await setContactPrefs(context.db, context.me.id, input);
+			return { ok: true };
 		}),
 
 	/**

@@ -14,6 +14,7 @@ import {
 import { newToken } from "@rsvp-site/db/tokens";
 import { updateEmail } from "@rsvp-site/email";
 import { siteUrl } from "@rsvp-site/email/worker";
+import { updateText } from "@rsvp-site/sms";
 import { and, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import { answersOf, answerWordsInput, toStored } from "../../answer-words";
@@ -43,7 +44,8 @@ import {
 } from "../../host-event";
 import { hostProcedure } from "../../index";
 import { emailSchema, idInput, idSchema } from "../../inputs";
-import { eventFacts, sendToList } from "../../mail";
+import { deliver, eventFacts } from "../../mail";
+import { hostNameOf, textFactsOf } from "../../texting";
 
 // A real calendar date and clock time, not just the right shape: 2026-13-01
 // would otherwise be stored and then throw in formatDate on every page.
@@ -215,12 +217,15 @@ export const editorRouter = {
 			) {
 				const changes = describeChanges(before, after);
 				if (changes.length > 0) {
-					const result = await sendToList(context.db, {
+					const facts = textFactsOf(after, await hostNameOf(context.db, after));
+					const result = await deliver(context.db, {
 						kind: "update",
 						eventId: after.id,
+						people: await stillComing(context.db, after.id),
 						rendered: updateEmail(eventFacts(after), changes),
+						text: (link) => updateText(facts, changes, link),
+						path: `/e/${after.id}`,
 						sentBy: context.me.id,
-						onlyPersonIds: await stillComing(context.db, after.id),
 					});
 					notified = result?.sent ?? 0;
 				}

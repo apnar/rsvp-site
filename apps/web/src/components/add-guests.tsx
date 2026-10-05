@@ -6,7 +6,13 @@ import { toast } from "sonner";
 import { plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
-import { type GuestPick, GuestPicker, hasPick, NO_PICK } from "./guest-picker";
+import {
+	type GuestPick,
+	GuestPicker,
+	hasPick,
+	NO_PICK,
+	textsUnconfirmed,
+} from "./guest-picker";
 import { Panel } from "./page";
 
 /**
@@ -58,7 +64,12 @@ export function AddGuests({
 			className="gap-3.5"
 			onSubmit={(ev) => {
 				ev.preventDefault();
-				add.mutate({ eventId, emails: pick.emails, userIds: pick.userIds });
+				add.mutate({
+					eventId,
+					emails: pick.emails,
+					userIds: pick.userIds,
+					textsOk: pick.textsOk,
+				});
 			}}
 		>
 			<h2 className="m-0 text-[20px]">Invite more</h2>
@@ -72,7 +83,9 @@ export function AddGuests({
 				<Button
 					type="submit"
 					variant="light"
-					disabled={add.isPending || !hasPick(pick)}
+					disabled={
+						add.isPending || !hasPick(pick) || textsUnconfirmed(pick, paper)
+					}
 				>
 					Add
 				</Button>

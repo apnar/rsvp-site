@@ -170,6 +170,9 @@ importers:
       '@rsvp-site/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@rsvp-site/sms':
+        specifier: workspace:*
+        version: link:../../packages/sms
       '@rsvp-site/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -285,6 +288,9 @@ importers:
       '@rsvp-site/env':
         specifier: workspace:*
         version: link:../env
+      '@rsvp-site/sms':
+        specifier: workspace:*
+        version: link:../sms
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@cloudflare/workers-types@5.20260907.1)(@types/pg@8.23.1)(kysely@0.29.5)(pg@8.23.0)
@@ -400,6 +406,22 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+
+  packages/sms:
+    dependencies:
+      '@rsvp-site/env':
+        specifier: workspace:*
+        version: link:../env
+    devDependencies:
+      '@rsvp-site/config':
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.11(@types/node@26.5.0)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13))
 
   packages/ui:
     dependencies:

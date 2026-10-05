@@ -5,6 +5,7 @@ import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
 import { nudgeEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
+import { nudgeText } from "@rsvp-site/sms";
 import { and, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 
@@ -20,7 +21,8 @@ import {
 import { withHostEvent, withLiveHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
 import { idInput, idSchema } from "../../inputs";
-import { eventFacts, sendInvites, sendToList } from "../../mail";
+import { deliver, eventFacts, sendInvites } from "../../mail";
+import { hostNameOf, textFactsOf } from "../../texting";
 
 /** How long before the same person can be nudged again. */
 const NUDGE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
@@ -217,14 +219,17 @@ export const sendingRouter = {
 					now,
 					claimed.map((c) => c.id),
 				);
-			let result: Awaited<ReturnType<typeof sendToList>>;
+			let result: Awaited<ReturnType<typeof deliver>>;
 			try {
-				result = await sendToList(context.db, {
+				const facts = textFactsOf(row, await hostNameOf(context.db, row));
+				result = await deliver(context.db, {
 					kind: "nudge",
 					eventId: row.id,
+					people: claimed.map((c) => c.userId),
 					rendered: nudgeEmail(eventFacts(row)),
+					text: (link) => nudgeText(facts, link),
+					path: `/e/${row.id}`,
 					sentBy: context.me.id,
-					onlyPersonIds: claimed.map((c) => c.userId),
 				});
 			} catch (error) {
 				await giveBack();

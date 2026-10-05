@@ -96,6 +96,12 @@ function RootDocument() {
 						<Link to="/" className="mr-auto no-underline">
 							<Wordmark className="text-[15px] text-haze" />
 						</Link>
+						<Link to="/terms" className="text-haze hover:text-ink">
+							Terms
+						</Link>
+						<Link to="/privacy" className="text-haze hover:text-ink">
+							Privacy
+						</Link>
 						{session ? (
 							<Link to="/account" className="text-haze hover:text-ink">
 								Your account

@@ -33,6 +33,19 @@ export interface CloudflareEnv {
 	 * sends to /api/brevo/webhook. Without it the webhook route answers 404.
 	 */
 	BREVO_WEBHOOK_SECRET?: string;
+	/**
+	 * Secret: `wrangler secret put TELNYX_API_KEY` (or .dev.vars locally).
+	 * Optional: without it texts are logged to the console on localhost and
+	 * refused anywhere else.
+	 */
+	TELNYX_API_KEY?: string;
+	/** Var: the number texts come from, E.164 (wrangler.jsonc `vars`). */
+	TELNYX_FROM: string;
+	/**
+	 * Var: the account's Ed25519 webhook public key, base64 (not a secret).
+	 * Without it /api/telnyx/webhook answers 404.
+	 */
+	TELNYX_PUBLIC_KEY?: string;
 }
 
 declare module "cloudflare:workers" {

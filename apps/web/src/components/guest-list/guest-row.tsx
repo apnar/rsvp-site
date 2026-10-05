@@ -1,6 +1,7 @@
 import type { AnswerSet } from "@rsvp-site/api/answer-words";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
+import { useMutation } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 
@@ -10,6 +11,7 @@ import { PaperActions } from "@/components/paper/paper-actions";
 import { AnswerTag } from "@/components/response-bar";
 import type { Print } from "@/lib/cards-pdf";
 import { initials, plural } from "@/lib/format";
+import { orpc } from "@/utils/orpc";
 import { AddEmail } from "./add-email";
 import { AnswerEditor } from "./answer-editor";
 import { rowSubtitle } from "./row-subtitle";
@@ -46,6 +48,33 @@ export type RowEvent = {
 export const GUEST_COLUMNS =
 	"md:grid md:grid-cols-[max-content_minmax(0,1fr)_fit-content(120px)_fit-content(120px)_fit-content(140px)_minmax(0,1.6fr)_max-content] md:gap-x-5";
 
+/**
+ * What is wrong with reaching a guest, as few pills as will say it: the
+ * email being off, the texts being off or failing, and "Can't reach" only
+ * when nothing above already explains why neither works. A name-only guest
+ * (no email, no number) is not a fault, so it gets none.
+ */
+function rowPills(g: Guest) {
+	const pills: { label: string; title?: string }[] = [];
+	if (g.emailOff) pills.push({ label: "No email" });
+	if (g.textsOff || g.textBlock === "stop") {
+		pills.push({
+			label: "Texts off",
+			title: g.textBlock === "stop" ? "Replied STOP" : "Switched texts off",
+		});
+	}
+	if (g.lastText?.status === "failed") {
+		pills.push({
+			label: "Text failed",
+			title: g.lastText.reason ?? g.textBlock ?? undefined,
+		});
+	}
+	if (g.unreachable && !g.noEmail && pills.length === 0) {
+		pills.push({ label: "Can't reach" });
+	}
+	return pills;
+}
+
 export function GuestRow({
 	guest: g,
 	isYou,
@@ -69,6 +98,7 @@ export function GuestRow({
 	const { nowMs, canNudge, paper, potluck, print } = event;
 	const eventId = event.id;
 	const [editing, setEditing] = useState(false);
+	const allowing = useMutation(orpc.guests.allowTexts.mutationOptions());
 	const waiting = g.response === null;
 	const out = g.response === "no";
 	const sub = rowSubtitle(g, { isYou, paper, nowMs, familyOnList });
@@ -79,6 +109,7 @@ export function GuestRow({
 			: g.source === "link"
 				? "Joined by share link"
 				: null;
+	const pills = rowPills(g);
 	const coming = g.response === "yes" || g.response === "maybe";
 
 	return (
@@ -120,11 +151,15 @@ export function GuestRow({
 						Answered by {g.answeredByName}
 					</span>
 				) : null}
-				{g.unreachable && !g.noEmail ? (
-					<span className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-ink">
-						No email
+				{pills.map((p) => (
+					<span
+						key={p.label}
+						title={p.title}
+						className="rounded-full border border-pink px-2 py-px text-[11px] text-pink-ink"
+					>
+						{p.label}
 					</span>
-				) : null}
+				))}
 			</span>
 			<span
 				className={cn(
@@ -183,6 +218,23 @@ export function GuestRow({
 					<Button variant="pink" size="sm" disabled={nudging} onClick={onNudge}>
 						Send a nudge
 					</Button>
+				) : null}
+				{g.canVouch && !g.textable ? (
+					<ConfirmAction
+						size="xs"
+						confirm="They expect texts from me"
+						cancel="Never mind"
+						confirmVariant="default"
+						pending={allowing.isPending}
+						onConfirm={(close) =>
+							allowing.mutate({ eventId, guestId: g.id }, { onSuccess: close })
+						}
+						trigger={{
+							variant: "outline",
+							size: "xs",
+							children: "Allow texts",
+						}}
+					/>
 				) : null}
 				<ConfirmAction
 					size="xs"

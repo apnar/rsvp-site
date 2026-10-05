@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+	type AnySQLiteColumn,
 	index,
 	integer,
 	sqliteTable,
@@ -52,6 +53,14 @@ export const UNSUBSCRIBE_REASONS = [
 	"invalid",
 ] as const;
 export type UnsubscribeReason = (typeof UNSUBSCRIBE_REASONS)[number];
+
+/**
+ * How somebody wants invitations and reminders: by email, by text, or both.
+ * Null is the site's default (`channelsFor` in packages/api): email when
+ * they have a working address, a text otherwise.
+ */
+export const CONTACT_CHANNELS = ["email", "text", "both"] as const;
+export type ContactChannel = (typeof CONTACT_CHANNELS)[number];
 
 /** Where the placeholder addresses of name-only paper guests live. */
 export const NO_EMAIL_DOMAIN = "no-email.invalid";
@@ -138,6 +147,26 @@ export const user = sqliteTable("user", {
 	unsubscribeReason: text("unsubscribe_reason", {
 		enum: UNSUBSCRIBE_REASONS,
 	}),
+
+	/** One of CONTACT_CHANNELS, or null for the site's default. */
+	contactBy: text("contact_by", { enum: CONTACT_CHANNELS }),
+	/** The same choice for a host's reply alerts; null follows `contact_by`. */
+	alertsBy: text("alerts_by", { enum: CONTACT_CHANNELS }),
+	/**
+	 * The consent behind texting this number: a host ticking "they expect a
+	 * text from me" when typing it (`texts_ok_by` is that host), or the
+	 * person switching texts on themselves (`texts_ok_by` is them). Carriers
+	 * ask how every recipient agreed; nobody without it is ever texted.
+	 */
+	textsOkAt: integer("texts_ok_at", { mode: "timestamp_ms" }),
+	textsOkBy: text("texts_ok_by").references((): AnySQLiteColumn => user.id, {
+		onDelete: "set null",
+	}),
+	/**
+	 * They switched texts off on the account page. A STOP from the phone is
+	 * not here but in `sms_block`, because it belongs to the number.
+	 */
+	textsOffAt: integer("texts_off_at", { mode: "timestamp_ms" }),
 
 	createdAt: integer("created_at", { mode: "timestamp_ms" })
 		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)

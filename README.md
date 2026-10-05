@@ -184,6 +184,50 @@ Rules, all unit-tested in `packages/api/src/schedule.test.ts`:
 - **Moving the date or the deadline re-arms** the reminders that belonged to the old one.
 - **Read, claim, send.** `jobs/event-mail.ts` reads who it would go to, claims the stamp with `UPDATE ... WHERE col IS NULL` (`meta.changes === 1` is the lock), sends, and gives the stamp back if every batch failed. The digest repeats, so its claim is "older than this morning's slot" instead. Two overlapping passes cannot both send.
 
+## Text messages
+
+Telnyx delivers texts; the app decides who gets one, keeps the log and the opt-outs. Every event message goes through `deliver` in `packages/api/src/mail.ts`, which sends each person the channels `channelsFor` (`packages/api/src/channels.ts`) picks: their own choice on the account page (email, text or both), or by default email when they can get it and a text when they can't.
+
+- **Who can be texted.** `textableWhere` / `listTextable` in `packages/db/src/people.ts`: a US number, not deactivated, texts not switched off, the number not in `sms_block`, and consent on record (`texts_ok_at`). Consent is a host ticking "they expect a text from me" when typing numbers (`guests.add`, `contacts.addPeople`, or "Allow texts" on a guest row), or the person switching texts on. A host's word only fills a blank on a record nobody has claimed, and goes when the number changes.
+- **Guests by phone.** "Pat Smith 301-555-0101" on its own line makes a name-only guest with that number, on any event. A number already in the host's book is that person.
+- **Links.** Each text carries `/t/<code>` (`text_link`), a 12-character stand-in for the email's `/api/auth/link?k=...`, which is where the Worker entry (`apps/web/src/server.ts`) redirects. A code holds a copy of the person's `link_token` and works only while they match, so a new sign-in link retires every code.
+- **Pictures.** Invitations go as MMS with the card (design on) or the cover: the small rendition (`card_mms_key` / `cover_mms_key`, drawn in the browser) or the original if it is under 600 KB, otherwise no picture. Everything else is plain SMS.
+- **STOP, START, HELP.** Telnyx answers them and blocks a STOPped number itself; the webhook (`apps/web/src/server/telnyx-webhook.ts`, Ed25519-signed with `TELNYX_PUBLIC_KEY`) mirrors that into `sms_block`, which is per number, not per person. A final failure that says landline or invalid number blocks it too. Anything else texted in is emailed to `info@` and gets one "we can't read replies" per day.
+- **Sign-in by text.** The login page's field takes a number: `people.requestTextLink` texts a link for each active person with it (at most three), once per ten minutes per number.
+- **Log.** One `sms_send` row per text, updated by the webhook (queued, sent, delivered, failed with Telnyx's code). Hosts see the last one per guest; `/admin/email` lists the recent ones and sends a test to your own phone.
+- **Dry run.** Without `TELNYX_API_KEY` on localhost each text is printed to the dev console, link included. Anywhere else a missing key fails the send.
+
+Setting it up:
+
+| What | Value |
+|---|---|
+| Number | +1 301-279-8944, messaging profile "RSVP" (`4001a103-e3d4-43c7-865b-6154c3154cc1`) |
+| Webhook | `https://rsvp.botch.com/api/telnyx/webhook`, set on the profile |
+| Vars | `TELNYX_FROM`, `TELNYX_PUBLIC_KEY` in `wrangler.jsonc` (the public key is from `GET /v2/public_key`) |
+| Secret | `TELNYX_API_KEY`: `pnpm --filter web exec wrangler secret put TELNYX_API_KEY < ~/.config/rsvp-site/telnyx-key` |
+
+To test the webhook locally, put a test key pair's public half in `.dev.vars` as `TELNYX_PUBLIC_KEY` and sign `<timestamp>|<body>` with the private half.
+
+Costs, roughly: $0.004 per SMS segment and $0.015 per MMS, plus carrier fees (about $0.003-0.005 per SMS, $0.007-0.01 per MMS). The profile has a daily spend limit ($5 when set up); a full MMS invitation to 200 people is about that.
+
+### 10DLC registration
+
+US carriers refuse texts from an unregistered local number (Telnyx error 40010). The brand is a sole proprietor; the campaign, in the Telnyx portal (Messaging > 10DLC > Campaigns), uses this:
+
+- **Use case:** Mixed (or "Account Notification" if Mixed isn't offered to a sole proprietor).
+- **Description:** Botch RSVP (rsvp.botch.com) is a small party-invitation site. Hosts invite friends and family to their own gatherings; guests receive the invitation by text with a link to RSVP, followed by reminders before the RSVP deadline and the day before, notices if the date, time or place changes or the event is canceled, and, on request, sign-in links. Hosts can choose to get a text when a guest replies. No marketing or promotional messages are sent.
+- **How people opt in:** A host adds a guest's mobile number to an invitation on rsvp.botch.com and must tick "The people whose numbers I added expect a text from me about this" before it can be sent; the host knows the guest personally. The first text names the host and the event and says "Reply STOP to opt out". People can also turn texts on or off themselves on their account page (rsvp.botch.com/account), and request a sign-in link by entering their own number on rsvp.botch.com/login. Terms: https://rsvp.botch.com/terms. Privacy: https://rsvp.botch.com/privacy.
+- **Sample messages:**
+  1. Botch RSVP: Josh invited you to Halloween Party, Sat, Oct 31 at 7:00 PM. See the invitation and RSVP: https://rsvp.botch.com/t/Ab3dE5fG7hJ9 Reply STOP to opt out.
+  2. Botch RSVP: Please RSVP by Sat, Oct 24 for Halloween Party, Sat, Oct 31 at 7:00 PM: https://rsvp.botch.com/t/Ab3dE5fG7hJ9 Reply STOP to opt out.
+  3. Botch RSVP: Tomorrow: Halloween Party at 7:00 PM, 12 Elm St. Details: https://rsvp.botch.com/t/Ab3dE5fG7hJ9 Reply STOP to opt out.
+  4. Botch RSVP: Pat Smith answered Yes (2 adults) for Halloween Party. Guest list: https://rsvp.botch.com/t/Kx2mP9qR4sT7 Reply STOP to opt out.
+  5. Botch RSVP: your sign-in link: https://rsvp.botch.com/t/Zq8wE3rT6yU1 Didn't ask? Ignore this.
+- **Attributes:** embedded links yes, embedded phone numbers no, age-gated no, direct lending no, subscriber opt-in yes, opt-out yes, help yes.
+- **Opt-in keywords:** START. **Opt-out keywords:** STOP, UNSUBSCRIBE, CANCEL, END, QUIT. **Help keyword:** HELP.
+- **Help message:** Botch RSVP: party invitations and RSVP updates. Help: info@rsvp.botch.com. Msg&data rates may apply. Reply STOP to opt out.
+- **Opt-out message:** Botch RSVP: you won't get more texts from us. Reply START to get them again.
+
 ## Database changes
 
 1. Edit the schema in `packages/db/src/schema`.

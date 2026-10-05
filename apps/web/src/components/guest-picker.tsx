@@ -239,12 +239,43 @@ export type GuestPick = {
 	userIds: string[];
 	/** UI only, never sent: keys of the open chips, so NO_PICK closes them. */
 	chips: string[];
+	/** The host's word that the people whose numbers they typed expect texts. */
+	textsOk: boolean;
 };
 
-export const NO_PICK: GuestPick = { emails: "", userIds: [], chips: [] };
+export const NO_PICK: GuestPick = {
+	emails: "",
+	userIds: [],
+	chips: [],
+	textsOk: false,
+};
 
 export const hasPick = (v: GuestPick) =>
 	v.emails.trim().length > 0 || v.userIds.length > 0;
+
+/**
+ * Whether the text has a phone number on a line, and whether some line has
+ * only one (no "@"). The server is the judge of what parses; this only
+ * decides when to ask the host for their word about texts, so a loose
+ * "ten or more digits" test is enough.
+ */
+export function phoneLines(emails: string) {
+	const phones = emails
+		.split(/\r?\n|[;,]/)
+		.filter((l) => (l.match(/\d/g) ?? []).length >= 10);
+	return {
+		any: phones.length > 0,
+		phoneOnly: phones.some((l) => !l.includes("@")),
+	};
+}
+
+/**
+ * A phone-only line on an emailed event becomes a guest only if the host
+ * says they expect a text, so submitting waits for the box. Paper events
+ * need no word: nobody is texted until the host does it deliberately.
+ */
+export const textsUnconfirmed = (v: GuestPick, paper: boolean) =>
+	!paper && !v.textsOk && phoneLines(v.emails).phoneOnly;
 
 /**
  * The one way a host chooses guests, for a new event and for one already
@@ -328,11 +359,24 @@ export function GuestPicker({
 				value={value.emails}
 				placeholder={
 					paper
-						? "Linh Nguyen <linh@example.com> 301-555-1212\nPriya Shah\n\nOne guest per line: name, email, phone. A name alone works for a card-only guest."
-						: "Linh Nguyen <linh@example.com> 301-555-1212\npriya@example.com\n\nOne guest per line: name, email, phone. An email alone works too."
+						? "Linh Nguyen <linh@example.com> 301-555-1212\nPat Smith 301-555-0101\nPriya Shah\n\nOne guest per line: name, email, phone. A name alone works for a card-only guest."
+						: "Linh Nguyen <linh@example.com> 301-555-1212\nPat Smith 301-555-0101\npriya@example.com\n\nOne guest per line: name, email, phone. An email or a phone alone works too."
 				}
 				onChange={(ev) => onChange({ ...value, emails: ev.target.value })}
 			/>
+			{phoneLines(value.emails).any ? (
+				<label className="flex cursor-pointer items-start gap-3 text-[14px] text-soft">
+					<input
+						type="checkbox"
+						checked={value.textsOk}
+						onChange={(ev) =>
+							onChange({ ...value, textsOk: ev.target.checked })
+						}
+						className="mt-1 size-4 accent-lime"
+					/>
+					The people whose numbers I added expect a text from me about this.
+				</label>
+			) : null}
 			<span className="text-[13px] text-haze">
 				{paper
 					? "Each guest answers with the QR code on their card. Nobody is emailed until you start emails."

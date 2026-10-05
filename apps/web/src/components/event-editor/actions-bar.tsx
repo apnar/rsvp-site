@@ -1,5 +1,6 @@
 import { Button } from "@rsvp-site/ui/components/button";
 
+import { textsUnconfirmed } from "@/components/guest-picker";
 import { plural } from "@/lib/format";
 
 import { CancelEvent } from "./cancel-event";
@@ -18,7 +19,7 @@ export function ActionsBar({
 	draft: EventDraft;
 	save: SaveEvent;
 }) {
-	const { form, moved, newPeople } = draft;
+	const { form, moved, newPeople, pick } = draft;
 	const { busy, run } = save;
 	const eventId = loaded?.event.id;
 	const status = loaded?.event.status ?? "draft";
@@ -66,7 +67,7 @@ export function ActionsBar({
 					<Button
 						variant="send"
 						size="lg"
-						disabled={busy || !form.date}
+						disabled={busy || !form.date || textsUnconfirmed(pick, form.paper)}
 						onClick={() => run("send")}
 					>
 						{sendLabel(form.paper, status, sendCount)}

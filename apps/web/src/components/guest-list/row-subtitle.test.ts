@@ -16,6 +16,9 @@ const base = {
 	hasPaper: false,
 	noEmail: false,
 	viewedAt: null,
+	phone: null,
+	invitedVia: null,
+	textable: false,
 } as const;
 
 const email = { isYou: false, paper: false, nowMs };
@@ -98,6 +101,39 @@ describe("rowSubtitle", () => {
 		);
 		expect(rowSubtitle({ ...base, hasPaper: true }, paper)).toBe(
 			"linh@example.com · paper invite",
+		);
+	});
+	it("says how an invitation went out", () => {
+		const invitedAt = new Date("2026-09-30T15:00:00Z");
+		expect(
+			rowSubtitle({ ...base, invitedAt, invitedVia: "email" }, email),
+		).toBe("linh@example.com · invited Sep 30");
+		expect(
+			rowSubtitle(
+				{
+					...base,
+					email: "",
+					phone: "+13015550101",
+					invitedAt,
+					invitedVia: "text",
+				},
+				email,
+			),
+		).toBe("(301) 555-0101 · invited by text Sep 30");
+		expect(
+			rowSubtitle(
+				{ ...base, phone: "+13015550101", invitedAt, invitedVia: "both" },
+				email,
+			),
+		).toBe("linh@example.com · invited by email and text Sep 30");
+	});
+	it("knows a guest with only a phone by their number", () => {
+		const pat = { ...base, email: "", noEmail: true, phone: "+13015550101" };
+		expect(rowSubtitle({ ...pat, textable: true }, email)).toBe(
+			"(301) 555-0101 · not invited yet",
+		);
+		expect(rowSubtitle(pat, email)).toBe(
+			"(301) 555-0101 · you answer for them",
 		);
 	});
 	it("says an emailed guest is not invited yet", () => {

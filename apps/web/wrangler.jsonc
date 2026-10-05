@@ -34,7 +34,12 @@
 	"vars": {
 		// Canonical public origin of the site. Better Auth uses it for cookies
 		// and callbacks, and src/server.ts redirects other hosts to it.
-		"BETTER_AUTH_URL": "https://rsvp.botch.com"
+		"BETTER_AUTH_URL": "https://rsvp.botch.com",
+		// Telnyx texting: the sending number, and the key webhooks are signed
+		// with. Both are public; the API key is a secret (`wrangler secret put
+		// TELNYX_API_KEY`).
+		"TELNYX_FROM": "+13012798944",
+		"TELNYX_PUBLIC_KEY": "ZKUhQnW3iIW64mvL0hI5S1SM7qmzMVeDv0axpPRVKhs="
 	},
 	"r2_buckets": [
 		{
