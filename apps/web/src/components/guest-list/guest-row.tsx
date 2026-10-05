@@ -35,6 +35,17 @@ export type RowEvent = {
 	answers: AnswerSet;
 };
 
+/**
+ * The guest list's grid, which every row takes as a subgrid. Shared, the
+ * columns size to what the whole list holds: the actions column is as wide
+ * as the widest row's buttons rather than a fixed allowance for a nudge
+ * most rows never show, and a column nobody on the list fills (bringing,
+ * with no potluck) closes up. The notes get what that frees. The edge
+ * columns are max-content because a subgrid's padding lands in them.
+ */
+export const GUEST_COLUMNS =
+	"md:grid md:grid-cols-[max-content_minmax(0,1fr)_fit-content(120px)_fit-content(120px)_fit-content(140px)_minmax(0,1.6fr)_max-content] md:gap-x-5";
+
 export function GuestRow({
 	guest: g,
 	isYou,
@@ -73,12 +84,9 @@ export function GuestRow({
 	return (
 		<div
 			className={cn(
-				"relative flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4 max-md:pr-12 md:grid",
-				// One fixed actions column per kind of event, so the tags line up
-				// down the list whatever buttons a row has.
-				paper
-					? "md:grid-cols-[44px_minmax(0,1.3fr)_96px_110px_120px_minmax(0,1fr)_290px]"
-					: "md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_220px]",
+				// The columns are the list's (`GUEST_COLUMNS`), so they line up
+				// down it whatever each row holds.
+				"relative flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4 max-md:pr-12 md:col-span-full md:grid md:grid-cols-subgrid",
 				waiting && "border border-line-strong border-dashed",
 				out && "bg-panel-dim text-haze",
 				!waiting && !out && "bg-panel",
@@ -104,7 +112,7 @@ export function GuestRow({
 			{/* Every column is drawn on every row, empty or not, so the tags and
 			    the counts line up down the list; the empties drop out on a phone,
 			    where the row wraps anyway. */}
-			<span className="flex w-[96px] flex-col items-start gap-1">
+			<span className="flex flex-col items-start gap-1 max-md:w-[96px]">
 				<AnswerTag response={g.response} words={event.answers.words} />
 				{g.answeredByName && g.response !== null ? (
 					<span className="text-[11px] text-haze">

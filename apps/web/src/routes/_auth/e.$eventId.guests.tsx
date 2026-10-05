@@ -11,7 +11,11 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
 import { EventCrumbs, EventTitleLink } from "@/components/event-crumbs";
-import { GuestRow, type RowEvent } from "@/components/guest-list/guest-row";
+import {
+	GUEST_COLUMNS,
+	GuestRow,
+	type RowEvent,
+} from "@/components/guest-list/guest-row";
 import { GuestLegend } from "@/components/guest-list/legend";
 import { guestSections, viewedLabel } from "@/components/guest-list/sections";
 import { Notice } from "@/components/notice";
@@ -348,39 +352,41 @@ function GuestListPage() {
 					/>
 				</div>
 				<GuestLegend guests={data.guests} youId={session.user.id} />
-				{sections.map((section) => (
-					<section
-						key={section.key}
-						aria-labelledby={`section-${section.key}`}
-						className="flex flex-col gap-2"
-					>
-						<h2
-							id={`section-${section.key}`}
-							className="kicker m-0 mt-2 text-soft"
+				<div className={cn("flex flex-col gap-3.5", GUEST_COLUMNS)}>
+					{sections.map((section) => (
+						<section
+							key={section.key}
+							aria-labelledby={`section-${section.key}`}
+							className="flex flex-col gap-2 md:col-span-full md:grid md:grid-cols-subgrid"
 						>
-							{section.label}{" "}
-							<span className="tnum text-haze">{section.guests.length}</span>
-						</h2>
-						{section.guests.map((g) => (
-							<GuestRow
-								familyOnList={
-									g.familyId !== null &&
-									data.guests.some(
-										(o) => o.id !== g.id && o.familyId === g.familyId,
-									)
-								}
-								key={g.id}
-								guest={g}
-								isYou={g.userId === session.user.id}
-								event={rowEvent}
-								nudging={nudge.isPending}
-								onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
-								onRemove={() => remove.mutate({ eventId, guestId: g.id })}
-								removing={remove.isPending}
-							/>
-						))}
-					</section>
-				))}
+							<h2
+								id={`section-${section.key}`}
+								className="kicker m-0 mt-2 text-soft md:col-span-full"
+							>
+								{section.label}{" "}
+								<span className="tnum text-haze">{section.guests.length}</span>
+							</h2>
+							{section.guests.map((g) => (
+								<GuestRow
+									familyOnList={
+										g.familyId !== null &&
+										data.guests.some(
+											(o) => o.id !== g.id && o.familyId === g.familyId,
+										)
+									}
+									key={g.id}
+									guest={g}
+									isYou={g.userId === session.user.id}
+									event={rowEvent}
+									nudging={nudge.isPending}
+									onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
+									onRemove={() => remove.mutate({ eventId, guestId: g.id })}
+									removing={remove.isPending}
+								/>
+							))}
+						</section>
+					))}
+				</div>
 				<span className="text-[13px] text-haze">
 					Showing {shown.length} of {plural(data.guests.length, "guest")}
 				</span>
