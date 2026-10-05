@@ -212,21 +212,31 @@ Costs, roughly: $0.004 per SMS segment and $0.015 per MMS, plus carrier fees (ab
 
 ### 10DLC registration
 
-US carriers refuse texts from an unregistered local number (Telnyx error 40010). The brand is a sole proprietor; the campaign, in the Telnyx portal (Messaging > 10DLC > Campaigns), uses this:
+US carriers refuse texts from an unregistered local number (Telnyx error 40010). Registered through the API on 2026-10-05:
 
-- **Use case:** Mixed (or "Account Notification" if Mixed isn't offered to a sole proprietor).
-- **Description:** Botch RSVP (rsvp.botch.com) is a small party-invitation site. Hosts invite friends and family to their own gatherings; guests receive the invitation by text with a link to RSVP, followed by reminders before the RSVP deadline and the day before, notices if the date, time or place changes or the event is canceled, and, on request, sign-in links. Hosts can choose to get a text when a guest replies. No marketing or promotional messages are sent.
-- **How people opt in:** A host adds a guest's mobile number to an invitation on rsvp.botch.com and must tick "The people whose numbers I added expect a text from me about this" before it can be sent; the host knows the guest personally. The first text names the host and the event and says "Reply STOP to opt out". People can also turn texts on or off themselves on their account page (rsvp.botch.com/account), and request a sign-in link by entering their own number on rsvp.botch.com/login. Terms: https://rsvp.botch.com/terms. Privacy: https://rsvp.botch.com/privacy.
-- **Sample messages:**
+| What | Value |
+|---|---|
+| Brand | sole proprietor "Botch RSVP", `4b2001a1-0cad-6873-929a-b9bfcaa9eead` (TCR `BH1KGAH`), identity verified by the PIN texted to the owner's mobile |
+| Campaign | `4b3001a1-0cb2-863b-6c18-b6c494eda28b`, use case `SOLE_PROPRIETOR` (the only one a sole-proprietor brand may use), sub-use case `ACCOUNT_NOTIFICATION`; $24 a year |
+| After approval | attach +1 301-279-8944 to the campaign (`POST /v2/10dlc/phone_number_campaigns`); a sole-proprietor campaign carries exactly one number. Carriers cap it at about 15 texts a minute on AT&T and 1,000 a day on T-Mobile |
+
+Two things that bit: the portal saved the brand's mobile number without its `1` (`+30...`, read as Greece), which the registry refused as "not a mobile", and an update didn't fix it, so the brand was deleted and created again through the API with `+1...`. And Telnyx won't submit a campaign with less than $30 on the account.
+
+What the campaign says (`POST /v2/10dlc/campaignBuilder`):
+
+- **Description:** Botch RSVP (rsvp.botch.com) is a small party-invitation site run by Joshua Lukens. Hosts invite friends and family to their own gatherings. Guests receive the invitation by text with a link to view it and RSVP, followed by reminders before the RSVP deadline and the day before, notices if the date, time or place changes or the event is canceled, and sign-in links they request. Hosts can choose to get a text when a guest replies. No marketing or promotional messages are sent.
+- **How people opt in:** A host adds a guest's mobile number to an invitation on rsvp.botch.com and must tick the box "The people whose numbers I added expect a text from me about this" before it can be sent; hosts invite people they know personally. The first text names the host and the event and ends "Reply STOP to opt out". People can also turn texts on or off themselves on their account page, and request a sign-in link by entering their own number at rsvp.botch.com/login. Terms: https://rsvp.botch.com/terms. Privacy: https://rsvp.botch.com/privacy.
+- **Samples:**
   1. Botch RSVP: Josh invited you to Halloween Party, Sat, Oct 31 at 7:00 PM. See the invitation and RSVP: https://rsvp.botch.com/t/Ab3dE5fG7hJ9 Reply STOP to opt out.
   2. Botch RSVP: Please RSVP by Sat, Oct 24 for Halloween Party, Sat, Oct 31 at 7:00 PM: https://rsvp.botch.com/t/Ab3dE5fG7hJ9 Reply STOP to opt out.
   3. Botch RSVP: Tomorrow: Halloween Party at 7:00 PM, 12 Elm St. Details: https://rsvp.botch.com/t/Ab3dE5fG7hJ9 Reply STOP to opt out.
   4. Botch RSVP: Pat Smith answered Yes (2 adults) for Halloween Party. Guest list: https://rsvp.botch.com/t/Kx2mP9qR4sT7 Reply STOP to opt out.
   5. Botch RSVP: your sign-in link: https://rsvp.botch.com/t/Zq8wE3rT6yU1 Didn't ask? Ignore this.
-- **Attributes:** embedded links yes, embedded phone numbers no, age-gated no, direct lending no, subscriber opt-in yes, opt-out yes, help yes.
-- **Opt-in keywords:** START. **Opt-out keywords:** STOP, UNSUBSCRIBE, CANCEL, END, QUIT. **Help keyword:** HELP.
-- **Help message:** Botch RSVP: party invitations and RSVP updates. Help: info@rsvp.botch.com. Msg&data rates may apply. Reply STOP to opt out.
-- **Opt-out message:** Botch RSVP: you won't get more texts from us. Reply START to get them again.
+- **Flags:** embedded links yes, embedded phone numbers no, age-gated no, direct lending no, affiliate marketing no, opt-in, opt-out and help yes.
+- **Keywords:** HELP, INFO; START, UNSTOP; STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT.
+- **Help:** Botch RSVP: party invitations and RSVP updates. Help: info@rsvp.botch.com. Msg&data rates may apply. Reply STOP to opt out.
+- **Opt-in:** Botch RSVP: texts are back on. Msg&data rates may apply. Reply HELP for help, STOP to opt out.
+- **Opt-out:** Botch RSVP: you won't get more texts from us. Reply START to get them again.
 
 ## Database changes
 
