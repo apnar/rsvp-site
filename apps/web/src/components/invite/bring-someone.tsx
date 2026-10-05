@@ -14,7 +14,14 @@ import type { Invite } from "./types";
  * People a guest brings see none of this: they get their own plus-ones and
  * nothing more, which is what keeps the list from running away.
  */
-export function BringSomeone({ data }: { data: Invite }) {
+export function BringSomeone({
+	data,
+	preview = false,
+}: {
+	data: Invite;
+	/** A host looking at the page as a guest: nobody is invited. */
+	preview?: boolean;
+}) {
 	const [email, setEmail] = useState("");
 	const me = data.me;
 	const invite = useMutation(
@@ -74,6 +81,10 @@ export function BringSomeone({ data }: { data: Invite }) {
 					className="flex flex-wrap gap-2"
 					onSubmit={(ev) => {
 						ev.preventDefault();
+						if (preview) {
+							toast("This is a preview. Guests invite friends here.");
+							return;
+						}
 						invite.mutate({ eventId: data.event.id, email });
 					}}
 				>

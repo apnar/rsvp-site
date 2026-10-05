@@ -17,7 +17,10 @@ import { inviteRefusal, invitesLeft } from "../../guest-invites";
 import { headcount, tally } from "../../headcount";
 import { startsAt } from "../../schedule";
 
-/** The page a guest sees. Hosts see the same page, with everything. */
+/**
+ * The page a guest sees. Hosts see the same page, as a guest would, and
+ * get the controls from the guest list and the editor.
+ */
 export async function invitePayload(
 	db: Db,
 	me: Addressee & { id: string },
@@ -44,9 +47,8 @@ export async function invitePayload(
 	const myClaims = mine
 		? (potluck.byGuest.get(mine.id) ?? []).map((c) => c.itemId)
 		: [];
-	const showNames = row.showGuestNames || access.isHost;
 	const names = (answer: "yes" | "maybe") =>
-		showNames
+		row.showGuestNames
 			? guests.filter((g) => g.response === answer).map((g) => g.name)
 			: [];
 	const start = startsAt(row);
@@ -111,6 +113,10 @@ export async function invitePayload(
 				}
 			: null,
 		viewerId: me.id,
+		// What a guest the hosts chose would be offered, for a host who is
+		// not on the list and sees the page as one. Guests have `canInvite`.
+		guestsMayInvite:
+			access.isHost && inviteRefusal(row, { source: "host" }) === null,
 		totals,
 		headcount: headcount(totals),
 		crowd: { yes: names("yes"), maybe: names("maybe") },

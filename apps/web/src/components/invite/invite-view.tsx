@@ -13,28 +13,24 @@ import type { Invite } from "./types";
 
 /**
  * The invitation as a guest sees it: hero, countdown, the details and the
- * crowd, with `aside` (the answer form, or a host's way to the controls)
- * beside them. The page decides what goes in `aside`.
+ * crowd, with `aside` (the answer form) beside them. A host gets the same
+ * page under `banner`, so what they check is what guests will get.
  */
 export function InviteView({
 	data,
 	aside,
+	banner,
 }: {
 	data: Invite;
 	aside: ReactNode;
+	banner?: ReactNode;
 }) {
 	const e = data.event;
 	const canceled = e.status === "canceled";
-	const statusLabel = canceled
-		? "Canceled"
-		: data.me
-			? "You're on the list"
-			: e.status === "draft"
-				? "Draft · only hosts see this"
-				: "You're hosting";
 
 	return (
 		<div>
+			{banner}
 			<EventHero
 				header={<SiteHeader overlay />}
 				coverKey={e.coverKey}
@@ -54,8 +50,8 @@ export function InviteView({
 				}
 				centered
 				size="page"
-				tone={canceled ? "ink" : data.me ? "lime" : "pink"}
-				status={statusLabel}
+				tone={canceled ? "ink" : "lime"}
+				status={canceled ? "Canceled" : "You're on the list"}
 				title={e.title}
 				dateLabel={e.dateLabel}
 				timeLabel={e.timeLabel}

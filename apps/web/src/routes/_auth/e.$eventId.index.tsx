@@ -1,10 +1,12 @@
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { z } from "zod";
 import { BringSomeone } from "@/components/invite/bring-someone";
-import { HostPanel } from "@/components/invite/host-panel";
+import { HostBar } from "@/components/invite/host-bar";
 import { InviteView } from "@/components/invite/invite-view";
 import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
+import type { Invite } from "@/components/invite/types";
 import { useRecordView } from "@/components/invite/use-record-view";
 import { pageTitle } from "@/content/site";
 import { orNotFound } from "@/lib/not-found";
@@ -40,6 +42,29 @@ export const Route = createFileRoute("/_auth/e/$eventId/")({
 	component: InvitePage,
 });
 
+/**
+ * A guest who hasn't answered yet, for a host who is not on the list: the
+ * form they preview is the one a guest the hosts chose would get. The name
+ * is the one the designed card uses for nobody in particular.
+ */
+function previewGuest(data: Invite): NonNullable<Invite["me"]> {
+	return {
+		guestId: "",
+		response: null,
+		adults: 1,
+		kids: 0,
+		dietary: "",
+		note: "",
+		claims: [],
+		name: "your guest",
+		firstName: "your guest",
+		friends: [],
+		family: [],
+		canInvite: data.guestsMayInvite,
+		invitesLeft: data.event.guestInviteLimit,
+	};
+}
+
 function InvitePage() {
 	const { eventId } = Route.useParams();
 	const { a } = Route.useSearch();
@@ -51,27 +76,40 @@ function InvitePage() {
 		client.guests.viewed({ eventId }),
 	);
 
+	// A host on the list answers for real; one who isn't gets a guest's
+	// form that saves nothing.
+	const preview = !data.me;
+	const me = data.me ?? previewGuest(data);
+	const shown = { ...data, me };
+	const canceled = data.event.status === "canceled";
+
 	return (
 		<InviteView
-			data={data}
+			data={shown}
+			banner={data.isHost ? <HostBar data={data} /> : null}
 			aside={
-				data.me && data.event.status !== "canceled" ? (
+				canceled ? (
+					<section className="flex flex-col gap-4 rounded-[28px] border border-line bg-panel p-[clamp(20px,3vw,32px)]">
+						<span className="kicker text-lime-ink">Canceled</span>
+						<h2 className="m-0 text-[30px]">This one's off.</h2>
+						<p className="m-0 text-soft">
+							Nothing to answer. Sorry to miss you.
+						</p>
+					</section>
+				) : (
 					<div className="flex flex-col gap-5">
-						{/* A co-host the owner also invited still needs the way to
-						    the controls; the form alone would hide them. */}
-						{data.isHost ? <HostPanel data={data} /> : null}
 						<RsvpForm
-							data={data}
-							initial={initialRsvp(data.me, data.answers, a ?? null)}
+							data={shown}
+							initial={initialRsvp(me, shown.answers, a ?? null)}
 							submit={(values, options) =>
-								respond.mutate({ eventId, ...values }, options)
+								preview
+									? toast("This is a preview. Guests answer here.")
+									: respond.mutate({ eventId, ...values }, options)
 							}
 							pending={respond.isPending}
 						/>
-						<BringSomeone data={data} />
+						<BringSomeone data={shown} preview={preview} />
 					</div>
-				) : (
-					<HostPanel data={data} />
 				)
 			}
 		/>
