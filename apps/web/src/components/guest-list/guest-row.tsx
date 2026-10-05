@@ -67,7 +67,6 @@ export function GuestRow({
 			: g.source === "link"
 				? "Joined by share link"
 				: null;
-	const note = [g.dietary, g.note ? `"${g.note}"` : ""].filter(Boolean);
 	const coming = g.response === "yes" || g.response === "maybe";
 
 	return (
@@ -141,12 +140,13 @@ export function GuestRow({
 			</span>
 			<span
 				className={cn(
-					"min-w-0 flex-[1_1_160px] text-[14px]",
-					g.dietary ? "text-pink-ink" : "text-soft",
-					note.length === 0 && "max-md:hidden",
+					"min-w-0 flex-[1_1_160px] text-[14px] text-soft",
+					!g.dietary && !g.note && "max-md:hidden",
 				)}
 			>
-				{note.join(" · ")}
+				{g.dietary ? <span className="text-pink-ink">{g.dietary}</span> : null}
+				{g.dietary && g.note ? " · " : null}
+				{g.note ? `"${g.note}"` : null}
 			</span>
 			<span className="flex items-center justify-end gap-1.5 max-md:empty:hidden md:ml-auto md:min-w-[40px]">
 				{paper ? (

@@ -12,6 +12,7 @@ import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
 import { EventCrumbs, EventTitleLink } from "@/components/event-crumbs";
 import { GuestRow, type RowEvent } from "@/components/guest-list/guest-row";
+import { GuestLegend } from "@/components/guest-list/legend";
 import { guestSections, viewedLabel } from "@/components/guest-list/sections";
 import { Notice } from "@/components/notice";
 import { Page, PageHead } from "@/components/page";
@@ -345,6 +346,7 @@ function GuestListPage() {
 						className="min-h-11 flex-[1_1_200px] rounded-full py-2.5"
 					/>
 				</div>
+				<GuestLegend guests={data.guests} youId={session.user.id} />
 				{sections.map((section) => (
 					<section
 						key={section.key}
