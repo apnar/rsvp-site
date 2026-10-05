@@ -6,8 +6,8 @@ import type { Guest } from "./types";
  * Their address (or its absence) with when they answered, or with how far
  * their invitation has got: when they first opened it, or when it went
  * out (the list's sections already say whether they have looked).
- * In two parts, so a long address can be cut short on a narrow row while
- * the status after it (the part a host is scanning for) always shows.
+ * In two parts, drawn as two lines: an address cut short beside the
+ * status left most of the list unreadable.
  */
 export function rowSubtitle(
 	g: Pick<

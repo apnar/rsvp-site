@@ -77,7 +77,7 @@ export function GuestRow({
 				// One fixed actions column per kind of event, so the tags line up
 				// down the list whatever buttons a row has.
 				paper
-					? "md:grid-cols-[44px_minmax(0,1.3fr)_96px_110px_120px_minmax(0,1fr)_336px]"
+					? "md:grid-cols-[44px_minmax(0,1.3fr)_96px_110px_120px_minmax(0,1fr)_290px]"
 					: "md:grid-cols-[44px_minmax(0,1.3fr)_96px_120px_140px_minmax(0,1fr)_220px]",
 				waiting && "border border-line-strong border-dashed",
 				out && "bg-panel-dim text-haze",
@@ -90,11 +90,11 @@ export function GuestRow({
 			/>
 			<div className="min-w-0 flex-[1_1_200px]">
 				<b className={cn("text-[17px]", out && "text-soft")}>{g.name}</b>
-				<div className="flex min-w-0 text-[13px] text-haze">
-					<span className="truncate">{sub.lead}</span>
-					{sub.status ? (
-						<span className="shrink-0 whitespace-pre">{` · ${sub.status}`}</span>
-					) : null}
+				<div className="text-[13px] text-haze">
+					<div className="truncate" title={sub.lead}>
+						{sub.lead}
+					</div>
+					{sub.status ? <div className="truncate">{sub.status}</div> : null}
 				</div>
 				{via ? (
 					<div className="truncate text-[12px] text-pink-ink">{via}</div>

@@ -3,7 +3,6 @@ import { remember } from "@rsvp-site/db/address-book";
 import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import { pickable } from "@rsvp-site/db/families";
-import { newPaperToken } from "@rsvp-site/db/paper";
 import {
 	createNameOnlyPeople,
 	findOrCreatePeople,
@@ -303,27 +302,6 @@ export const guestsRouter = {
 		await recordView(context.db, access);
 		return { ok: true as const };
 	}),
-
-	/**
-	 * Replace one guest's QR key: a lost or misprinted card stops working,
-	 * and the next download prints the new one.
-	 */
-	newPaperCode: hostProcedure
-		.input(idInput.extend({ guestId: idSchema }))
-		.use(withHostEvent)
-		.handler(async ({ context, input }) => {
-			const row = context.event;
-			if (!row.paper) {
-				throw new ORPCError("BAD_REQUEST", { message: "Not a paper event." });
-			}
-			await context.db
-				.update(eventGuest)
-				.set({ paperToken: newPaperToken() })
-				.where(
-					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
-				);
-			return { ok: true };
-		}),
 
 	/**
 	 * Give a name-only guest an email address, so they can get email once

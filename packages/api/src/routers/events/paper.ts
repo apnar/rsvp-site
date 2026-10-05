@@ -25,7 +25,6 @@ export const paperRouter = {
 	 * Everything the host's browser needs to print paper invitations: the
 	 * event, and a QR key per guest, issued on first print and kept after, so
 	 * printing again never breaks a card already in somebody's mailbox.
-	 * (`guests.newPaperCode` replaces one guest's key on purpose.)
 	 *
 	 * The keys go to the host by design -- they are printed -- which is why
 	 * they are per invitation and sign in plain guests only.
@@ -40,9 +39,13 @@ export const paperRouter = {
 					message: "This event is sent by email, not on paper.",
 				});
 			}
-			// One statement for the whole list, and each row draws its own bytes.
-			// Same shape as `newPaperToken()`: 16 lower-case hex characters. The
-			// IS NULL guard keeps a key already on a card in somebody's mailbox.
+			// One statement for the whole list, and each row draws its own bytes:
+			// 16 lower-case hex characters, 64 bits. Half a sign-in token,
+			// because a card's key reads and answers one invitation and signs
+			// nobody in, and guessing 64 bits online is hopeless; the shorter URL
+			// lets the QR code carry stronger error correction at the same size.
+			// `paperCardUrl` upper-cases it for the code. The IS NULL guard keeps
+			// a key already on a card in somebody's mailbox.
 			await context.db
 				.update(eventGuest)
 				.set({ paperToken: sql`lower(hex(randomblob(8)))` })
