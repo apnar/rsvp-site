@@ -244,6 +244,7 @@ export async function guestsOf(db: Db, eventId: string) {
 			id: eventGuest.id,
 			userId: eventGuest.userId,
 			name: user.name,
+			image: user.image,
 			email: user.email,
 			source: eventGuest.source,
 			response: eventGuest.response,

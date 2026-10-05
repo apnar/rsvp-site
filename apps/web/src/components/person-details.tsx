@@ -1,7 +1,8 @@
 import { formatPhone } from "@rsvp-site/db/phone";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
+import { AvatarField } from "@/components/avatar/avatar-field";
 import { Field } from "@/components/controls";
 
 /** The detail fields a person carries; blank is stored as an empty string. */
@@ -60,6 +61,7 @@ export function PersonDetailsDialog({
 	onSave,
 	onSaveEmail,
 	onClose,
+	picture,
 }: {
 	person: DetailsPerson;
 	editable: boolean;
@@ -68,6 +70,8 @@ export function PersonDetailsDialog({
 	onSave: (patch: DetailsPatch) => Promise<unknown>;
 	onSaveEmail: (email: string) => Promise<unknown>;
 	onClose: () => void;
+	/** Their picture's controls, for the callers allowed them (admins). */
+	picture?: Omit<ComponentProps<typeof AvatarField>, "name" | "mine">;
 }) {
 	const ref = useRef<HTMLDialogElement>(null);
 	const firstRef = useRef<HTMLInputElement>(null);
@@ -131,6 +135,9 @@ export function PersonDetailsDialog({
 						{lockedReason ?? "These aren't yours to change."}
 					</p>
 				)}
+				{picture ? (
+					<AvatarField {...picture} name={person.name} mine={false} />
+				) : null}
 				<div className="grid grid-cols-2 gap-3">
 					<Field label="First name" htmlFor={`${id}-firstName`}>
 						<Input

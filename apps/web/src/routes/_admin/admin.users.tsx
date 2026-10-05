@@ -218,6 +218,14 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 	);
 	const update = useMutation(orpc.people.update.mutationOptions());
 	const setEmail = useMutation(orpc.people.setEmail.mutationOptions());
+	const setPicture = useMutation(
+		orpc.people.setPicture.mutationOptions({
+			onSuccess: () => toast.success("Picture saved."),
+		}),
+	);
+	const removePicture = useMutation(
+		orpc.people.removePicture.mutationOptions(),
+	);
 	const [editing, setEditing] = useState(false);
 	const deactivate = useMutation(orpc.people.deactivate.mutationOptions());
 	const reactivate = useMutation(orpc.people.reactivate.mutationOptions());
@@ -232,6 +240,7 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 		>
 			<Avatar
 				initials={initials(p.name)}
+				image={p.image}
 				tone={isYou ? "pink" : off ? "dim" : "plain"}
 			/>
 			<div className="min-w-0 flex-[1_1_220px]">
@@ -344,6 +353,12 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 					}
 					onSaveEmail={(email) => setEmail.mutateAsync({ userId: p.id, email })}
 					onClose={() => setEditing(false)}
+					picture={{
+						image: p.image,
+						pending: setPicture.isPending || removePicture.isPending,
+						onSave: (file) => setPicture.mutateAsync({ userId: p.id, file }),
+						onRemove: () => removePicture.mutateAsync({ userId: p.id }),
+					}}
 				/>
 			) : null}
 		</div>

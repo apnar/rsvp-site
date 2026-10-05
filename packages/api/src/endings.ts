@@ -127,6 +127,11 @@ export async function erasePerson(
 	userId: string,
 	plan: Awaited<ReturnType<typeof removalPlan>>,
 ) {
+	const picture = await db
+		.select({ image: user.image })
+		.from(user)
+		.where(eq(user.id, userId))
+		.get();
 	await db.batch([
 		db.delete(user).where(eq(user.id, userId)),
 		...plan.handOff.map((h) =>
@@ -140,4 +145,5 @@ export async function erasePerson(
 		...plan.erase.map((e) => db.delete(event).where(eq(event.id, e.id))),
 	]);
 	for (const e of plan.erase) await deleteEventMedia(env, e);
+	if (picture?.image) await env.MEDIA.delete(picture.image);
 }

@@ -17,11 +17,13 @@ import { getMailer } from "@rsvp-site/email/worker";
 import { count } from "drizzle-orm";
 import { z } from "zod";
 
+import { removePicture, setPicture } from "../avatar";
 import { detailsPatch, saveDetails, saveEmail } from "../details";
 import { erasePerson, removalPlan } from "../endings";
 import { adminProcedure, publicProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
 import { sendWelcome } from "../mail";
+import { avatarFile } from "../media";
 
 const nameSchema = z.string().trim().max(60, "Shorter name, please.");
 const reasonSchema = z.string().trim().max(200, "Keep it short.").optional();
@@ -111,6 +113,27 @@ export const peopleRouter = {
 			await requirePerson(context.db, userId);
 			await saveDetails(context.db, userId, patch, false);
 			return { ok: true };
+		}),
+
+	/** Put up somebody's picture for them, cropped in the admin's browser. */
+	setPicture: adminProcedure
+		.input(z.object({ userId: idSchema, file: avatarFile }))
+		.handler(async ({ context, input }) => {
+			await requirePerson(context.db, input.userId);
+			return setPicture(
+				context.db,
+				context.env,
+				input.userId,
+				input.file,
+				context.me.id,
+			);
+		}),
+
+	removePicture: adminProcedure
+		.input(z.object({ userId: idSchema }))
+		.handler(async ({ context, input }) => {
+			await requirePerson(context.db, input.userId);
+			return removePicture(context.db, context.env, input.userId);
 		}),
 
 	/**

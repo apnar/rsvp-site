@@ -94,6 +94,7 @@ export function GuestRow({
 		>
 			<Avatar
 				initials={initials(g.name)}
+				image={g.image}
 				tone={isYou ? "pink" : waiting ? "outline" : out ? "dim" : "plain"}
 			/>
 			<div className="min-w-0 flex-[1_1_200px]">

@@ -290,7 +290,11 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 	return (
 		<li className="flex flex-col gap-2 border-line border-t py-3">
 			<div className="flex items-center gap-3">
-				<Avatar initials={initials(p.name)} className="size-9 text-[12px]" />
+				<Avatar
+					initials={initials(p.name)}
+					image={p.image}
+					className="size-9 text-[12px]"
+				/>
 				<span className="min-w-0 flex-1">
 					<InlineEdit
 						label={`${p.name}'s name`}

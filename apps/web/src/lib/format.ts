@@ -85,6 +85,11 @@ export function coverSrc(coverKey: string): string {
 	return `/api/${coverKey}`;
 }
 
+/** The public address of a profile picture, token-free like a cover. */
+export function avatarSrc(imageKey: string): string {
+	return `/api/${imageKey}`;
+}
+
 /** "Josh" from "Josh Lukens". */
 export function firstName(name: string): string {
 	return name.trim().split(/\s+/)[0] ?? name;

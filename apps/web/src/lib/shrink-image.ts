@@ -1,3 +1,5 @@
+import { type Crop, exportTransform } from "./avatar-crop";
+
 /**
  * Redraw an image no larger than `max` pixels on its long side. The one
  * place the browser's decode-and-recompress dance lives: a phone camera's
@@ -112,4 +114,52 @@ export function naturalSize(
 		img.onerror = () => reject(new Error("That image didn't load."));
 		img.src = src;
 	});
+}
+
+/**
+ * A photo decoded for the profile-picture cropper, its long side capped so
+ * a phone's original doesn't hold tens of megabytes while it is framed.
+ * `createImageBitmap` applies the camera's EXIF rotation.
+ */
+export async function decodeForCrop(
+	file: Blob,
+	max = 2048,
+): Promise<ImageBitmap> {
+	const full = await createImageBitmap(file);
+	const scale = max / Math.max(full.width, full.height);
+	if (scale >= 1) return full;
+	const small = await createImageBitmap(full, {
+		resizeWidth: Math.round(full.width * scale),
+		resizeHeight: Math.round(full.height * scale),
+		resizeQuality: "high",
+	});
+	full.close();
+	return small;
+}
+
+/** The framed square, drawn the way the cropper showed it, as a JPEG. */
+export async function renderAvatar(
+	bitmap: ImageBitmap,
+	crop: Crop,
+	size = 512,
+): Promise<File> {
+	const canvas = document.createElement("canvas");
+	canvas.width = size;
+	canvas.height = size;
+	const ctx = canvas.getContext("2d");
+	if (!ctx) throw new Error("This browser can't prepare images.");
+	// A transparent PNG would otherwise go black in a JPEG.
+	ctx.fillStyle = "#ffffff";
+	ctx.fillRect(0, 0, size, size);
+	const t = exportTransform(crop, bitmap, size);
+	ctx.translate(t.tx, t.ty);
+	ctx.rotate(t.radians);
+	ctx.scale(t.scale, t.scale);
+	ctx.imageSmoothingQuality = "high";
+	ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2);
+	const blob = await new Promise<Blob | null>((resolve) =>
+		canvas.toBlob(resolve, "image/jpeg", 0.88),
+	);
+	if (!blob) throw new Error("That picture couldn't be saved.");
+	return new File([blob], "avatar.jpg", { type: "image/jpeg" });
 }

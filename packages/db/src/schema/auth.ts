@@ -90,6 +90,11 @@ export const user = sqliteTable("user", {
 	emailVerified: integer("email_verified", { mode: "boolean" })
 		.default(false)
 		.notNull(),
+	/**
+	 * The profile picture's R2 key (`avatars/<uuid>.jpg`), not a URL; null
+	 * shows initials. Better Auth's own column, written only through
+	 * packages/api/src/avatar.ts, by the person or an admin.
+	 */
 	image: text("image"),
 	/** One of ROLES, or null for `user`. Read it through `roleOf`. */
 	role: text("role"),

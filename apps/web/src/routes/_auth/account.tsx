@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { type ChangeEvent, useState } from "react";
 import { toast } from "sonner";
+import { AvatarField } from "@/components/avatar/avatar-field";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field, SettingRow, Switch } from "@/components/controls";
 import { Page, PageHead, Panel } from "@/components/page";
@@ -82,6 +83,21 @@ function NameAndEmail() {
 			},
 		}),
 	);
+	// The header reads the picture from the session too.
+	const pictureSaved = async () => {
+		await router.invalidate();
+	};
+	const setPicture = useMutation(
+		orpc.account.setPicture.mutationOptions({
+			onSuccess: async () => {
+				toast.success("Picture saved.");
+				await pictureSaved();
+			},
+		}),
+	);
+	const removePicture = useMutation(
+		orpc.account.removePicture.mutationOptions({ onSuccess: pictureSaved }),
+	);
 	const field = (k: DetailKey, max = 100) => ({
 		id: `me-${k}`,
 		value: draft[k],
@@ -98,6 +114,14 @@ function NameAndEmail() {
 			}}
 		>
 			<h2 className="m-0 text-[20px]">You</h2>
+			<AvatarField
+				name={me.name}
+				image={me.image}
+				mine
+				pending={setPicture.isPending || removePicture.isPending}
+				onSave={(file) => setPicture.mutateAsync({ file })}
+				onRemove={() => removePicture.mutateAsync({})}
+			/>
 			<div className="grid grid-cols-2 gap-3">
 				<Field label="First name" htmlFor="me-firstName">
 					<Input {...field("firstName", 60)} autoComplete="given-name" />

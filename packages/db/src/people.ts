@@ -116,6 +116,7 @@ export async function setRealEmail(
 const personColumns = {
 	id: user.id,
 	name: user.name,
+	image: user.image,
 	...detailColumns,
 	claimedAt: user.claimedAt,
 	email: user.email,

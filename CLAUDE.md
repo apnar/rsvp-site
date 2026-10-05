@@ -24,7 +24,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
 | D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0021 applied (CI applies new ones on push) |
-| R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
+| R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/`, profile pictures under `avatars/` |
 | Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` sign-in and "email me my link", and per person on guests inviting friends |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
@@ -413,6 +413,13 @@ decide → claim → send.
   an admin. `canEditDetails` decides and the UPDATE repeats the condition.
   Pastes only fill blanks (`fillBlanks`). Phones are stored by
   `normalizePhone` and shown by `formatPhone`.
+- `user.image` (Better Auth's column) is the profile picture's R2 key,
+  not a URL; null shows initials. Only `api/src/avatar.ts` writes it, for
+  the person (`account.setPicture`) or an admin (`people.setPicture`);
+  hosts never, even before a sign-in. The browser crops and renders the
+  512px JPEG (`lib/avatar-crop.ts` is the pure maths the screen and the
+  canvas share), the server takes nothing else, and `erasePerson`
+  deletes it. Show it through `Avatar`'s `image`.
 - `link_token` and `unsubscribe_token` are stamped at insert by
   `findOrCreatePeople`, and by the Better Auth `user.create.after` hook
   (`stampTokens`) for rows it makes, so nobody exists with no way in.

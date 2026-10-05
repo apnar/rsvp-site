@@ -9,8 +9,10 @@ import { getMailer } from "@rsvp-site/email/worker";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
+import { removePicture, setPicture } from "../avatar";
 import { detailsPatch, saveDetails } from "../details";
 import { personProcedure } from "../index";
+import { avatarFile } from "../media";
 
 /**
  * Somebody's own account. Passwords are optional here: the emailed links are
@@ -23,6 +25,7 @@ export const accountRouter = {
 		return {
 			id: me.id,
 			name: me.name,
+			image: me.image,
 			firstName: me.firstName,
 			lastName: me.lastName,
 			phone: me.phone,
@@ -50,6 +53,23 @@ export const accountRouter = {
 			await saveDetails(context.db, context.me.id, input, false);
 			return { ok: true };
 		}),
+
+	/** Their own picture, already cropped in the browser. */
+	setPicture: personProcedure
+		.input(z.object({ file: avatarFile }))
+		.handler(({ context, input }) =>
+			setPicture(
+				context.db,
+				context.env,
+				context.me.id,
+				input.file,
+				context.me.id,
+			),
+		),
+
+	removePicture: personProcedure.handler(({ context }) =>
+		removePicture(context.db, context.env, context.me.id),
+	),
 
 	/**
 	 * Email on or off. Turning it back on also lifts Brevo's blocklist, or the

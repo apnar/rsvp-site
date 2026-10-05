@@ -144,6 +144,15 @@ app.get("/designs/:eventId/:name", async (c) => {
 	return media(`designs/${eventId}/${name}`, c.req.header("if-none-match"));
 });
 
+/** Profile pictures, under avatars/. */
+app.get("/avatars/:name", async (c) => {
+	const name = c.req.param("name");
+	if (!/^[0-9a-f-]{36}\.jpg$/.test(name)) {
+		return c.text("No such picture.", 404);
+	}
+	return media(`avatars/${name}`, c.req.header("if-none-match"));
+});
+
 app.route("/unsubscribe", unsubscribe);
 app.route("/brevo/webhook", brevoWebhook);
 

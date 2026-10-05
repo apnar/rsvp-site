@@ -159,6 +159,7 @@ export const contactsRouter = {
 				.select({
 					userId: user.id,
 					name: user.name,
+					image: user.image,
 					...detailColumns,
 					email: user.email,
 					noEmail: user.noEmail,

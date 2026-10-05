@@ -6,13 +6,14 @@ import { authMiddleware } from "@/middleware/auth";
  * Who is signed in, and nothing else. The router context is serialised into
  * the page and server-function responses, where script can read it; the
  * session row's token, address and user agent belong behind the HttpOnly
- * cookie. Pages read id, name, email and role only.
+ * cookie. Pages read id, name, email, role and the picture's key only.
  */
 export type SessionUser = {
 	id: string;
 	name: string;
 	email: string;
 	role: string | null;
+	image: string | null;
 };
 
 export type AppSession = { user: SessionUser } | null;
@@ -28,6 +29,7 @@ export const getUser = createServerFn({ method: "GET" })
 				name: user.name,
 				email: user.email,
 				role: typeof user.role === "string" ? user.role : null,
+				image: user.image ?? null,
 			},
 		};
 	});

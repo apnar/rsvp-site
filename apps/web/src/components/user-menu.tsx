@@ -16,12 +16,14 @@ import {
 	useRouter,
 } from "@tanstack/react-router";
 
+import { Avatar } from "@/components/brand";
 import { authClient } from "@/lib/auth-client";
 import { initials } from "@/lib/format";
 
 /**
- * The account menu behind the pink initials. Places live in the nav beside
- * it; this holds who you are signed in as, your account, and the way out.
+ * The account menu behind your picture (or your pink initials). Places
+ * live in the nav beside it; this holds who you are signed in as, your
+ * account, and the way out.
  * The address is a label rather than an item: it answers "which account is
  * this", which matters when people get in from links sent to two addresses.
  */
@@ -36,9 +38,14 @@ export default function UserMenu() {
 		<DropdownMenu>
 			<DropdownMenuTrigger
 				aria-label="Your account"
-				className="grid size-9 cursor-pointer place-items-center rounded-full border-0 bg-pink font-bold text-[13px] text-on-pink outline-none focus-visible:outline-2 focus-visible:outline-lime focus-visible:outline-offset-2"
+				className="cursor-pointer rounded-full border-0 bg-transparent p-0 outline-none focus-visible:outline-2 focus-visible:outline-lime focus-visible:outline-offset-2"
 			>
-				{initials(session.user.name)}
+				<Avatar
+					initials={initials(session.user.name)}
+					image={session.user.image}
+					tone="pink"
+					className="size-9 text-[13px]"
+				/>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-auto min-w-56">
 				<DropdownMenuGroup>

@@ -26,12 +26,21 @@ export const imageFile = z
 	.mime([...IMAGE_TYPES], "A JPEG, PNG or WebP, please.");
 
 /**
+ * A profile picture. The browser crops and renders it to a 512px JPEG
+ * itself, so anything bigger or of another type did not come from our page.
+ */
+export const avatarFile = z
+	.file()
+	.max(1024 * 1024, "Under 1 MB, please.")
+	.mime(["image/jpeg"], "A JPEG, please.");
+
+/**
  * An upload's bytes. zod's `File` and the Workers `Blob` are different
  * declarations of the same object; the cast bridges that mismatch, it is
  * not a conversion.
  */
 export function fileBytes(
-	file: z.output<typeof imageFile>,
+	file: z.output<typeof imageFile> | z.output<typeof avatarFile>,
 ): Promise<ArrayBuffer> {
 	return (file as unknown as Blob).arrayBuffer();
 }
@@ -46,7 +55,7 @@ export async function putImage(
 	prefix: string,
 	type: ImageType,
 	bytes: ArrayBuffer,
-	meta: { eventId: string; uploadedBy: string },
+	meta: Record<string, string>,
 	name = "",
 ) {
 	const key = `${prefix}${name}${crypto.randomUUID()}.${IMAGE_EXT[type]}`;
