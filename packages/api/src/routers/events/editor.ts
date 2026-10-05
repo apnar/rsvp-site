@@ -16,6 +16,7 @@ import { updateEmail } from "@rsvp-site/email";
 import { siteUrl } from "@rsvp-site/email/worker";
 import { and, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
+import { answersOf, answerWordsInput, toStored } from "../../answer-words";
 import { callOff, deleteEventMedia } from "../../endings";
 import {
 	describeChanges,
@@ -66,6 +67,9 @@ const eventFields = z.object({
 	askKids: z.boolean(),
 	askDietary: z.boolean(),
 	askNote: z.boolean(),
+	allowMaybe: z.boolean(),
+	// Stored as null when they are the site's own words: see `toStored`.
+	answerWords: answerWordsInput.transform(toStored),
 	potluckEnabled: z.boolean(),
 	showGuestNames: z.boolean(),
 	shareEnabled: z.boolean(),
@@ -115,6 +119,7 @@ export const editorRouter = {
 				hasDesign: designed !== undefined,
 				card: card?.scene ?? null,
 				labels: labelsOf(row),
+				answers: answersOf(row),
 				hosts,
 				guests: guests.map((g) => ({
 					id: g.id,

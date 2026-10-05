@@ -3,9 +3,10 @@ import { Input } from "@rsvp-site/ui/components/input";
 import { SettingRow, StepHeading, Switch } from "@/components/controls";
 import { Panel } from "@/components/page";
 
+import { AnswersSetting } from "./answers-setting";
 import type { EventDraft } from "./use-event-draft";
 
-/** Step 4: what guests are asked, and the RSVP deadline. */
+/** Step 4: what guests are asked and how, and the RSVP deadline. */
 export function QuestionsSection({ draft }: { draft: EventDraft }) {
 	const { form, set } = draft;
 	return (
@@ -13,6 +14,7 @@ export function QuestionsSection({ draft }: { draft: EventDraft }) {
 			<div className="mb-2.5">
 				<StepHeading n={4} title="What to ask" />
 			</div>
+			<AnswersSetting draft={draft} />
 			<SettingRow
 				title="Plus-ones"
 				hint={

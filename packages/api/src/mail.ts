@@ -29,6 +29,7 @@ import {
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
+import { answersOf } from "./answer-words";
 import {
 	type EventRow,
 	guestCountsOf,
@@ -76,6 +77,7 @@ export function eventFacts(row: EventRow): EventFacts {
 		siteUrl: siteUrl(),
 		...labelsOf(row),
 		look: lookOf(row),
+		answers: answersOf(row),
 	};
 }
 

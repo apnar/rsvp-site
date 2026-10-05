@@ -88,7 +88,11 @@ export function InviteView({
 					{aside}
 					<div className="flex flex-col gap-10">
 						<DetailsSection event={e} />
-						<CrowdSection totals={data.totals} crowd={data.crowd} />
+						<CrowdSection
+							totals={data.totals}
+							crowd={data.crowd}
+							answers={data.answers}
+						/>
 					</div>
 				</section>
 			</Container>

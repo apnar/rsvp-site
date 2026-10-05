@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
+import { readWords } from "../../answer-words";
 import { accessTo, byDate, cardsFor, cleanTheme } from "../../events";
 import { deciding, openSlots } from "../../headcount";
 import { hostProcedure, personProcedure } from "../../index";
@@ -97,7 +98,7 @@ export const dashboardRouter = {
 					.where(and(scope, gt(eventGuest.respondedAt, since)))
 					.get(),
 			]);
-			const titles = new Map(rows.map((r) => [r.id, r.title]));
+			const byId = new Map(rows.map((r) => [r.id, r]));
 			return {
 				now: new Date().toISOString(),
 				today,
@@ -112,7 +113,8 @@ export const dashboardRouter = {
 				},
 				fresh: fresh.map((f) => ({
 					...f,
-					eventTitle: titles.get(f.eventId) ?? "",
+					eventTitle: byId.get(f.eventId)?.title ?? "",
+					words: readWords(byId.get(f.eventId)?.answerWords),
 				})),
 			};
 		}),

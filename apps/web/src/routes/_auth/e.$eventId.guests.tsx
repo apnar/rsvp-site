@@ -1,3 +1,4 @@
+import { showsMaybe } from "@rsvp-site/api/answer-words";
 import { seenNoReply } from "@rsvp-site/api/headcount";
 import { formatDate } from "@rsvp-site/api/time";
 import { Button } from "@rsvp-site/ui/components/button";
@@ -11,7 +12,7 @@ import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
 import { EventCrumbs, EventTitleLink } from "@/components/event-crumbs";
 import { GuestRow, type RowEvent } from "@/components/guest-list/guest-row";
-import { guestSections } from "@/components/guest-list/sections";
+import { guestSections, viewedLabel } from "@/components/guest-list/sections";
 import { Notice } from "@/components/notice";
 import { Page, PageHead } from "@/components/page";
 import { PaperPanel } from "@/components/paper/paper-panel";
@@ -19,12 +20,7 @@ import { usePrint } from "@/components/paper/use-print";
 import { PillTabs } from "@/components/pill-tabs";
 import { ResponseBar } from "@/components/response-bar";
 import { StatTile } from "@/components/stat-tile";
-import {
-	ANSWER_LABELS,
-	COUNT_LABELS,
-	DRY_RUN_SUFFIX,
-	pageTitle,
-} from "@/content/site";
+import { DRY_RUN_SUFFIX, pageTitle } from "@/content/site";
 import { refreshCard } from "@/lib/design-card";
 import { capitalize, matchesPerson, plural } from "@/lib/format";
 import { orNotFound } from "@/lib/not-found";
@@ -122,7 +118,13 @@ function GuestListPage() {
 			return matchesPerson(g, query);
 		});
 	}, [data.guests, filter, query]);
-	const sections = useMemo(() => guestSections(shown), [shown]);
+	const { answers } = data;
+	const words = answers.words;
+	const maybe = showsMaybe(answers, t.maybe);
+	const sections = useMemo(
+		() => guestSections(shown, answers.words),
+		[shown, answers.words],
+	);
 
 	// What every row shares about the event, so a row takes one object
 	// instead of repeating the event's facts as separate props.
@@ -133,6 +135,7 @@ function GuestListPage() {
 		canNudge: published && !e.emailsHeld,
 		nowMs,
 		print,
+		answers,
 	};
 
 	return (
@@ -215,25 +218,29 @@ function GuestListPage() {
 					</span>
 				</div>
 				<div className="flex flex-col justify-center gap-3.5 rounded-[26px] bg-panel p-[22px]">
-					<ResponseBar totals={t} className="h-4" />
-					<div className="grid grid-cols-4 gap-2">
+					<ResponseBar totals={t} words={words} className="h-4" />
+					<div
+						className={cn("grid gap-2", maybe ? "grid-cols-4" : "grid-cols-3")}
+					>
 						<StatTile
 							compact
 							value={t.yes}
-							label={COUNT_LABELS.yes}
+							label={words.yes.count}
 							tone="lime"
 						/>
-						<StatTile
-							compact
-							value={t.maybe}
-							label={COUNT_LABELS.maybe}
-							tone="pink"
-						/>
-						<StatTile compact value={t.no} label={COUNT_LABELS.no} />
+						{maybe ? (
+							<StatTile
+								compact
+								value={t.maybe}
+								label={words.maybe.count}
+								tone="pink"
+							/>
+						) : null}
+						<StatTile compact value={t.no} label={words.no.count} />
 						<StatTile
 							compact
 							value={t.waiting}
-							label={COUNT_LABELS.waiting}
+							label={words.none.count}
 							tone="haze"
 						/>
 					</div>
@@ -296,18 +303,22 @@ function GuestListPage() {
 							{ value: "all", label: "All", count: t.invited },
 							{
 								value: "yes",
-								label: capitalize(COUNT_LABELS.yes),
+								label: capitalize(words.yes.count),
 								count: t.yes,
 							},
-							{
-								value: "maybe",
-								label: capitalize(COUNT_LABELS.maybe),
-								count: t.maybe,
-							},
-							{ value: "no", label: capitalize(COUNT_LABELS.no), count: t.no },
+							...(maybe || filter === "maybe"
+								? [
+										{
+											value: "maybe" as const,
+											label: capitalize(words.maybe.count),
+											count: t.maybe,
+										},
+									]
+								: []),
+							{ value: "no", label: capitalize(words.no.count), count: t.no },
 							{
 								value: "waiting",
-								label: ANSWER_LABELS.none,
+								label: words.none.pick,
 								count: t.waiting,
 							},
 							// Nothing to show until somebody has opened it.
@@ -315,7 +326,7 @@ function GuestListPage() {
 								? [
 										{
 											value: "seen" as const,
-											label: "Viewed, no reply",
+											label: viewedLabel(words),
 											count: data.seenNoReply,
 										},
 									]

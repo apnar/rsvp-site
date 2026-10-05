@@ -1,3 +1,4 @@
+import type { AnswerSet } from "@rsvp-site/api/answer-words";
 import type { Totals } from "@rsvp-site/api/headcount";
 import { daysBetween, formatTime } from "@rsvp-site/api/time";
 import { cn } from "@rsvp-site/ui/lib/utils";
@@ -21,6 +22,7 @@ type CardEvent = {
 	/** The designed card's picture and its page colour, when the design is on. */
 	card?: { key: string; bg: string } | null;
 	totals: Totals;
+	answers: AnswerSet;
 };
 
 /** "Sat, Oct 24 · 5:00 PM" -- the start only, as the design shows it. */
@@ -106,8 +108,8 @@ export function EventCard({
 						</Link>
 					</h3>
 				</div>
-				<ResponseBar totals={event.totals} />
-				<ResponseCounts totals={event.totals} />
+				<ResponseBar totals={event.totals} words={event.answers.words} />
+				<ResponseCounts totals={event.totals} answers={event.answers} />
 				<div className="relative z-10 mt-auto flex flex-wrap gap-2">
 					{actions}
 				</div>

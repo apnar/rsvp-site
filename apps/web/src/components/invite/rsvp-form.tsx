@@ -1,3 +1,4 @@
+import { type AnswerSet, offered } from "@rsvp-site/api/answer-words";
 import type { Answer } from "@rsvp-site/api/headcount";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
@@ -33,10 +34,16 @@ export type RsvpInitial = {
 
 export function initialRsvp(
 	me: NonNullable<Invite["me"]>,
+	answers: AnswerSet,
 	preselected: Answer | null,
 ): RsvpInitial {
+	// An old email's maybe button, after the host took maybe away.
+	const carried =
+		preselected && offered(answers, me.response).includes(preselected)
+			? preselected
+			: null;
 	return {
-		answer: preselected ?? me.response,
+		answer: carried ?? me.response,
 		// A child's own row is 0 adults and 1 kid; the steppers are for a
 		// grown-up's party, and clampParty would count that kid twice.
 		adults: me.adults < 1 ? 1 : me.adults,
@@ -69,6 +76,7 @@ export function RsvpForm({
 }) {
 	const e = data.event;
 	const me = data.me;
+	const answers = data.answers;
 	const saved = me?.response ?? null;
 	const [answer, setAnswer] = useState<Answer | null>(initial.answer);
 	const [adults, setAdults] = useState(initial.adults);
@@ -94,7 +102,7 @@ export function RsvpForm({
 			onSubmit={(ev) => {
 				ev.preventDefault();
 				if (!answer) {
-					toast.error("Yes, maybe or can't?");
+					toast.error("Pick an answer first.");
 					return;
 				}
 				submit(
@@ -122,7 +130,7 @@ export function RsvpForm({
 								);
 							} else {
 								toast.success(
-									answer === "no" ? "Got it. They'll miss you." : "Locked in.",
+									answer === "no" ? "Got it. They'll miss you." : "Saved.",
 								);
 							}
 						},
@@ -138,7 +146,13 @@ export function RsvpForm({
 				) : null}
 				<h2 className="mt-1.5 mb-0 text-[30px]">You coming, {me.firstName}?</h2>
 			</div>
-			<AnswerPicker value={answer} onChange={setAnswer} pending={pending} />
+			<AnswerPicker
+				answers={answers}
+				saved={saved}
+				value={answer}
+				onChange={setAnswer}
+				pending={pending}
+			/>
 
 			{coming && (e.maxPlusOnes > 0 || e.askKids) ? (
 				<div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
@@ -188,6 +202,8 @@ export function RsvpForm({
 								) : null}
 							</span>
 							<AnswerPicker
+								answers={answers}
+								saved={r.response}
 								size="sm"
 								name={`family-${r.guestId}`}
 								value={r.shown}
@@ -234,7 +250,7 @@ export function RsvpForm({
 					? "Saving..."
 					: saved && !pending
 						? "Update my answer"
-						: "Lock it in"}
+						: answers.words.submit}
 			</Button>
 		</form>
 	);

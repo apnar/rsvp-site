@@ -10,10 +10,13 @@ import {
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { mayPick } from "./answer-words";
 import { type Access, requireOpen } from "./events";
 import { clampParty, relativeParty } from "./headcount";
 import { idSchema } from "./inputs";
 import { alertHosts } from "./mail";
+
+const NO_MAYBE = "This one is a yes or a no.";
 
 /** What a guest sends with an answer, whichever way they reached the page. */
 export const answerInput = z.object({
@@ -62,6 +65,9 @@ export async function answer(
 	requireOpen(row);
 
 	const guest = access.guest;
+	if (!mayPick(row.allowMaybe, guest.response, input.response)) {
+		throw new ORPCError("BAD_REQUEST", { message: NO_MAYBE });
+	}
 	const party =
 		input.response === "no" ? { adults: 1, kids: 0 } : clampParty(input, row);
 	// A "no" brings nothing; otherwise keep exactly what was ticked.
@@ -98,6 +104,9 @@ export async function answer(
 			rel.kids === theirs.kids;
 		return same ? [] : [{ rel, response, party: theirs }];
 	});
+	if (kept.some((k) => !mayPick(row.allowMaybe, k.rel.response, k.response))) {
+		throw new ORPCError("BAD_REQUEST", { message: NO_MAYBE });
+	}
 	// One batch (atomic on D1): the answer, the dropped claims and each
 	// guarded claim land together or not at all.
 	const results = await rawBatch(db.$client, [

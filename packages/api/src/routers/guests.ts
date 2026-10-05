@@ -18,6 +18,7 @@ import {
 } from "@rsvp-site/db/schema/event";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { answersOf } from "../answer-words";
 import { answer, answerInput } from "../answers";
 import {
 	type Access,
@@ -72,6 +73,7 @@ export const guestsRouter = {
 				notInvited: notInvitedCount(guests),
 				seenNoReply: seenNoReplyCount(guests),
 				potluck: potluck.lines,
+				answers: answersOf(row),
 				guests: guests.map((g) => ({
 					...g,
 					bringing: (potluck.byGuest.get(g.id) ?? []).map((c) => c.label),

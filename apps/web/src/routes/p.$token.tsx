@@ -47,7 +47,7 @@ function PaperInvitePage() {
 					<div className="flex flex-col gap-5">
 						<RsvpForm
 							data={data}
-							initial={initialRsvp(data.me, null)}
+							initial={initialRsvp(data.me, data.answers, null)}
 							submit={(values, options) =>
 								respond.mutate({ token, ...values }, options)
 							}

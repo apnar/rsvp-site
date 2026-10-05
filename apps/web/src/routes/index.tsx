@@ -1,3 +1,4 @@
+import { DEFAULT_WORDS } from "@rsvp-site/api/answer-words";
 import { buttonVariants } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
@@ -70,7 +71,10 @@ function Landing() {
 							</span>
 							<span className="font-bold text-[16px]">families in</span>
 						</div>
-						<ResponseBar totals={{ yes: 42, maybe: 9, no: 6, waiting: 14 }} />
+						<ResponseBar
+							totals={{ yes: 42, maybe: 9, no: 6, waiting: 14 }}
+							words={DEFAULT_WORDS}
+						/>
 						<span className="text-[13px] text-soft">
 							The Nguyens just said yes, +3
 						</span>

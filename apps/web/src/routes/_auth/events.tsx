@@ -255,7 +255,7 @@ function HostDashboard() {
 								params={{ eventId: f.eventId }}
 								className="flex items-center gap-3 border-line border-t py-3 text-ink no-underline hover:text-ink"
 							>
-								<AnswerTag response={f.response} />
+								<AnswerTag response={f.response} words={f.words} />
 								<span className="min-w-0 flex-1 text-[15px]">
 									<b>{f.name}</b>
 									{f.response === "yes" && extraPeople(f) > 0
@@ -331,7 +331,11 @@ function InvitedTo({ heading = true }: { heading?: boolean }) {
 								>
 									{event.myResponse ? (
 										<>
-											You said <AnswerTag response={event.myResponse} />
+											You said{" "}
+											<AnswerTag
+												response={event.myResponse}
+												words={event.answers.words}
+											/>
 										</>
 									) : (
 										"Answer"
@@ -376,7 +380,7 @@ function Invites() {
 									{e.dateLabel}
 								</span>
 							</span>
-							<AnswerTag response={e.myResponse} />
+							<AnswerTag response={e.myResponse} words={e.answers.words} />
 						</Link>
 					))}
 				</section>

@@ -1,4 +1,6 @@
+import { DEFAULT_WORDS } from "@rsvp-site/api/answer-words";
 import { formatDate, formatTimeRange } from "@rsvp-site/api/time";
+import { buttonVariants } from "@rsvp-site/ui/components/button";
 
 import { AnswerPicker } from "@/components/controls";
 import { Cover } from "@/components/cover";
@@ -53,13 +55,20 @@ export function GuestPreview({
 							</span>
 						</div>
 					</div>
-					<div className="pointer-events-none p-3.5" inert>
+					<div
+						className="pointer-events-none flex flex-col gap-2.5 p-3.5"
+						inert
+					>
 						<AnswerPicker
+							answers={{ words: form.answerWords, maybe: form.allowMaybe }}
 							value="yes"
 							onChange={() => {}}
 							size="sm"
 							name="preview"
 						/>
+						<span className={buttonVariants({ variant: "send", size: "sm" })}>
+							{form.answerWords.submit || DEFAULT_WORDS.submit}
+						</span>
 					</div>
 				</div>
 			)}

@@ -1,7 +1,7 @@
 import type { Db } from "@rsvp-site/db";
 import { relativesOnEvent } from "@rsvp-site/db/families";
 import { firstNameOf } from "@rsvp-site/db/names";
-
+import { answersOf } from "../../answer-words";
 import {
 	type Access,
 	type Addressee,
@@ -77,6 +77,7 @@ export async function invitePayload(
 			guestInviteLimit: row.guestInviteLimit,
 			...labelsOf(row),
 		},
+		answers: answersOf(row),
 		design: card && row.theme ? { scene: card.scene, theme: row.theme } : null,
 		hosts: hosts.map((h) => ({ id: h.id, name: h.name })),
 		me: mine

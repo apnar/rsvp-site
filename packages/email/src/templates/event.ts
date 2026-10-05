@@ -43,24 +43,29 @@ export type EventFacts = {
 	siteUrl: string;
 	/** The event's design, when it is on: the card replaces band and cover. */
 	look?: EmailLook | null;
+	/** What this event calls its answers, and whether maybe is offered. */
+	answers: EmailAnswers;
 };
 
-const ANSWER_WORD: Record<RsvpAnswer, string> = {
-	yes: "Yes",
-	maybe: "Maybe",
-	no: "Can't",
-};
+/**
+ * The event's words for its answers (`answersOf` in packages/api, which
+ * owns the defaults): `pick` is the button and the chip, `count` the word
+ * after a number. `none` is no reply.
+ */
+type Words = Record<RsvpAnswer | "none", { pick: string; count: string }>;
+export type EmailAnswers = { words: Words; maybe: boolean };
 
-/** The one-tap button and link wording: the word, with a cheer on yes. */
-const answerLabel = (a: RsvpAnswer) => (a === "yes" ? "Yes!" : ANSWER_WORD[a]);
-
-const ANSWERS: readonly RsvpAnswer[] = ["yes", "maybe", "no"];
+/** The one-tap button wording: the word, with a cheer on the plain yes. */
+const answerLabel = (w: Words, a: RsvpAnswer) =>
+	a === "yes" && w.yes.pick === "Yes" ? "Yes!" : w[a].pick;
 
 function answerButtons(facts: EventFacts): Block {
+	const { words, maybe } = facts.answers;
+	const offered: RsvpAnswer[] = maybe ? ["yes", "maybe", "no"] : ["yes", "no"];
 	return {
 		kind: "buttons",
-		items: ANSWERS.map((a) => ({
-			label: answerLabel(a),
+		items: offered.map((a) => ({
+			label: answerLabel(words, a),
 			href: rsvpLink(facts.siteUrl, facts.eventId, a),
 			tone: a === "yes" ? "lime" : "outline",
 		})),
@@ -273,9 +278,9 @@ export type HostTotals = {
 	expecting: number;
 };
 
-function partyLine(r: ReplyLine): string {
+function partyWords(w: Words, r: ReplyLine): string {
 	const by = r.answeredBy ? ` (answered by ${r.answeredBy})` : "";
-	if (r.response === "no") return `${ANSWER_WORD.no}${by}`;
+	if (r.response === "no") return `${w.no.pick}${by}`;
 	// A child a relative answered for is 0 adults and 1 kid: never "0 adults".
 	const people = [
 		...(r.adults > 0 || r.kids < 1
@@ -283,7 +288,7 @@ function partyLine(r: ReplyLine): string {
 			: []),
 		...(r.kids > 0 ? [`${r.kids} ${r.kids === 1 ? "kid" : "kids"}`] : []),
 	];
-	return `${ANSWER_WORD[r.response]} · ${people.join(", ")}${by}`;
+	return `${w[r.response].pick} · ${people.join(", ")}${by}`;
 }
 
 /** "Sam", "Sam and Ada", "Sam, Ada and Lou". */
@@ -292,8 +297,17 @@ function nameList(names: readonly string[]): string {
 	return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-function totalsLine(t: HostTotals): string {
-	return `${t.yes} yes · ${t.maybe} maybe · ${t.no} can't · ${t.waiting} waiting · expecting ${t.expecting}`;
+/** "4 in · 1 maybe · 2 out · 3 waiting · expecting 9", in the event's words. */
+function totalsLine(a: EmailAnswers, t: HostTotals): string {
+	const w = a.words;
+	return [
+		`${t.yes} ${w.yes.count}`,
+		// Off, maybe is left out -- unless somebody said it before it went.
+		...(a.maybe || t.maybe > 0 ? [`${t.maybe} ${w.maybe.count}`] : []),
+		`${t.no} ${w.no.count}`,
+		`${t.waiting} ${w.none.count}`,
+		`expecting ${t.expecting}`,
+	].join(" · ");
 }
 
 function guestListLink(facts: EventFacts): string {
@@ -308,6 +322,7 @@ function hostRender(
 	totals: HostTotals,
 ): Rendered {
 	const note = (r: ReplyLine) => r.note.trim();
+	const partyLine = (r: ReplyLine) => partyWords(facts.answers.words, r);
 	const rows: Block = {
 		kind: "custom",
 		html: `<table role="presentation" style="margin:0 0 18px; border-collapse:collapse; font-size:16px; line-height:1.4;">${replies
@@ -329,7 +344,7 @@ function hostRender(
 		list: true,
 		blocks: [
 			rows,
-			{ kind: "text", text: totalsLine(totals) },
+			{ kind: "text", text: totalsLine(facts.answers, totals) },
 			{
 				kind: "buttons",
 				items: [{ label: "Guest list", href: guestListLink(facts) }],
@@ -356,7 +371,7 @@ export function hostAlertEmail(
 	return hostRender(
 		facts,
 		self
-			? `${own.name}: ${ANSWER_WORD[own.response]} · ${facts.title}`
+			? `${own.name}: ${facts.answers.words[own.response].pick} · ${facts.title}`
 			: `${own.name} answered for ${names} · ${facts.title}`,
 		self
 			? relatives.length

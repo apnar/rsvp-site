@@ -62,7 +62,7 @@ function InvitePage() {
 						{data.isHost ? <HostPanel data={data} /> : null}
 						<RsvpForm
 							data={data}
-							initial={initialRsvp(data.me, a ?? null)}
+							initial={initialRsvp(data.me, data.answers, a ?? null)}
 							submit={(values, options) =>
 								respond.mutate({ eventId, ...values }, options)
 							}

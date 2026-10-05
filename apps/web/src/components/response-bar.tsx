@@ -1,7 +1,13 @@
+import {
+	type AnswerSet,
+	type AnswerWords,
+	pickWord,
+	showsMaybe,
+} from "@rsvp-site/api/answer-words";
 import type { Answer, Totals } from "@rsvp-site/api/headcount";
 import { cn } from "@rsvp-site/ui/lib/utils";
 
-import { ANSWER_LABELS, COUNT_LABELS } from "@/content/site";
+type Counts = Pick<Totals, "yes" | "maybe" | "no" | "waiting">;
 
 /**
  * The stacked yes / maybe / no / waiting bar: lime, pink, muted, empty.
@@ -9,9 +15,11 @@ import { ANSWER_LABELS, COUNT_LABELS } from "@/content/site";
  */
 export function ResponseBar({
 	totals,
+	words,
 	className,
 }: {
-	totals: Pick<Totals, "yes" | "maybe" | "no" | "waiting">;
+	totals: Counts;
+	words: AnswerWords;
 	className?: string;
 }) {
 	const empty = totals.yes + totals.maybe + totals.no + totals.waiting === 0;
@@ -22,7 +30,7 @@ export function ResponseBar({
 				className,
 			)}
 			role="img"
-			aria-label={`${totals.yes} yes, ${totals.maybe} maybe, ${totals.no} can't, ${totals.waiting} waiting`}
+			aria-label={`${totals.yes} ${words.yes.count}, ${totals.maybe} ${words.maybe.count}, ${totals.no} ${words.no.count}, ${totals.waiting} ${words.none.count}`}
 		>
 			{empty ? null : (
 				<>
@@ -39,14 +47,17 @@ export function ResponseBar({
 /** "42 in · 9 maybe · 6 out · 14 waiting", with the numbers colored. */
 export function ResponseCounts({
 	totals,
+	answers,
 	className,
 	alwaysShowOut = false,
 }: {
-	totals: Pick<Totals, "yes" | "maybe" | "no" | "waiting">;
+	totals: Counts;
+	answers: AnswerSet;
 	className?: string;
 	/** The invite page lists all four; a card drops "out" while it is zero. */
 	alwaysShowOut?: boolean;
 }) {
+	const { words } = answers;
 	return (
 		<div
 			className={cn(
@@ -55,49 +66,48 @@ export function ResponseCounts({
 			)}
 		>
 			<span>
-				<b className="text-lime-ink">{totals.yes}</b> {COUNT_LABELS.yes}
+				<b className="text-lime-ink">{totals.yes}</b> {words.yes.count}
 			</span>
-			<span>
-				<b className="text-pink-ink">{totals.maybe}</b> {COUNT_LABELS.maybe}
-			</span>
+			{showsMaybe(answers, totals.maybe) ? (
+				<span>
+					<b className="text-pink-ink">{totals.maybe}</b> {words.maybe.count}
+				</span>
+			) : null}
 			{totals.no > 0 || alwaysShowOut ? (
 				<span>
-					<b className="text-ink">{totals.no}</b> {COUNT_LABELS.no}
+					<b className="text-ink">{totals.no}</b> {words.no.count}
 				</span>
 			) : null}
 			<span>
-				<b className="text-ink">{totals.waiting}</b> {COUNT_LABELS.waiting}
+				<b className="text-ink">{totals.waiting}</b> {words.none.count}
 			</span>
 		</div>
 	);
 }
 
-/** The small answer chip: YES, MAYBE, CAN'T, NO REPLY. */
-export function AnswerTag({ response }: { response: Answer | null }) {
-	const base =
-		"inline-block flex-none rounded-full px-3 py-1 font-bold text-[12px] uppercase tracking-[0.04em]";
-	if (response === "yes") {
-		return (
-			<span className={cn(base, "bg-lime text-on-lime")}>
-				{ANSWER_LABELS.yes}
-			</span>
-		);
-	}
-	if (response === "maybe") {
-		return (
-			<span className={cn(base, "bg-pink text-on-pink")}>
-				{ANSWER_LABELS.maybe}
-			</span>
-		);
-	}
-	if (response === "no") {
-		return (
-			<span className={cn(base, "bg-line text-soft")}>{ANSWER_LABELS.no}</span>
-		);
-	}
+const TAG_LOOK: Record<Answer | "none", string> = {
+	yes: "bg-lime text-on-lime",
+	maybe: "bg-pink text-on-pink",
+	no: "bg-line text-soft",
+	none: "border border-line-strong text-haze",
+};
+
+/** The small answer chip, in the event's words: YES, MAYBE, CAN'T, NO REPLY. */
+export function AnswerTag({
+	response,
+	words,
+}: {
+	response: Answer | null;
+	words: AnswerWords;
+}) {
 	return (
-		<span className={cn(base, "border border-line-strong text-haze")}>
-			{ANSWER_LABELS.none}
+		<span
+			className={cn(
+				"inline-block flex-none rounded-full px-3 py-1 font-bold text-[12px] uppercase tracking-[0.04em]",
+				TAG_LOOK[response ?? "none"],
+			)}
+		>
+			{pickWord(words, response)}
 		</span>
 	);
 }

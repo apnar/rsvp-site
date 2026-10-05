@@ -6,6 +6,7 @@ import { paperCardUrl } from "@rsvp-site/email/links";
 import { siteUrl } from "@rsvp-site/email/worker";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { answersOf, pickWord } from "../../answer-words";
 import { csvCell } from "../../event-rules";
 import {
 	designedDoc,
@@ -101,6 +102,7 @@ export const paperRouter = {
 				guestsOf(context.db, row.id),
 				potluckOf(context.db, row.id),
 			]);
+			const { words } = answersOf(row);
 			const bringing = (guestId: string) =>
 				(potluck.byGuest.get(guestId) ?? []).map((c) => c.label).join("; ");
 			const header = [
@@ -121,7 +123,7 @@ export const paperRouter = {
 			const lines = guests.map((g) => [
 				g.name,
 				g.email,
-				g.response ?? "no reply",
+				pickWord(words, g.response),
 				g.response === "yes" ? String(g.adults) : "",
 				g.response === "yes" ? String(g.kids) : "",
 				g.dietary,

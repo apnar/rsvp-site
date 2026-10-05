@@ -23,7 +23,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0019 applied |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0021 applied (CI applies new ones on push) |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/` |
 | Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` sign-in and "email me my link", and per person on guests inviting friends |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY` |
@@ -174,9 +174,9 @@ libraries; only `apps/web` builds):
   event reads and access (`events.ts`, `host-event.ts`), sending
   (`mail.ts`), R2 and uploads (`media.ts`), stored designs
   (`designs-store.ts`, `design-rules.ts`), shared inputs (`inputs.ts`), pure
-  rules with tests (`event-rules.ts`), pure arithmetic the web app also
-  bundles (`time.ts`, `headcount.ts`, `schedule.ts` -- keep those free of
-  drizzle and `cloudflare:workers`), and the cron pass in
+  rules with tests (`event-rules.ts`), pure modules the web app also
+  bundles (`time.ts`, `headcount.ts`, `schedule.ts`, `answer-words.ts` --
+  keep those free of drizzle and `cloudflare:workers`), and the cron pass in
   `src/jobs/event-mail.ts`. Routers never import each other.
 - `packages/email` — pure template/Brevo code (`src/index.ts`) plus
   `src/worker.ts`, the only file there that touches the Worker env.
@@ -317,6 +317,16 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   `designValues` and the share teaser.
 - `headcount.ts` is the only arithmetic for totals; pages and emails must
   not count on their own.
+- Answer words are per event: `event.answer_words` (JSON, null = the
+  defaults) and `event.allow_maybe`, read only through `answersOf` in
+  `api/src/answer-words.ts`, which owns the defaults, presets and
+  validation. Stored answers stay yes / maybe / no. Each answer has a
+  `pick` (button, chip, heading) and a `count` (after a number); `none` is
+  no reply. Every payload that shows answers carries `answers`, the
+  components take it as a required prop, and `eventFacts` hands it to the
+  emails: never write "Maybe" or "out" literally. With maybe off, `mayPick`
+  refuses a new maybe, but one already given stays, still counts, and stays
+  on the guest's picker (`offered`).
 
 ### Invitation designs
 

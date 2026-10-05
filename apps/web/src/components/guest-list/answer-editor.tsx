@@ -1,3 +1,4 @@
+import { type AnswerSet, offered, pickWord } from "@rsvp-site/api/answer-words";
 import { Button } from "@rsvp-site/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
@@ -5,15 +6,10 @@ import { toast } from "sonner";
 
 import { Stepper } from "@/components/controls";
 import { PillTabs } from "@/components/pill-tabs";
-import { ANSWER_LABELS } from "@/content/site";
 import { orpc } from "@/utils/orpc";
 import type { Guest } from "./types";
 
 type EditedAnswer = "yes" | "maybe" | "no" | "none";
-
-const ANSWERS: { value: EditedAnswer; label: string }[] = (
-	["yes", "maybe", "no", "none"] as const
-).map((value) => ({ value, label: ANSWER_LABELS[value] }));
 
 /**
  * A host recording a guest's answer -- they called, or they told you at the
@@ -23,12 +19,22 @@ const ANSWERS: { value: EditedAnswer; label: string }[] = (
 export function AnswerEditor({
 	eventId,
 	guest,
+	answers,
 	onDone,
 }: {
 	eventId: string;
 	guest: Guest;
+	answers: AnswerSet;
 	onDone: () => void;
 }) {
+	// The guest's own choices, and putting it back to no reply.
+	const options: { value: EditedAnswer; label: string }[] = [
+		...offered(answers, guest.response),
+		"none" as const,
+	].map((value) => ({
+		value,
+		label: pickWord(answers.words, value === "none" ? null : value),
+	}));
 	const [answer, setAnswer] = useState<EditedAnswer>(guest.response ?? "none");
 	const [adults, setAdults] = useState(guest.adults);
 	const [kids, setKids] = useState(guest.kids);
@@ -59,7 +65,7 @@ export function AnswerEditor({
 				label={`${guest.name}'s answer`}
 				value={answer}
 				onChange={setAnswer}
-				options={ANSWERS}
+				options={options}
 			/>
 			{coming ? (
 				<div className="grid min-w-[300px] flex-1 grid-cols-2 gap-2">

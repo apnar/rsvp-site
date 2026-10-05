@@ -1,9 +1,10 @@
 /**
- * The form pieces the design draws by hand: the Yes!/Maybe/Can't picker, the
+ * The form pieces the design draws by hand: the yes / maybe / no picker, the
  * round +/- stepper, the toggle switch row and a labelled field. Native
  * inputs underneath, so they work with a keyboard and a screen reader.
  */
 
+import { type AnswerSet, offered } from "@rsvp-site/api/answer-words";
 import type { Answer } from "@rsvp-site/api/headcount";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { Minus, Plus } from "lucide-react";
@@ -15,22 +16,25 @@ import {
 	useId,
 } from "react";
 
-import { ANSWER_LABELS } from "@/content/site";
-
-const ANSWERS: Answer[] = ["yes", "maybe", "no"];
-
 /**
  * Radios dressed as one segmented pill. `pending` marks an answer that came
  * from an email link and is not saved yet: it shows picked, but outlined
  * rather than filled, until the guest presses the button.
+ *
+ * The event's words label the answers. With maybe off it offers two, but
+ * keeps maybe for somebody whose `saved` answer it already is.
  */
 export function AnswerPicker({
+	answers,
+	saved = null,
 	value,
 	onChange,
 	pending = false,
 	size = "lg",
 	name = "answer",
 }: {
+	answers: AnswerSet;
+	saved?: Answer | null;
 	value: Answer | null;
 	onChange: (answer: Answer) => void;
 	pending?: boolean;
@@ -40,7 +44,7 @@ export function AnswerPicker({
 	return (
 		<fieldset className="m-0 flex gap-1 rounded-full border-0 bg-night p-1.5">
 			<legend className="sr-only">Are you coming?</legend>
-			{ANSWERS.map((a) => (
+			{offered(answers, saved).map((a) => (
 				<label
 					key={a}
 					className={cn(
@@ -66,7 +70,7 @@ export function AnswerPicker({
 						onChange={() => onChange(a)}
 						className="sr-only"
 					/>
-					{ANSWER_LABELS[a]}
+					{answers.words[a].pick}
 				</label>
 			))}
 		</fieldset>

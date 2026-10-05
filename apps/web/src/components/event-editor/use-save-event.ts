@@ -1,3 +1,4 @@
+import { answerWordsInput } from "@rsvp-site/api/answer-words";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
@@ -55,6 +56,12 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 		} = draft;
 		const fields = fieldsOf(form);
 		if (!fields.title) throw new Error("Give it a name.");
+		const words = answerWordsInput.safeParse(fields.answerWords);
+		if (!words.success) {
+			throw new Error(
+				`Answer words: ${words.error.issues[0]?.message ?? "check them."}`,
+			);
+		}
 		let id = eventId ?? createdId.current ?? undefined;
 		let notified = 0;
 		if (!id) {

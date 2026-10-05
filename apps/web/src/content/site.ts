@@ -53,7 +53,7 @@ export const STEPS = [
 export const FEATURES = [
 	{
 		title: "In, maybe or out",
-		body: "One tap, changeable right up until the party starts.",
+		body: "One tap, in your own words, changeable right up until the party starts.",
 	},
 	{
 		title: "Plus-ones and kids",
@@ -76,22 +76,3 @@ export const FEATURES = [
 		body: "A nudge before the deadline, only to people who haven't answered.",
 	},
 ];
-
-/**
- * What an answer is called wherever it is a thing to pick or a chip on a
- * row. `none` is a guest who has not replied.
- */
-export const ANSWER_LABELS = {
-	yes: "Yes",
-	maybe: "Maybe",
-	no: "Can't",
-	none: "No reply",
-} as const;
-
-/** The same four as a count: "42 in", "9 maybe", "6 out", "14 waiting". */
-export const COUNT_LABELS = {
-	yes: "in",
-	maybe: "maybe",
-	no: "out",
-	waiting: "waiting",
-} as const;

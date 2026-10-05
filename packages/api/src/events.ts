@@ -41,6 +41,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
+import { answersOf } from "./answer-words";
 import { readTheme, savedDesign } from "./designs-store";
 import { emailsHeld, mayDelete, openRefusal } from "./event-rules";
 import { type GuestCounts, potluckLines, tally } from "./headcount";
@@ -422,6 +423,7 @@ export async function cardsFor(db: Db, rows: readonly EventRow[]) {
 			coverKey: row.coverKey,
 			card: cardOf(row),
 			hostLine: row.hostLine,
+			answers: answersOf(row),
 			totals: tally(guestsBy.get(row.id) ?? []),
 			potluck: row.potluckEnabled
 				? potluckLines(itemsBy.get(row.id) ?? [], claimsBy.get(row.id) ?? [])

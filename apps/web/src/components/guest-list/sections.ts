@@ -1,17 +1,34 @@
+import type { AnswerWords } from "@rsvp-site/api/answer-words";
 import { seenNoReply } from "@rsvp-site/api/headcount";
-import { ANSWER_LABELS } from "@/content/site";
 import type { Guest } from "./types";
 
 export const SECTION_KEYS = ["yes", "maybe", "no", "viewed", "unseen"] as const;
 export type SectionKey = (typeof SECTION_KEYS)[number];
 
-const LABELS: Record<SectionKey, string> = {
-	yes: ANSWER_LABELS.yes,
-	maybe: ANSWER_LABELS.maybe,
-	no: ANSWER_LABELS.no,
-	viewed: "Viewed, no reply",
-	unseen: "Not viewed",
-};
+/**
+ * "No reply" inside a sentence: "Viewed, no reply". Only a word in
+ * sentence case is lowered, so a host's "RSVP pending" keeps its capitals.
+ */
+export function midSentence(word: string): string {
+	return /^\p{Lu}\p{Ll}/u.test(word)
+		? word.charAt(0).toLocaleLowerCase() + word.slice(1)
+		: word;
+}
+
+/** Opened the invitation and said nothing: "Viewed, no reply". */
+export function viewedLabel(words: AnswerWords): string {
+	return `Viewed, ${midSentence(words.none.pick)}`;
+}
+
+function labels(words: AnswerWords): Record<SectionKey, string> {
+	return {
+		yes: words.yes.pick,
+		maybe: words.maybe.pick,
+		no: words.no.pick,
+		viewed: viewedLabel(words),
+		unseen: "Not viewed",
+	};
+}
 
 type Sortable = Pick<Guest, "name" | "response" | "viewedAt">;
 
@@ -28,10 +45,14 @@ const byName = new Intl.Collator("en", { sensitivity: "base", numeric: true });
  * the ones worth a word. Alphabetical inside each, and empty sections are
  * left out.
  */
-export function guestSections<T extends Sortable>(guests: readonly T[]) {
+export function guestSections<T extends Sortable>(
+	guests: readonly T[],
+	words: AnswerWords,
+) {
+	const label = labels(words);
 	return SECTION_KEYS.map((key) => ({
 		key,
-		label: LABELS[key],
+		label: label[key],
 		guests: guests
 			.filter((g) => sectionOf(g) === key)
 			.sort((a, b) => byName.compare(a.name, b.name)),

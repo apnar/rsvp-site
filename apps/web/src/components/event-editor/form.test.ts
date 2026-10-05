@@ -1,3 +1,4 @@
+import { type AnswerWords, DEFAULT_WORDS } from "@rsvp-site/api/answer-words";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -26,6 +27,7 @@ const event = {
 	askKids: false,
 	askDietary: true,
 	askNote: true,
+	allowMaybe: false,
 	potluckEnabled: true,
 	showGuestNames: false,
 	shareEnabled: true,
@@ -39,8 +41,16 @@ const event = {
 	hostAlerts: "off",
 };
 
+/** The words as the server resolves them (`answers`), not the raw column. */
+const words: AnswerWords = {
+	...DEFAULT_WORDS,
+	yes: { pick: "Going", count: "going" },
+	submit: "Send it",
+};
+
 const loaded = {
 	event,
+	answers: { words, maybe: false },
 	potluck: [
 		{ id: "p1", label: "Chips", quantity: 2 },
 		{ id: "p2", label: "Ice", quantity: 1 },
@@ -49,7 +59,7 @@ const loaded = {
 
 describe("formOf and fieldsOf", () => {
 	it("turns an event into a form and back to the same fields", () => {
-		expect(fieldsOf(formOf(loaded))).toEqual(event);
+		expect(fieldsOf(formOf(loaded))).toEqual({ ...event, answerWords: words });
 	});
 	it("shows an empty date or time as an empty input", () => {
 		const form = formOf(loaded);

@@ -100,6 +100,20 @@ export const event = sqliteTable(
 			.notNull()
 			.default(true),
 		askNote: integer("ask_note", { mode: "boolean" }).notNull().default(true),
+		/**
+		 * Off: guests are offered yes or no. A guest who already said maybe
+		 * keeps it until they change it, so switching this off loses nothing.
+		 */
+		allowMaybe: integer("allow_maybe", { mode: "boolean" })
+			.notNull()
+			.default(true),
+		/**
+		 * The host's own words for the answers and the RSVP button; null is
+		 * the site's. Only the words: the stored answers stay yes / maybe /
+		 * no. Typed `unknown` on purpose -- only `answersOf` (api/answer-words)
+		 * may read it, and a value it can't parse falls back to the defaults.
+		 */
+		answerWords: text("answer_words", { mode: "json" }).$type<unknown>(),
 		potluckEnabled: integer("potluck_enabled", { mode: "boolean" })
 			.notNull()
 			.default(false),

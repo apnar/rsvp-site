@@ -49,7 +49,7 @@ export function BringSomeone({ data }: { data: Invite }) {
 								<b>{f.name}</b>{" "}
 								<span className="text-[13px] text-haze">{f.email}</span>
 							</span>
-							<AnswerTag response={f.response} />
+							<AnswerTag response={f.response} words={data.answers.words} />
 							{f.response === null ? (
 								<Button
 									variant="ghost"

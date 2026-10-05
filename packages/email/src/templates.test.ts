@@ -38,6 +38,15 @@ const facts: EventFacts = {
 	deadlineLabel: "Sat, Oct 17",
 	coverKey: "covers/abc.jpg",
 	siteUrl: site,
+	answers: {
+		words: {
+			yes: { pick: "Yes", count: "in" },
+			maybe: { pick: "Maybe", count: "maybe" },
+			no: { pick: "Can't", count: "out" },
+			none: { pick: "No reply", count: "waiting" },
+		},
+		maybe: true,
+	},
 };
 
 const totals: HostTotals = {
@@ -367,6 +376,65 @@ describe("subjects and logs", () => {
 	});
 });
 
+describe("an event's own answer words", () => {
+	const own: EventFacts = {
+		...facts,
+		answers: {
+			words: {
+				yes: { pick: "Count me in", count: "coming" },
+				maybe: { pick: "Probably", count: "probably" },
+				no: { pick: "Sadly no", count: "missing" },
+				none: { pick: "Silent", count: "quiet" },
+			},
+			maybe: true,
+		},
+	};
+	const yesNo: EventFacts = {
+		...own,
+		answers: { ...own.answers, maybe: false },
+	};
+
+	it("label the one-tap buttons, with no cheer added", () => {
+		const r = inviteEmail(own);
+		expect(r.html).toContain("Count me in");
+		expect(r.html).not.toContain("Count me in!");
+		expect(r.html).toContain("Probably");
+		expect(r.html).toContain("Sadly no");
+		expect(inviteEmail(facts).html).toContain("Yes!");
+	});
+
+	it("leave maybe off when the event doesn't offer it", () => {
+		for (const r of [
+			inviteEmail(yesNo),
+			deadlineReminderEmail(yesNo),
+			nudgeEmail(yesNo),
+		]) {
+			expect(r.text).not.toContain("%3Fa%3Dmaybe");
+			expect(r.text).toContain("%3Fa%3Dyes");
+			expect(r.text).toContain("%3Fa%3Dno");
+		}
+	});
+
+	it("name the answer and the tallies in a host's alert", () => {
+		const r = hostAlertEmail(
+			own,
+			{ name: "Linh", response: "no", adults: 1, kids: 0, note: "" },
+			totals,
+		);
+		expect(r.subject).toBe("Linh: Sadly no · House Crawl <& tacos>");
+		expect(r.text).toContain(
+			"3 coming · 1 probably · 1 missing · 4 quiet · expecting 8",
+		);
+	});
+
+	it("drop maybe from the tallies once it is off and nobody said it", () => {
+		const none = { ...totals, maybe: 0 };
+		const r = hostDigestEmail(yesNo, [], none);
+		expect(r.text).toContain("3 coming · 1 missing · 4 quiet · expecting 8");
+		expect(hostDigestEmail(yesNo, [], totals).text).toContain("1 probably");
+	});
+});
+
 describe("words people type", () => {
 	const facts = {
 		eventId: "e1",
@@ -379,6 +447,15 @@ describe("words people type", () => {
 		deadlineLabel: null,
 		coverKey: null,
 		siteUrl: "https://rsvp.botch.com",
+		answers: {
+			words: {
+				yes: { pick: "In {{ params.key }}", count: "{{ params.key }}" },
+				maybe: { pick: "Maybe", count: "maybe" },
+				no: { pick: "{% if x %}", count: "out" },
+				none: { pick: "No reply", count: "waiting" },
+			},
+			maybe: true,
+		},
 	};
 	const stray = (s: string) =>
 		s.replaceAll(PARAM.key, "").replaceAll(PARAM.unsubscribeUrl, "");
@@ -390,6 +467,13 @@ describe("words people type", () => {
 			expect(stray(part)).not.toMatch(/\{\{/);
 		}
 		expect(r.text).toContain("https://evil.example/?t={");
+	});
+
+	it("can't smuggle one in through the answer words", () => {
+		const r = inviteEmail(facts, null);
+		for (const part of [r.subject, r.html, r.text]) {
+			expect(stray(part)).not.toMatch(/\{\{|\{%/);
+		}
 	});
 
 	it("can't smuggle one into a host's alert through a note or a name", () => {

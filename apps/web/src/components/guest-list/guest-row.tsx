@@ -1,3 +1,4 @@
+import type { AnswerSet } from "@rsvp-site/api/answer-words";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { Pencil } from "lucide-react";
@@ -30,6 +31,7 @@ export type RowEvent = {
 	canNudge: boolean;
 	nowMs: number;
 	print: Print;
+	answers: AnswerSet;
 };
 
 export function GuestRow({
@@ -103,7 +105,7 @@ export function GuestRow({
 			    the counts line up down the list; the empties drop out on a phone,
 			    where the row wraps anyway. */}
 			<span className="flex w-[96px] flex-col items-start gap-1">
-				<AnswerTag response={g.response} />
+				<AnswerTag response={g.response} words={event.answers.words} />
 				{g.answeredByName && g.response !== null ? (
 					<span className="text-[11px] text-haze">
 						Answered by {g.answeredByName}
@@ -190,6 +192,7 @@ export function GuestRow({
 				<AnswerEditor
 					eventId={eventId}
 					guest={g}
+					answers={event.answers}
 					onDone={() => setEditing(false)}
 				/>
 			) : null}

@@ -1,3 +1,5 @@
+import { DEFAULT_WORDS } from "@rsvp-site/api/answer-words";
+
 import type { Inputs, Outputs } from "@/lib/api-types";
 import { plural } from "@/lib/format";
 
@@ -41,6 +43,8 @@ export const BLANK: EventForm = {
 	askKids: true,
 	askDietary: true,
 	askNote: true,
+	allowMaybe: true,
+	answerWords: DEFAULT_WORDS,
 	potluckEnabled: false,
 	showGuestNames: true,
 	shareEnabled: false,
@@ -70,6 +74,9 @@ export function formOf(loaded: Loaded): EventForm {
 		askKids: e.askKids,
 		askDietary: e.askDietary,
 		askNote: e.askNote,
+		allowMaybe: e.allowMaybe,
+		// Resolved by the server: the defaults when the event has none.
+		answerWords: loaded.answers.words,
 		potluckEnabled: e.potluckEnabled,
 		showGuestNames: e.showGuestNames,
 		shareEnabled: e.shareEnabled,
