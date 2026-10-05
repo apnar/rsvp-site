@@ -4,6 +4,7 @@
  * cannot disagree about how many people are coming.
  */
 
+import { DIET_IDS, type DietId } from "@rsvp-site/db/diets";
 import type { GuestResponse } from "@rsvp-site/db/schema/event";
 
 export type Answer = GuestResponse;
@@ -178,4 +179,26 @@ export function relativeParty(
 	askKids: boolean,
 ): { adults: number; kids: number } {
 	return child && askKids ? { adults: 0, kids: 1 } : { adults: 1, kids: 0 };
+}
+
+/**
+ * How many of the people coming tick each diet, for the hosts' shopping:
+ * yes rows only, like the headcount. A relative answered for has a row of
+ * their own and counts; plus-ones have no profile and don't (their needs
+ * are the free `party_diet` note). Every preset is present, zeros included.
+ */
+export function dietCounts(
+	guests: readonly { response: Answer | null; diets: readonly DietId[] }[],
+): Record<DietId, number> {
+	const counts = Object.fromEntries(DIET_IDS.map((id) => [id, 0])) as Record<
+		DietId,
+		number
+	>;
+	for (const g of guests) {
+		if (g.response !== "yes") continue;
+		for (const id of new Set(g.diets)) {
+			if (id in counts) counts[id]++;
+		}
+	}
+	return counts;
 }

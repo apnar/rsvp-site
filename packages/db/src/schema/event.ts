@@ -262,7 +262,14 @@ export const eventGuest = sqliteTable(
 		 */
 		adults: integer("adults").notNull().default(1),
 		kids: integer("kids").notNull().default(0),
+		/** Unread since 0024 moved diets onto `user`; due to be dropped. */
 		dietary: text("dietary").notNull().default(""),
+		/**
+		 * Dietary needs of the party's people who aren't on the list (the
+		 * plus-ones and kids counted in `adults`/`kids`); each invited
+		 * person's own are on their `user` row.
+		 */
+		partyDiet: text("party_diet").notNull().default(""),
 		note: text("note").notNull().default(""),
 		/** When the invitation went out. Null: not sent yet. */
 		invitedAt: integer("invited_at", { mode: "timestamp_ms" }),

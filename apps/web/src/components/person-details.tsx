@@ -1,9 +1,11 @@
+import type { DietId } from "@rsvp-site/db/diets";
 import { formatPhone } from "@rsvp-site/db/phone";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { Field } from "@/components/controls";
+import { DietFields, type DietValue, sameDiet } from "@/components/diet";
 
 /** The detail fields a person carries; blank is stored as an empty string. */
 export const DETAIL_KEYS = [
@@ -18,12 +20,17 @@ export const DETAIL_KEYS = [
 	"country",
 ] as const;
 export type DetailKey = (typeof DETAIL_KEYS)[number];
-export type DetailsPatch = Partial<Record<DetailKey, string>>;
+export type DetailsPatch = Partial<Record<DetailKey, string>> & {
+	diets?: DietId[];
+	dietNote?: string;
+};
 
 export type DetailsPerson = {
 	name: string;
 	email: string;
 	noEmail: boolean;
+	diets: DietId[];
+	dietNote: string;
 } & Record<DetailKey, string | null>;
 
 /** Only what differs from the saved value; null and "" are the same blank. */
@@ -77,6 +84,8 @@ export function PersonDetailsDialog({
 	const firstRef = useRef<HTMLInputElement>(null);
 	const id = useId();
 	const [draft, setDraft] = useState(() => draftOf(person));
+	const savedDiet: DietValue = { diets: person.diets, note: person.dietNote };
+	const [diet, setDiet] = useState(savedDiet);
 	const [email, setEmail] = useState(person.email);
 	const [busy, setBusy] = useState(false);
 
@@ -88,7 +97,13 @@ export function PersonDetailsDialog({
 		firstRef.current?.focus();
 	}, []);
 
-	const patch = changedDetails(person, draft);
+	// Diet fields go in the patch only when changed: saving either one stamps
+	// the person's diet as confirmed, which an untouched form must not do.
+	const patch: DetailsPatch = changedDetails(person, draft);
+	if (!sameDiet(diet, savedDiet)) {
+		patch.diets = diet.diets;
+		patch.dietNote = diet.note;
+	}
 	const emailChanged = email.trim().toLowerCase() !== person.email;
 	const dirty = Object.keys(patch).length > 0 || emailChanged;
 
@@ -189,6 +204,17 @@ export function PersonDetailsDialog({
 							<Input {...set("country")} autoComplete="off" />
 						</Field>
 					</div>
+				</fieldset>
+				<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+					<legend className="mb-2 p-0 font-bold text-[14px]">
+						Dietary needs
+					</legend>
+					<DietFields
+						value={diet}
+						onChange={setDiet}
+						idPrefix={id}
+						disabled={!editable}
+					/>
 				</fieldset>
 				<div className="flex flex-wrap justify-end gap-2">
 					<Button

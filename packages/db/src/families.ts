@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 
 import { inBook } from "./address-book";
 import { mapChunks } from "./batch";
+import { dietsOf } from "./diets";
 import type { Db } from "./index";
 import { notDeactivated } from "./people";
 import { isAdmin } from "./roles";
@@ -46,6 +47,9 @@ export async function relativesOnEvent(
 			adults: eventGuest.adults,
 			kids: eventGuest.kids,
 			child: kin.child,
+			diets: user.diets,
+			dietNote: user.dietNote,
+			dietAt: user.dietAt,
 		})
 		.from(mine)
 		.innerJoin(kin, eq(kin.familyId, mine.familyId))
@@ -57,7 +61,40 @@ export async function relativesOnEvent(
 		.where(
 			and(eq(mine.userId, userId), ne(kin.userId, userId), notDeactivated()),
 		)
+		.all()
+		.then((rows) => rows.map((r) => ({ ...r, diets: dietsOf(r.diets) })));
+}
+
+/**
+ * Everybody in this person's families, once each however many they share:
+ * the people whose diets they may set (`setDiets`).
+ */
+export async function relativesOf(db: Db, userId: string) {
+	const mine = alias(familyMember, "mine");
+	const kin = alias(familyMember, "kin");
+	const rows = await db
+		.select({
+			id: user.id,
+			name: user.name,
+			child: kin.child,
+			diets: user.diets,
+			dietNote: user.dietNote,
+			dietAt: user.dietAt,
+		})
+		.from(mine)
+		.innerJoin(kin, eq(kin.familyId, mine.familyId))
+		.innerJoin(user, eq(user.id, kin.userId))
+		.where(
+			and(eq(mine.userId, userId), ne(kin.userId, userId), notDeactivated()),
+		)
+		.orderBy(asc(kin.child), asc(user.name))
 		.all();
+	const seen = new Set<string>();
+	return rows.flatMap((r) => {
+		if (seen.has(r.id)) return [];
+		seen.add(r.id);
+		return [{ ...r, diets: dietsOf(r.diets) }];
+	});
 }
 
 /** In any family: then only an admin, or they themselves, edit their details. */

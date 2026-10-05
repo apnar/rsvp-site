@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { dietText } from "@rsvp-site/db/diets";
 import { firstNameOf } from "@rsvp-site/db/names";
 import { formatPhone } from "@rsvp-site/db/phone";
 import { user } from "@rsvp-site/db/schema/auth";
@@ -103,7 +104,7 @@ export const paperRouter = {
 		.handler(async ({ context }) => {
 			const row = context.event;
 			const [guests, potluck] = await Promise.all([
-				guestsOf(context.db, row.id),
+				guestsOf(context.db, row.id, { diets: row.askDietary }),
 				potluckOf(context.db, row.id),
 			]);
 			const { words } = answersOf(row);
@@ -117,6 +118,7 @@ export const paperRouter = {
 				"Adults",
 				"Kids",
 				"Dietary",
+				"Rest of party",
 				"Note",
 				"Bringing",
 				"Answered",
@@ -134,7 +136,8 @@ export const paperRouter = {
 				pickWord(words, g.response),
 				g.response === "yes" ? String(g.adults) : "",
 				g.response === "yes" ? String(g.kids) : "",
-				g.dietary,
+				dietText({ diets: g.diets, note: g.dietNote }),
+				g.partyDiet,
 				g.note,
 				bringing(g.id),
 				g.respondedAt ? g.respondedAt.toISOString() : "",

@@ -31,6 +31,7 @@ import {
 } from "../events";
 import { inviteRefusal } from "../guest-invites";
 import {
+	dietCounts,
 	headcount,
 	notInvitedCount,
 	seenNoReplyCount,
@@ -50,7 +51,7 @@ export const guestsRouter = {
 		.handler(async ({ context }) => {
 			const row = context.event;
 			const [guests, potluck, designFormat] = await Promise.all([
-				guestsOf(context.db, row.id),
+				guestsOf(context.db, row.id, { diets: row.askDietary }),
 				potluckOf(context.db, row.id),
 				designFormatOf(context.db, row),
 			]);
@@ -68,9 +69,11 @@ export const guestsRouter = {
 					emailsReleasedAt: row.emailsReleasedAt,
 					emailsHeld: emailsHeld(row),
 					designFormat,
+					askDietary: row.askDietary,
 				},
 				totals,
 				headcount: headcount(totals),
+				diets: dietCounts(guests),
 				notInvited: notInvitedCount(guests),
 				seenNoReply: seenNoReplyCount(guests),
 				potluck: potluck.lines,

@@ -1,9 +1,11 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
+import { relativesOnEvent } from "@rsvp-site/db/families";
 import { findPaperInvite } from "@rsvp-site/db/paper";
 import { z } from "zod";
 import { answer, answerInput } from "../answers";
 import { contactInput, fillContact } from "../contact-ask";
+import { dietsInput, saveDiets } from "../diet";
 import { type Access, type Addressee, findEvent, notFound } from "../events";
 import { publicProcedure } from "../index";
 import { recordView } from "../views";
@@ -113,6 +115,30 @@ export const paperRouter = {
 				details,
 				"card",
 				voucher,
+			);
+		}),
+
+	/**
+	 * Set or confirm diets from a card: its guest's own, and those of the
+	 * relatives on the same list -- whom the card may already answer for.
+	 * Not limited to blanks like `addContact`: a diet is no way in.
+	 */
+	saveDiet: publicProcedure
+		.input(tokenInput.merge(dietsInput))
+		.handler(async ({ context, input }) => {
+			const { access, who } = await paperAccess(context.db, input.token);
+			if (access.event.status === "canceled") throw notFound();
+			const relatives = await relativesOnEvent(
+				context.db,
+				access.event.id,
+				who.id,
+			);
+			const allowed = new Set([who.id, ...relatives.map((r) => r.userId)]);
+			return saveDiets(
+				context.db,
+				input,
+				{ admin: false, userId: who.id },
+				allowed,
 			);
 		}),
 };

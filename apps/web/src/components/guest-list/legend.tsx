@@ -1,10 +1,14 @@
+import { DIETS } from "@rsvp-site/db/diets";
+import { DietIcon } from "@/components/diet";
 import type { Guest } from "./types";
 
 type Legendable = Pick<
 	Guest,
 	| "userId"
 	| "source"
-	| "dietary"
+	| "diets"
+	| "dietNote"
+	| "partyDiet"
 	| "note"
 	| "emailOff"
 	| "textsOff"
@@ -30,9 +34,17 @@ export function GuestLegend({
 				You
 			</span>
 		) : null,
-		guests.some((g) => g.dietary) ? (
-			<span key="dietary" className="text-pink-ink">
-				Dietary notes
+		...DIETS.filter((d) => guests.some((g) => g.diets.includes(d.id))).map(
+			(d) => (
+				<span key={d.id} className="flex items-center gap-1.5 text-pink-ink">
+					<DietIcon id={d.id} decorative />
+					{d.label}
+				</span>
+			),
+		),
+		guests.some((g) => g.dietNote || g.partyDiet) ? (
+			<span key="dietnote" className="text-pink-ink">
+				Diet notes
 			</span>
 		) : null,
 		guests.some((g) => g.note) ? (

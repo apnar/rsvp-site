@@ -169,6 +169,13 @@
 			"when": 1791203564736,
 			"tag": "0023_arrivals",
 			"breakpoints": true
+		},
+		{
+			"idx": 24,
+			"version": "6",
+			"when": 1791219344470,
+			"tag": "0024_diets",
+			"breakpoints": true
 		}
 	]
 }

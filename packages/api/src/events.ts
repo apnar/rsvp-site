@@ -6,6 +6,7 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { mapChunks } from "@rsvp-site/db/batch";
+import { dietsOf } from "@rsvp-site/db/diets";
 import { firstNameOf } from "@rsvp-site/db/names";
 import type { Person } from "@rsvp-site/db/people";
 import { textablePhone } from "@rsvp-site/db/phone";
@@ -243,8 +244,15 @@ const answerer = alias(user, "answerer");
  * `hasPaper` says their printed card has a QR code issued; `viewedAt`,
  * and how they came to view and to answer (`viewedVia`, `respondedVia`), are
  * for hosts only, so guest-facing payloads pick their fields by hand.
+ * Diets (the person's own, and `partyDiet` for the rest of their party)
+ * come blank unless `opts.diets`: callers pass the event's `askDietary`,
+ * so a host who didn't ask isn't handed their guests' allergies.
  */
-export async function guestsOf(db: Db, eventId: string) {
+export async function guestsOf(
+	db: Db,
+	eventId: string,
+	opts: { diets: boolean } = { diets: false },
+) {
 	const rows = await db
 		.select({
 			id: eventGuest.id,
@@ -256,7 +264,10 @@ export async function guestsOf(db: Db, eventId: string) {
 			response: eventGuest.response,
 			adults: eventGuest.adults,
 			kids: eventGuest.kids,
-			dietary: eventGuest.dietary,
+			diets: user.diets,
+			dietNote: user.dietNote,
+			dietAt: user.dietAt,
+			partyDiet: eventGuest.partyDiet,
 			note: eventGuest.note,
 			invitedAt: eventGuest.invitedAt,
 			respondedAt: eventGuest.respondedAt,
@@ -299,6 +310,10 @@ export async function guestsOf(db: Db, eventId: string) {
 			textsOkAt,
 			textsOffAt,
 			claimedAt,
+			diets,
+			dietNote,
+			dietAt,
+			partyDiet,
 			...row
 		}) => {
 			const active = status !== "deactivated";
@@ -314,6 +329,10 @@ export async function guestsOf(db: Db, eventId: string) {
 				...row,
 				// A placeholder address is never shown, not even to the host.
 				email: row.noEmail ? "" : row.email,
+				diets: opts.diets ? dietsOf(diets) : [],
+				dietNote: opts.diets ? dietNote : "",
+				dietConfirmed: opts.diets && dietAt !== null,
+				partyDiet: opts.diets ? partyDiet : "",
 				hasPaper: paperToken !== null,
 				emailOff: unsubscribedAt !== null,
 				textsOff: textsOffAt !== null,

@@ -89,6 +89,16 @@ export const user = sqliteTable("user", {
 	postalCode: text("postal_code").notNull().default(""),
 	country: text("country").notNull().default(""),
 	/**
+	 * What they eat, about themselves only (a party's uninvited others are
+	 * `event_guest.party_diet`): ids from `DIETS`, read through `dietsOf`,
+	 * and a free note. Written only by `setDiet` and `updateDetails`, which
+	 * stamp `diet_at`; null there means nobody has ever said, so the next
+	 * answer asks in full rather than "still right?".
+	 */
+	diets: text("diets", { mode: "json" }).notNull().default([]).$type<unknown>(),
+	dietNote: text("diet_note").notNull().default(""),
+	dietAt: integer("diet_at", { mode: "timestamp_ms" }),
+	/**
 	 * When they first signed in. Until then a host who has them in their
 	 * address book may correct their details; from then on the record is
 	 * theirs, and only they and an admin change it. Stamped by the session

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	clampParty,
 	deciding,
+	dietCounts,
 	extraPeople,
 	headcount,
 	notInvitedCount,
@@ -178,5 +179,28 @@ describe("extraPeople", () => {
 
 	it("is never negative", () => {
 		expect(extraPeople({ adults: 0, kids: 0 })).toBe(0);
+	});
+});
+
+describe("dietCounts", () => {
+	it("counts each diet among the people coming, relatives included", () => {
+		const c = dietCounts([
+			{ response: "yes", diets: ["vegan", "nuts"] },
+			// A child answered for is a row of their own.
+			{ response: "yes", diets: ["nuts"] },
+			{ response: "maybe", diets: ["vegan"] },
+			{ response: "no", diets: ["vegan"] },
+			{ response: null, diets: ["shellfish"] },
+		]);
+		expect(c.vegan).toBe(1);
+		expect(c.nuts).toBe(2);
+		expect(c.shellfish).toBe(0);
+		expect(c.vegetarian).toBe(0);
+	});
+
+	it("counts a person once however their diets were stored", () => {
+		expect(
+			dietCounts([{ response: "yes", diets: ["vegan", "vegan"] }]).vegan,
+		).toBe(1);
 	});
 });

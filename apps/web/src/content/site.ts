@@ -60,8 +60,8 @@ export const FEATURES = [
 		body: "Counted separately, so the pizza math works.",
 	},
 	{
-		title: "Dietary notes",
-		body: "Allergies and preferences right next to each name.",
+		title: "Dietary needs",
+		body: "Allergies and diets kept on each guest's profile, shown by every name and counted up for you.",
 	},
 	{
 		title: "Potluck sign-up",

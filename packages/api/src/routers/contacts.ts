@@ -3,7 +3,12 @@ import type { Db } from "@rsvp-site/db";
 import { inBook, remember, repointEntry } from "@rsvp-site/db/address-book";
 import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, insertChunks } from "@rsvp-site/db/batch";
-import { canEditDetails, detailColumns } from "@rsvp-site/db/details";
+import {
+	canEditDetails,
+	detailColumns,
+	dietColumns,
+} from "@rsvp-site/db/details";
+import { dietsOf } from "@rsvp-site/db/diets";
 import {
 	inAnyFamily,
 	listFamilies,
@@ -175,6 +180,7 @@ export const contactsRouter = {
 					name: user.name,
 					image: user.image,
 					...detailColumns,
+					...dietColumns,
 					email: user.email,
 					noEmail: user.noEmail,
 					unsubscribedAt: user.unsubscribedAt,
@@ -219,8 +225,17 @@ export const contactsRouter = {
 
 		return {
 			people: people.map(
-				({ unsubscribedAt, role, status, claimedAt, familyMember, ...p }) => ({
+				({
+					unsubscribedAt,
+					role,
+					status,
+					claimedAt,
+					familyMember,
+					dietAt: _,
+					...p
+				}) => ({
 					...p,
+					diets: dietsOf(p.diets),
 					// Who could be a co-host: hosts and admins who are still in.
 					canHost: canHost({ role }) && status !== "deactivated",
 					claimed: claimedAt !== null,

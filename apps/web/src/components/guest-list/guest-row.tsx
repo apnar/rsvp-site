@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
+import { DietIcons } from "@/components/diet";
 import { PaperActions } from "@/components/paper/paper-actions";
 import { AnswerTag } from "@/components/response-bar";
 import type { Print } from "@/lib/cards-pdf";
@@ -16,6 +17,9 @@ import { AddEmail } from "./add-email";
 import { AnswerEditor } from "./answer-editor";
 import { rowSubtitle } from "./row-subtitle";
 import type { Guest } from "./types";
+
+/** The " · " between two notes, only when something follows. */
+const sep = (next: string) => (next ? " · " : null);
 
 function party(g: Guest) {
 	// A child a relative answered for is stored as 0 adults and 1 kid.
@@ -110,6 +114,8 @@ export function GuestRow({
 				? "Joined by share link"
 				: null;
 	const pills = rowPills(g);
+	const hasNotes =
+		g.diets.length > 0 || !!g.dietNote || !!g.partyDiet || !!g.note;
 	const coming = g.response === "yes" || g.response === "maybe";
 
 	return (
@@ -188,11 +194,26 @@ export function GuestRow({
 			<span
 				className={cn(
 					"min-w-0 flex-[1_1_160px] text-[14px] text-soft",
-					!g.dietary && !g.note && "max-md:hidden",
+					!hasNotes && "max-md:hidden",
 				)}
 			>
-				{g.dietary ? <span className="text-pink-ink">{g.dietary}</span> : null}
-				{g.dietary && g.note ? " · " : null}
+				{g.diets.length > 0 ? (
+					<DietIcons
+						diets={g.diets}
+						className="align-text-bottom text-pink-ink"
+					/>
+				) : null}
+				{g.diets.length > 0 && g.dietNote ? " " : null}
+				{g.dietNote ? (
+					<span className="text-pink-ink">{g.dietNote}</span>
+				) : null}
+				{g.diets.length > 0 || g.dietNote ? sep(g.partyDiet || g.note) : null}
+				{g.partyDiet ? (
+					<span className="text-pink-ink">
+						<span className="text-haze">Party:</span> {g.partyDiet}
+					</span>
+				) : null}
+				{g.partyDiet ? sep(g.note) : null}
 				{g.note ? `"${g.note}"` : null}
 			</span>
 			<span className="flex items-center justify-end gap-1.5 max-md:empty:hidden md:ml-auto md:min-w-[40px]">

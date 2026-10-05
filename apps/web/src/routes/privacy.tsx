@@ -18,7 +18,7 @@ function PrivacyPage() {
 		<LegalPage
 			kicker="Privacy"
 			title="Privacy policy"
-			updated="October 4, 2026"
+			updated="October 5, 2026"
 		>
 			<p>
 				{SITE_NAME} (rsvp.botch.com) keeps only what it takes to run
@@ -29,11 +29,15 @@ function PrivacyPage() {
 			<ul>
 				<li>
 					Your name, email address and, if you or a host who invited you added
-					them, your mobile number, mailing address and profile picture.
+					them, your mobile number, mailing address and profile picture. Any
+					dietary needs you give are kept on your profile too: they're shown to
+					the hosts of events you're invited to when the host asks about diets,
+					and the people in your family on the site can change them.
 				</li>
 				<li>
-					Your answers to invitations: whether you're coming, how many, dietary
-					notes and anything you wrote to the host.
+					Your answers to invitations: whether you're coming, how many, anything
+					you wrote to the host and, if you brought others, a note about their
+					diets.
 				</li>
 				<li>
 					Which invitations were sent to you, by email or text, whether they

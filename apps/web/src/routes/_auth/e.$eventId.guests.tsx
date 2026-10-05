@@ -1,6 +1,7 @@
 import { showsMaybe } from "@rsvp-site/api/answer-words";
 import { seenNoReply } from "@rsvp-site/api/headcount";
 import { formatDate } from "@rsvp-site/api/time";
+import { DIETS } from "@rsvp-site/db/diets";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
@@ -10,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AddGuests } from "@/components/add-guests";
+import { DietIcon } from "@/components/diet";
 import { EventCrumbs, EventTitleLink } from "@/components/event-crumbs";
 import {
 	GUEST_COLUMNS,
@@ -126,6 +128,13 @@ function GuestListPage() {
 	const { answers } = data;
 	const words = answers.words;
 	const maybe = showsMaybe(answers, t.maybe);
+	const dietCounts = data.event.askDietary
+		? DIETS.flatMap((d) =>
+				data.diets[d.id] > 0
+					? [{ id: d.id, count: d.count, n: data.diets[d.id] }]
+					: [],
+			)
+		: [];
 	const sections = useMemo(
 		() => guestSections(shown, answers.words),
 		[shown, answers.words],
@@ -222,6 +231,17 @@ function GuestListPage() {
 					<span className="font-medium text-[15px]">
 						{plural(t.adults, "adult")} · {plural(t.kids, "kid")}
 					</span>
+					{dietCounts.length > 0 ? (
+						<span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-normal text-[13px] opacity-80">
+							{dietCounts.map((d, i) => (
+								<span key={d.id} className="inline-flex items-center gap-1">
+									{i > 0 ? <span aria-hidden>·</span> : null}
+									<DietIcon id={d.id} decorative className="size-3.5" />
+									{d.n} {d.count}
+								</span>
+							))}
+						</span>
+					) : null}
 				</div>
 				<div className="flex flex-col justify-center gap-3.5 rounded-[26px] bg-panel p-[22px]">
 					<ResponseBar totals={t} words={words} className="h-4" />

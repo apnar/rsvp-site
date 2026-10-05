@@ -1,3 +1,4 @@
+import type { DietId } from "@rsvp-site/db/diets";
 import { formatPhone } from "@rsvp-site/db/phone";
 import { canHost } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
@@ -17,6 +18,13 @@ import { toast } from "sonner";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field, Segmented, SettingRow, Switch } from "@/components/controls";
+import {
+	DietFields,
+	DietIcons,
+	type DietValue,
+	dietSummary,
+	sameDiet,
+} from "@/components/diet";
 import { Page, PageHead, Panel } from "@/components/page";
 import {
 	changedDetails,
@@ -28,6 +36,7 @@ import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/utils/orpc";
 
 const meQuery = () => orpc.account.me.queryOptions();
+const familyQuery = () => orpc.diet.family.queryOptions();
 const hasPasswordQuery = () => orpc.account.hasPassword.queryOptions();
 
 export const Route = createFileRoute("/_auth/account")({
@@ -61,6 +70,7 @@ function AccountPage() {
 			<div className="grid max-w-[1000px] grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-5">
 				<NameAndEmail />
 				<div className="flex flex-col gap-5">
+					<DietPanel />
 					<ReachPrefs />
 					<PasswordPanel />
 					<SignOutEverywhere />
@@ -181,6 +191,158 @@ function NameAndEmail() {
 				Save
 			</Button>
 		</Panel>
+	);
+}
+
+/**
+ * Dietary needs belong to the person, not to each RSVP, so they are said
+ * once here; relatives answer for each other, so they can be set here too.
+ */
+function DietPanel() {
+	const router = useRouter();
+	const { data: me } = useSuspenseQuery(meQuery());
+	const { data: family } = useSuspenseQuery(familyQuery());
+	const saved: DietValue = { diets: me.diets, note: me.dietNote };
+	const [draft, setDraft] = useState(saved);
+	const save = useMutation(
+		orpc.account.setDetails.mutationOptions({
+			onSuccess: async () => {
+				toast.success("Saved.");
+				await router.invalidate();
+			},
+		}),
+	);
+	return (
+		<>
+			<Panel
+				as="form"
+				onSubmit={(e) => {
+					e.preventDefault();
+					save.mutate({ diets: draft.diets, dietNote: draft.note });
+				}}
+			>
+				<h2 className="m-0 text-[20px]">Dietary needs</h2>
+				<p className="m-0 text-[14px] text-haze">
+					The hosts of events you're on see this when they ask about diets, so
+					you don't have to say it with every RSVP.
+				</p>
+				<DietFields value={draft} onChange={setDraft} idPrefix="me" />
+				<Button
+					type="submit"
+					className="self-start"
+					// Unchanged still saves for somebody never asked: "none" is an answer.
+					disabled={
+						save.isPending || (me.dietConfirmed && sameDiet(draft, saved))
+					}
+				>
+					Save
+				</Button>
+			</Panel>
+			{/* Its own panel, not inside the form above: Enter in a relative's
+			    note must not save yours. */}
+			{family.length > 0 ? (
+				<Panel>
+					<h2 className="m-0 text-[20px]">Your family's</h2>
+					<p className="m-0 text-[14px] text-haze">
+						You can set these for each other, since whoever answers for the
+						family is often the one who knows.
+					</p>
+					{family.map((r) => (
+						<RelativeDiet key={r.id} relative={r} />
+					))}
+				</Panel>
+			) : null}
+		</>
+	);
+}
+
+function RelativeDiet({
+	relative: r,
+}: {
+	relative: {
+		id: string;
+		name: string;
+		child: boolean;
+		diets: DietId[];
+		dietNote: string;
+	};
+}) {
+	const saved: DietValue = { diets: r.diets, note: r.dietNote };
+	const [open, setOpen] = useState(false);
+	const [draft, setDraft] = useState(saved);
+	const save = useMutation(
+		orpc.diet.save.mutationOptions({
+			onSuccess: () => {
+				toast.success("Saved.");
+				setOpen(false);
+			},
+		}),
+	);
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="flex items-center gap-2">
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<span className="font-bold text-[15px]">
+						{r.name}
+						{r.child ? (
+							<span className="ml-2 rounded-full border border-line px-2 py-0.5 font-semibold text-[11px] text-haze">
+								kid
+							</span>
+						) : null}
+					</span>
+					<span className="flex items-center gap-2 text-[13px] text-haze">
+						<DietIcons diets={r.diets} decorative />
+						{dietSummary(saved)}
+					</span>
+				</div>
+				{open ? null : (
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() => {
+							setDraft(saved);
+							setOpen(true);
+						}}
+					>
+						Change
+					</Button>
+				)}
+			</div>
+			{open ? (
+				<div className="flex flex-col gap-3">
+					<DietFields
+						value={draft}
+						onChange={setDraft}
+						idPrefix={`rel-${r.id}`}
+					/>
+					<div className="flex gap-2">
+						<Button
+							type="button"
+							size="sm"
+							disabled={save.isPending || sameDiet(draft, saved)}
+							onClick={() =>
+								save.mutate({
+									people: [
+										{ userId: r.id, diets: draft.diets, note: draft.note },
+									],
+								})
+							}
+						>
+							Save
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => setOpen(false)}
+						>
+							Cancel
+						</Button>
+					</div>
+				</div>
+			) : null}
+		</div>
 	);
 }
 

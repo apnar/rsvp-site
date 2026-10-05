@@ -54,9 +54,12 @@ export function QuestionsSection({ draft }: { draft: EventDraft }) {
 					onChange={(v) => set("askKids", v)}
 				/>
 			</SettingRow>
-			<SettingRow title="Dietary notes" hint="Allergies and preferences">
+			<SettingRow
+				title="Dietary needs"
+				hint="Guests check their dietary needs after answering"
+			>
 				<Switch
-					label="Dietary notes"
+					label="Dietary needs"
 					checked={form.askDietary}
 					onChange={(v) => set("askDietary", v)}
 				/>

@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import { mayPick } from "./answer-words";
 import { type Access, requireOpen } from "./events";
-import { clampParty, relativeParty } from "./headcount";
+import { clampParty, extraPeople, relativeParty } from "./headcount";
 import { idSchema } from "./inputs";
 import { alertHosts } from "./mail";
 
@@ -24,7 +24,8 @@ export const answerInput = z.object({
 	response: z.enum(GUEST_RESPONSES),
 	adults: z.number().int().min(0).max(50).default(1),
 	kids: z.number().int().min(0).max(50).default(0),
-	dietary: z.string().trim().max(300).default(""),
+	/** Diets of the party's people who aren't on the list; see `party_diet`. */
+	partyDiet: z.string().trim().max(300).default(""),
 	note: z.string().trim().max(1000).default(""),
 	claims: z.array(idSchema).max(40).default([]),
 	/** Answers for relatives on the same list (see `relativesOnEvent`). */
@@ -119,7 +120,10 @@ export async function answer(
 				.set({
 					response: input.response,
 					...party,
-					dietary: row.askDietary ? input.dietary : "",
+					// Only while somebody uninvited comes along: an invited
+					// person's diet is on their own profile.
+					partyDiet:
+						row.askDietary && extraPeople(party) > 0 ? input.partyDiet : "",
 					note: row.askNote ? input.note : "",
 					respondedAt: new Date(),
 					respondedVia: via,

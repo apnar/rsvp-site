@@ -2,6 +2,7 @@ import { accountRouter } from "./account";
 import { contactRouter } from "./contact";
 import { contactsRouter } from "./contacts";
 import { designsRouter } from "./designs";
+import { dietRouter } from "./diet";
 import { eventsRouter } from "./events";
 import { familiesRouter } from "./families";
 import { guestsRouter } from "./guests";
@@ -12,6 +13,7 @@ import { peopleRouter } from "./people";
 export const appRouter = {
 	account: accountRouter,
 	contact: contactRouter,
+	diet: dietRouter,
 	events: eventsRouter,
 	designs: designsRouter,
 	guests: guestsRouter,

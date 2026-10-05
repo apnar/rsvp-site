@@ -9,6 +9,8 @@ import { NAME_MAX } from "@rsvp-site/db/names";
 import { normalizePhone } from "@rsvp-site/db/phone";
 import { z } from "zod";
 
+import { dietIdsInput, dietNoteInput } from "./diet";
+
 const part = (max: number) => z.string().trim().max(max, "That's too long.");
 
 /**
@@ -40,6 +42,8 @@ export const detailsPatch = z.object({
 	region: part(60).optional(),
 	postalCode: part(20).optional(),
 	country: part(60).optional(),
+	diets: dietIdsInput.optional(),
+	dietNote: dietNoteInput.optional(),
 });
 
 /** Nobody is a blank: a name pair needs at least a first name. */

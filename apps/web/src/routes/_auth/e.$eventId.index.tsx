@@ -3,11 +3,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AfterAnswer, dietPeople } from "@/components/invite/after-answer";
 import { BringSomeone } from "@/components/invite/bring-someone";
-import { ContactAsk } from "@/components/invite/contact-ask";
 import { HostBar } from "@/components/invite/host-bar";
 import { InviteView } from "@/components/invite/invite-view";
-import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
+import {
+	initialRsvp,
+	RsvpForm,
+	type RsvpValues,
+} from "@/components/invite/rsvp-form";
 import type { Invite } from "@/components/invite/types";
 import { useRecordView } from "@/components/invite/use-record-view";
 import { pageTitle } from "@/content/site";
@@ -55,7 +59,9 @@ function previewGuest(data: Invite): NonNullable<Invite["me"]> {
 		response: null,
 		adults: 1,
 		kids: 0,
-		dietary: "",
+		partyDiet: "",
+		diet: { diets: [], note: "", confirmed: false },
+		userId: "",
 		note: "",
 		claims: [],
 		name: "your guest",
@@ -74,8 +80,9 @@ function InvitePage() {
 	const { data } = useSuspenseQuery(inviteQuery(eventId));
 	const respond = useMutation(orpc.guests.respond.mutationOptions());
 	const addContact = useMutation(orpc.contact.add.mutationOptions());
-	// Opened by an answer, while there is a blank to ask about.
-	const [asking, setAsking] = useState(false);
+	const saveDiets = useMutation(orpc.diet.save.mutationOptions());
+	// Opened by an answer: the answer it was, which decides whose diets to check.
+	const [asking, setAsking] = useState<RsvpValues | null>(null);
 	// The host sees their own page for their own reasons; the server
 	// decides who counts, this only saves it the call.
 	useRecordView(data.me && !data.isHost ? eventId : null, () =>
@@ -115,19 +122,27 @@ function InvitePage() {
 											{
 												onSuccess: (result) => {
 													options.onSuccess(result);
-													setAsking(true);
+													setAsking(values);
 												},
 											},
 										)
 							}
 							pending={respond.isPending}
 						/>
-						{asking && (me.missing.email || me.missing.phone) ? (
-							<ContactAsk
+						{asking ? (
+							<AfterAnswer
+								// A fresh answer is a fresh check.
+								key={JSON.stringify(asking)}
 								missing={me.missing}
-								submit={(values, options) => addContact.mutate(values, options)}
-								pending={addContact.isPending}
-								onClose={() => setAsking(false)}
+								people={dietPeople(me, data.event.askDietary, asking)}
+								saveDiets={(people, options) =>
+									saveDiets.mutate({ people }, options)
+								}
+								submitContact={(values, options) =>
+									addContact.mutate(values, options)
+								}
+								pending={addContact.isPending || saveDiets.isPending}
+								onClose={() => setAsking(null)}
 							/>
 						) : null}
 						<BringSomeone data={shown} preview={preview} />

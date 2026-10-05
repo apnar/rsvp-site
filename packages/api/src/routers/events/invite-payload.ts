@@ -1,5 +1,6 @@
 import type { Db } from "@rsvp-site/db";
 import { contactGaps, type FilledBy, NO_GAPS } from "@rsvp-site/db/details";
+import type { DietId } from "@rsvp-site/db/diets";
 import { relativesOnEvent } from "@rsvp-site/db/families";
 import { firstNameOf } from "@rsvp-site/db/names";
 import { answersOf } from "../../answer-words";
@@ -34,7 +35,7 @@ export async function invitePayload(
 	// The card says the viewer's own name, which is the caller's: so the
 	// layout needs nothing from the other reads and runs beside them.
 	const [guests, potluck, hosts, card, relatives, missing] = await Promise.all([
-		guestsOf(db, row.id),
+		guestsOf(db, row.id, { diets: row.askDietary }),
 		row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
 		hostsOf(db, row.id),
 		designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
@@ -49,6 +50,16 @@ export async function invitePayload(
 	// The relatives this guest may answer for, as the guest list has them.
 	const childOf = new Map(relatives.map((r) => [r.id, r.child]));
 	const myFamily = guests.filter((g) => childOf.has(g.id));
+	const myRow = mine ? guests.find((g) => g.id === mine.id) : undefined;
+	const dietOf = (g?: {
+		diets: DietId[];
+		dietNote: string;
+		dietConfirmed: boolean;
+	}) => ({
+		diets: g?.diets ?? [],
+		note: g?.dietNote ?? "",
+		confirmed: g?.dietConfirmed ?? false,
+	});
 	const myClaims = mine
 		? (potluck.byGuest.get(mine.id) ?? []).map((c) => c.itemId)
 		: [];
@@ -93,7 +104,10 @@ export async function invitePayload(
 					response: mine.response,
 					adults: mine.adults,
 					kids: mine.kids,
-					dietary: mine.dietary,
+					partyDiet: row.askDietary ? mine.partyDiet : "",
+					/** Their own diet, for the "still right?" after answering. */
+					diet: dietOf(myRow),
+					userId: mine.userId,
 					note: mine.note,
 					claims: myClaims,
 					name: me.name,
@@ -106,8 +120,10 @@ export async function invitePayload(
 					})),
 					family: myFamily.map((g) => ({
 						guestId: g.id,
+						userId: g.userId,
 						name: g.name,
 						child: childOf.get(g.id) === true,
+						diet: dietOf(g),
 						response: g.response,
 						answeredByName: g.answeredByName,
 					})),

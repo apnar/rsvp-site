@@ -2,6 +2,7 @@ import { and, eq, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 
 import { normalizeEmail } from "./addresses";
 import { batchAll } from "./batch";
+import type { Diet, DietId } from "./diets";
 import { isUniqueViolation } from "./errors";
 import type { Db } from "./index";
 import { nameFor } from "./names";
@@ -20,6 +21,8 @@ export type Details = {
 	region: string;
 	postalCode: string;
 	country: string;
+	diets: DietId[];
+	dietNote: string;
 };
 
 export const ADDRESS_FIELDS = [
@@ -42,6 +45,16 @@ export const detailColumns = {
 	region: user.region,
 	postalCode: user.postalCode,
 	country: user.country,
+};
+
+/**
+ * The columns behind a person's diet, for selects. `diets` comes back raw:
+ * pass it through `dietsOf`.
+ */
+export const dietColumns = {
+	diets: user.diets,
+	dietNote: user.dietNote,
+	dietAt: user.dietAt,
 };
 
 /**
@@ -128,11 +141,13 @@ export async function updateDetails(
 	const firstName = patch.firstName ?? row.firstName;
 	const lastName = patch.lastName ?? row.lastName;
 	const named = patch.firstName !== undefined || patch.lastName !== undefined;
+	const dieted = patch.diets !== undefined || patch.dietNote !== undefined;
 	const result = await db
 		.update(user)
 		.set({
 			...patch,
 			...(newNumber ? { textsOkAt: null, textsOkBy: null } : {}),
+			...(dieted ? { dietAt: new Date() } : {}),
 			...(named
 				? {
 						firstName,
@@ -145,6 +160,60 @@ export async function updateDetails(
 		.where(editable(id, opts.asHost))
 		.run();
 	return result.meta.changes === 1;
+}
+
+/**
+ * Who is setting diets outside the details forms. A person sets their own
+ * and their relatives': diets are the one thing family members may change
+ * for each other, since a parent answering for a child is the only one who
+ * will. A printed card counts as its guest, for the same people it may
+ * answer for -- a diet is no way into an account, unlike an address.
+ */
+export type DietBy = { admin: true } | { admin: false; userId: string };
+
+/** Where a diet may land for this writer; repeated in the UPDATE against races. */
+function dietWritable(id: string, by: DietBy): SQL | undefined {
+	if (by.admin) return eq(user.id, id);
+	if (by.userId === id) {
+		return and(eq(user.id, id), ne(user.status, "deactivated"));
+	}
+	return and(
+		eq(user.id, id),
+		ne(user.status, "deactivated"),
+		// Plain names: a raw subquery on a single-table update (CLAUDE.md).
+		sql`exists (
+			select 1 from family_member mine
+			join family_member kin on kin.family_id = mine.family_id
+			where mine.user_id = ${by.userId} and kin.user_id = ${id}
+		)`,
+	);
+}
+
+/**
+ * Save (or confirm, unchanged) diets for these people, stamping `diet_at`
+ * either way: a confirmation is what turns the next ask into "still
+ * right?". The ids returned are the ones written; the caller checked who
+ * they may set beforehand, and anybody missing lost a race.
+ */
+export async function setDiets(
+	db: Db,
+	rows: readonly { userId: string; diet: Diet }[],
+	by: DietBy,
+): Promise<string[]> {
+	if (rows.length === 0) return [];
+	const at = new Date();
+	const results = await batchAll(
+		db,
+		rows.map(({ userId, diet }) =>
+			db
+				.update(user)
+				.set({ diets: diet.diets, dietNote: diet.note, dietAt: at })
+				.where(dietWritable(userId, by)),
+		),
+	);
+	return rows
+		.filter((_, i) => results[i]?.meta.changes === 1)
+		.map((r) => r.userId);
 }
 
 /**

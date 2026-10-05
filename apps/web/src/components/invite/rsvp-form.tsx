@@ -1,5 +1,5 @@
 import { type AnswerSet, offered } from "@rsvp-site/api/answer-words";
-import type { Answer } from "@rsvp-site/api/headcount";
+import { type Answer, extraPeople } from "@rsvp-site/api/headcount";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
@@ -16,7 +16,7 @@ export type RsvpValues = {
 	response: Answer;
 	adults: number;
 	kids: number;
-	dietary: string;
+	partyDiet: string;
 	note: string;
 	claims: string[];
 	family: { guestId: string; response: Answer }[];
@@ -27,7 +27,7 @@ export type RsvpInitial = {
 	answer: Answer | null;
 	adults: number;
 	kids: number;
-	dietary: string;
+	partyDiet: string;
 	note: string;
 	claims: string[];
 };
@@ -48,7 +48,7 @@ export function initialRsvp(
 		// grown-up's party, and clampParty would count that kid twice.
 		adults: me.adults < 1 ? 1 : me.adults,
 		kids: me.adults < 1 ? 0 : me.kids,
-		dietary: me.dietary,
+		partyDiet: me.partyDiet,
 		note: me.note,
 		claims: me.claims,
 	};
@@ -81,7 +81,7 @@ export function RsvpForm({
 	const [answer, setAnswer] = useState<Answer | null>(initial.answer);
 	const [adults, setAdults] = useState(initial.adults);
 	const [kids, setKids] = useState(initial.kids);
-	const [dietary, setDietary] = useState(initial.dietary);
+	const [partyDiet, setPartyDiet] = useState(initial.partyDiet);
 	const [note, setNote] = useState(initial.note);
 	const [claims, setClaims] = useState<string[]>(initial.claims);
 	// Relatives the guest has answered in this form. Until then an unanswered
@@ -110,7 +110,7 @@ export function RsvpForm({
 						response: answer,
 						adults,
 						kids,
-						dietary,
+						partyDiet,
 						note,
 						claims,
 						// Only answers this form changes: re-sending a relative's own
@@ -214,14 +214,16 @@ export function RsvpForm({
 				</div>
 			) : null}
 
-			{coming && e.askDietary ? (
-				<Field label="Dietary notes" htmlFor="dietary">
+			{/* Each invited person's own diet is on their profile, checked
+			    after answering; this is for the people they bring. */}
+			{coming && e.askDietary && extraPeople({ adults, kids }) > 0 ? (
+				<Field label="Diets of the others you're bringing" htmlFor="party-diet">
 					<Input
-						id="dietary"
-						value={dietary}
+						id="party-diet"
+						value={partyDiet}
 						maxLength={300}
 						placeholder="Allergies, vegetarians, anything the hosts should know"
-						onChange={(ev) => setDietary(ev.target.value)}
+						onChange={(ev) => setPartyDiet(ev.target.value)}
 					/>
 				</Field>
 			) : null}

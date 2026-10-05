@@ -1,9 +1,13 @@
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { ContactAsk } from "@/components/invite/contact-ask";
+import { AfterAnswer, dietPeople } from "@/components/invite/after-answer";
 import { InviteView } from "@/components/invite/invite-view";
-import { initialRsvp, RsvpForm } from "@/components/invite/rsvp-form";
+import {
+	initialRsvp,
+	RsvpForm,
+	type RsvpValues,
+} from "@/components/invite/rsvp-form";
 import { useRecordView } from "@/components/invite/use-record-view";
 import { pageTitle } from "@/content/site";
 import { orNotFound } from "@/lib/not-found";
@@ -40,7 +44,9 @@ function PaperInvitePage() {
 	const { data } = useSuspenseQuery(paperQuery(token));
 	const respond = useMutation(orpc.paper.respond.mutationOptions());
 	const addContact = useMutation(orpc.paper.addContact.mutationOptions());
-	const [asking, setAsking] = useState(false);
+	const saveDiets = useMutation(orpc.paper.saveDiet.mutationOptions());
+	// Opened by an answer: the answer it was, which decides whose diets to check.
+	const [asking, setAsking] = useState<RsvpValues | null>(null);
 	useRecordView(token, () => client.paper.viewed({ token }));
 
 	return (
@@ -58,21 +64,27 @@ function PaperInvitePage() {
 									{
 										onSuccess: (result) => {
 											options.onSuccess(result);
-											setAsking(true);
+											setAsking(values);
 										},
 									},
 								)
 							}
 							pending={respond.isPending}
 						/>
-						{asking && (data.me.missing.email || data.me.missing.phone) ? (
-							<ContactAsk
+						{asking ? (
+							<AfterAnswer
+								// A fresh answer is a fresh check.
+								key={JSON.stringify(asking)}
 								missing={data.me.missing}
-								submit={(values, options) =>
+								people={dietPeople(data.me, data.event.askDietary, asking)}
+								saveDiets={(people, options) =>
+									saveDiets.mutate({ token, people }, options)
+								}
+								submitContact={(values, options) =>
 									addContact.mutate({ token, ...values }, options)
 								}
-								pending={addContact.isPending}
-								onClose={() => setAsking(false)}
+								pending={addContact.isPending || saveDiets.isPending}
+								onClose={() => setAsking(null)}
 							/>
 						) : null}
 						<p className="m-0 text-[14px] text-haze">

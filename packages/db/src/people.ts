@@ -15,7 +15,8 @@ import {
 import { bookByPhone } from "./address-book";
 import { normalizeEmail } from "./addresses";
 import { batchAll, insertChunks, mapChunks } from "./batch";
-import { detailColumns, fillBlanks } from "./details";
+import { detailColumns, dietColumns, fillBlanks } from "./details";
+import { dietsOf } from "./diets";
 import { isUniqueViolation } from "./errors";
 import type { Db } from "./index";
 import { displayName, nameFor } from "./names";
@@ -178,6 +179,7 @@ const personColumns = {
 	name: user.name,
 	image: user.image,
 	...detailColumns,
+	...dietColumns,
 	claimedAt: user.claimedAt,
 	email: user.email,
 	emailVerified: user.emailVerified,
@@ -202,12 +204,18 @@ const personColumns = {
  * column is free text, and a name-only guest's placeholder address blanked.
  */
 function present<
-	T extends { role: string | null; email: string; noEmail: boolean },
+	T extends {
+		role: string | null;
+		email: string;
+		noEmail: boolean;
+		diets: unknown;
+	},
 >(row: T) {
 	return {
 		...row,
 		role: roleOf(row.role),
 		email: row.noEmail ? "" : row.email,
+		diets: dietsOf(row.diets),
 	};
 }
 
