@@ -23,7 +23,7 @@ guest list `/e/$eventId/guests`, create/edit `/e/new` and `/e/$eventId/edit`.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0024 applied (CI applies new ones on push) |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0025 applied (CI applies new ones on push) |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/`, profile pictures under `avatars/` |
 | Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute per path and IP on password sign-in, resets, the `/link` sign-in and "email me my link", and per person on guests inviting friends |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY`, `TELNYX_API_KEY` |
@@ -335,8 +335,7 @@ Everything is constructed per request: `createDb()`, `createAuth()`,
   `diet_at`, stamped on every save *or confirmation* (null = never asked,
   so the post-answer panel opens the boxes instead of "still right?").
   `event_guest.party_diet` is only for a party's uninvited people, kept
-  while `extraPeople > 0`; `event_guest.dietary` is unread since 0024 and
-  due to be dropped. Writers: `updateDetails` (the details forms, under
+  while `extraPeople > 0`. Writers: `updateDetails` (the details forms, under
   `canEditDetails`) and `setDiets` with a `DietBy` guard in the UPDATE --
   family members may set each other's diets (the one detail they may), and
   a card counts as its guest for the people it may answer for
