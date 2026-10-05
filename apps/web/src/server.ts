@@ -45,7 +45,7 @@ async function textLink(request: Request, code: string): Promise<Response> {
 	if (!success) return new Response("Too many tries.", { status: 429 });
 	const found = await redeemTextLink(createDb(), code);
 	const to = found
-		? `/api/auth/link?k=${found.linkToken}&to=${encodeURIComponent(found.path)}`
+		? `/api/auth/link?k=${found.linkToken}&to=${encodeURIComponent(found.path)}&via=text`
 		: "/login?error=link";
 	return new Response(null, {
 		status: 302,

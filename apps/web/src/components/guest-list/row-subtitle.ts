@@ -8,7 +8,8 @@ import type { Guest } from "./types";
  * their invitation has got: when they first opened it, or when it went
  * out (the list's sections already say whether they have looked).
  * Somebody with no email is known by their number, so a guest the host
- * added by phone alone is not a blank line.
+ * added by phone alone is not a blank line. An answer or a first look says
+ * how the guest came to it, where that was recorded.
  * In two parts, drawn as two lines: an address cut short beside the
  * status left most of the list unreadable.
  */
@@ -18,10 +19,12 @@ export function rowSubtitle(
 		| "email"
 		| "response"
 		| "respondedAt"
+		| "respondedVia"
 		| "invitedAt"
 		| "hasPaper"
 		| "noEmail"
 		| "viewedAt"
+		| "viewedVia"
 		| "phone"
 		| "invitedVia"
 		| "textable"
@@ -42,8 +45,15 @@ export function rowSubtitle(
 	const answered = g.respondedAt ? ago(g.respondedAt, nowMs) : null;
 	if (isYou) return line("That's you", answered);
 	const email = g.email || formatPhone(g.phone) || "No email";
-	if (g.response !== null) return line(email, answered);
-	if (g.viewedAt) return line(email, `viewed ${ago(g.viewedAt, nowMs)}`);
+	if (g.response !== null) {
+		return line(email, withVia(answered, g.respondedVia));
+	}
+	if (g.viewedAt) {
+		return line(
+			email,
+			withVia(`viewed ${ago(g.viewedAt, nowMs)}`, g.viewedVia),
+		);
+	}
 	if (g.invitedAt) {
 		const by =
 			g.invitedVia === "text"
@@ -63,6 +73,23 @@ export function rowSubtitle(
 		return line(email, familyOnList ? "family answers" : "you answer for them");
 	}
 	return line(email, "not invited yet");
+}
+
+type Via = NonNullable<Guest["respondedVia"]>;
+
+const VIA_WORDS: Record<Via, string> = {
+	email: "via email",
+	text: "via text",
+	paper: "via paper",
+	direct: "via the site",
+	host: "by a host",
+};
+
+/** "2 hours ago via email"; rows from before this was kept have no via. */
+function withVia(when: string | null, via: Via | null): string | null {
+	const how = via ? VIA_WORDS[via] : null;
+	if (!when) return how;
+	return how ? `${when} ${how}` : when;
 }
 
 /** The subtitle as one line of text. */

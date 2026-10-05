@@ -226,6 +226,15 @@ export type GuestSource = (typeof GUEST_SOURCES)[number];
 export const INVITE_CHANNELS = ["email", "text", "both"] as const;
 export type InviteChannel = (typeof INVITE_CHANNELS)[number];
 
+/**
+ * How a guest came to their invitation when they first opened it and when
+ * they answered: a link in an email or a text, their printed card's QR
+ * code, or the site itself with no link (already signed in, or a
+ * password). `host` is only ever an answer a host recorded for them.
+ */
+export const ARRIVALS = ["email", "text", "paper", "direct", "host"] as const;
+export type Arrival = (typeof ARRIVALS)[number];
+
 /** What a guest said. No row value at all (null) is "hasn't answered". */
 export const GUEST_RESPONSES = ["yes", "maybe", "no"] as const;
 export type GuestResponse = (typeof GUEST_RESPONSES)[number];
@@ -267,6 +276,8 @@ export const eventGuest = sqliteTable(
 		 */
 		paperToken: text("paper_token").unique(),
 		respondedAt: integer("responded_at", { mode: "timestamp_ms" }),
+		/** How they came to give that answer; rewritten with `responded_at`. */
+		respondedVia: text("responded_via", { enum: ARRIVALS }),
 		/**
 		 * When the guest themselves first and last had the invite page on
 		 * screen -- recorded by the browser after it renders, never by the
@@ -276,6 +287,8 @@ export const eventGuest = sqliteTable(
 		 */
 		viewedAt: integer("viewed_at", { mode: "timestamp_ms" }),
 		lastViewedAt: integer("last_viewed_at", { mode: "timestamp_ms" }),
+		/** How they came to it that first time, written with `viewed_at`. */
+		viewedVia: text("viewed_via", { enum: ARRIVALS }),
 		nudgedAt: integer("nudged_at", { mode: "timestamp_ms" }),
 		addedBy: text("added_by").references(() => user.id, {
 			onDelete: "set null",

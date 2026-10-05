@@ -12,10 +12,12 @@ const base = {
 	email: "linh@example.com",
 	response: null,
 	respondedAt: null,
+	respondedVia: null,
 	invitedAt: null,
 	hasPaper: false,
 	noEmail: false,
 	viewedAt: null,
+	viewedVia: null,
 	phone: null,
 	invitedVia: null,
 	textable: false,
@@ -94,6 +96,40 @@ describe("rowSubtitle", () => {
 				email,
 			),
 		).toBe("linh@example.com · 2 hours ago");
+	});
+	it("says how a guest came to look and to answer", () => {
+		expect(
+			rowSubtitle(
+				{ ...base, viewedAt: hoursAgo(5), viewedVia: "paper" },
+				paper,
+			),
+		).toBe("linh@example.com · viewed 5 hours ago via paper");
+		expect(
+			rowSubtitle({ ...base, viewedAt: hoursAgo(5), viewedVia: "text" }, email),
+		).toBe("linh@example.com · viewed 5 hours ago via text");
+		const answered = {
+			...base,
+			response: "yes",
+			respondedAt: hoursAgo(2),
+			viewedAt: hoursAgo(3),
+			viewedVia: "paper",
+		} as const;
+		expect(rowSubtitle({ ...answered, respondedVia: "email" }, email)).toBe(
+			"linh@example.com · 2 hours ago via email",
+		);
+		expect(rowSubtitle({ ...answered, respondedVia: "direct" }, email)).toBe(
+			"linh@example.com · 2 hours ago via the site",
+		);
+		expect(rowSubtitle({ ...answered, respondedVia: "host" }, email)).toBe(
+			"linh@example.com · 2 hours ago by a host",
+		);
+		// The host's own row needs no reminder of how they got there.
+		expect(
+			rowSubtitle(
+				{ ...answered, respondedVia: "direct" },
+				{ ...email, isYou: true },
+			),
+		).toBe("That's you · 2 hours ago");
 	});
 	it("says where a paper guest's card is", () => {
 		expect(rowSubtitle({ ...base, email: "" }, paper)).toBe(

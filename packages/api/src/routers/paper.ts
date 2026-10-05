@@ -64,7 +64,7 @@ export const paperRouter = {
 		.input(tokenInput)
 		.handler(async ({ context, input }) => {
 			const { access } = await paperAccess(context.db, input.token);
-			await recordView(context.db, access);
+			await recordView(context.db, access, "paper");
 			return { ok: true as const };
 		}),
 
@@ -73,6 +73,6 @@ export const paperRouter = {
 		.input(tokenInput.merge(answerInput))
 		.handler(async ({ context, input }) => {
 			const { access, who } = await paperAccess(context.db, input.token);
-			return answer(context.db, access, who, input);
+			return answer(context.db, access, who, input, "paper");
 		}),
 };

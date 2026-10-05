@@ -3,6 +3,7 @@ import type { Db } from "@rsvp-site/db";
 import { built, rawBatch } from "@rsvp-site/db/batch";
 import { relativesOnEvent } from "@rsvp-site/db/families";
 import {
+	type Arrival,
 	eventGuest,
 	GUEST_RESPONSES,
 	potluckClaim,
@@ -45,6 +46,7 @@ export const answerInput = z.object({
  * (`answered_by`), and only for people `relativesOnEvent` says are theirs:
  * any other id is ignored. A relative's party is fixed by `relativeParty`,
  * not by what the request says. The hosts get one alert for the lot.
+ * Every answer written carries `via`, how the one answering came here.
  *
  * Potluck claims are guarded in the INSERT itself -- it only writes while
  * the item still has room -- so two guests taking the last slot at once
@@ -55,6 +57,7 @@ export async function answer(
 	access: Access,
 	who: { id: string; name: string },
 	input: z.infer<typeof answerInput>,
+	via: Arrival,
 ): Promise<{ ok: true; full: string[] }> {
 	const row = access.event;
 	if (!access.guest) {
@@ -119,6 +122,7 @@ export async function answer(
 					dietary: row.askDietary ? input.dietary : "",
 					note: row.askNote ? input.note : "",
 					respondedAt: new Date(),
+					respondedVia: via,
 					answeredBy: null,
 				})
 				.where(eq(eventGuest.id, guest.id)),
@@ -162,6 +166,7 @@ export async function answer(
 						response,
 						...theirs,
 						respondedAt: new Date(),
+						respondedVia: via,
 						answeredBy: who.id,
 					})
 					.where(

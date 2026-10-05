@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { remember } from "@rsvp-site/db/address-book";
 import { parseGuests } from "@rsvp-site/db/addresses";
+import { arrivalOf } from "@rsvp-site/db/arrival";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import { pickable } from "@rsvp-site/db/families";
 import {
@@ -261,6 +262,7 @@ export const guestsRouter = {
 					adults: input.response === "no" ? 1 : input.adults,
 					kids: input.response === "no" ? 0 : input.kids,
 					respondedAt: input.response ? new Date() : null,
+					respondedVia: input.response ? "host" : null,
 					// The host recorded this, not a relative.
 					answeredBy: null,
 				})
@@ -323,13 +325,19 @@ export const guestsRouter = {
 		.input(idInput.merge(answerInput))
 		.handler(async ({ context, input }) => {
 			const access = await accessTo(context.db, context.me, input.eventId);
-			return answer(context.db, access, context.me, input);
+			return answer(
+				context.db,
+				access,
+				context.me,
+				input,
+				arrivalOf(context.headers),
+			);
 		}),
 
 	/** The guest has their invite page on screen (see `recordView`). */
 	viewed: personProcedure.input(idInput).handler(async ({ context, input }) => {
 		const access = await accessTo(context.db, context.me, input.eventId);
-		await recordView(context.db, access);
+		await recordView(context.db, access, arrivalOf(context.headers));
 		return { ok: true as const };
 	}),
 

@@ -1,4 +1,9 @@
 import type { Db } from "@rsvp-site/db";
+import {
+	ARRIVAL_COOKIE,
+	ARRIVAL_MAX_AGE,
+	LINK_ARRIVALS,
+} from "@rsvp-site/db/arrival";
 import { findPersonByLinkToken } from "@rsvp-site/db/tokens";
 import { safeReturnPath } from "@rsvp-site/email";
 import type { BetterAuthPlugin } from "better-auth";
@@ -14,7 +19,8 @@ import * as z from "zod";
  *
  * Served at `/api/auth/link?k=<token>&to=<path>`. GET, so Better Auth's
  * origin check does not apply. The param is `k`, not `callbackURL`: that
- * name is spoken for.
+ * name is spoken for. `via=text` marks the redirect from a text's `/t/`
+ * link; anything else came in an email.
  */
 export function emailLink({ db }: { db: Db }) {
 	return {
@@ -27,6 +33,8 @@ export function emailLink({ db }: { db: Db }) {
 					query: z.object({
 						k: z.string().min(1),
 						to: z.string().optional(),
+						// A mangled one must not cost the guest their sign-in.
+						via: z.enum(LINK_ARRIVALS).optional().catch(undefined),
 					}),
 				},
 				async (ctx) => {
@@ -70,6 +78,15 @@ export function emailLink({ db }: { db: Db }) {
 						user.id,
 					);
 					await setSessionCookie(ctx, { session, user });
+					// So hosts can see the invitation was opened from this link
+					// (see `arrivalOf`).
+					ctx.setCookie(ARRIVAL_COOKIE, ctx.query.via ?? "email", {
+						path: "/",
+						httpOnly: true,
+						sameSite: "lax",
+						secure: site.startsWith("https:"),
+						maxAge: ARRIVAL_MAX_AGE,
+					});
 					throw ctx.redirect(
 						new URL(safeReturnPath(ctx.query.to), site).toString(),
 					);

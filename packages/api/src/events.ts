@@ -240,7 +240,8 @@ const answerer = alias(user, "answerer");
  * `mailableWhere` and `textableWhere` do), and `unreachable` that neither
  * can; `lastText` is how the latest text to them about this event fared; `addedBy` is who put them on the list; `answeredByName` the
  * relative who answered for them; `familyId` their family, if any;
- * `hasPaper` says their printed card has a QR code issued; `viewedAt` is
+ * `hasPaper` says their printed card has a QR code issued; `viewedAt`,
+ * and how they came to view and to answer (`viewedVia`, `respondedVia`), are
  * for hosts only, so guest-facing payloads pick their fields by hand.
  */
 export async function guestsOf(db: Db, eventId: string) {
@@ -259,7 +260,9 @@ export async function guestsOf(db: Db, eventId: string) {
 			note: eventGuest.note,
 			invitedAt: eventGuest.invitedAt,
 			respondedAt: eventGuest.respondedAt,
+			respondedVia: eventGuest.respondedVia,
 			viewedAt: eventGuest.viewedAt,
+			viewedVia: eventGuest.viewedVia,
 			lastViewedAt: eventGuest.lastViewedAt,
 			nudgedAt: eventGuest.nudgedAt,
 			createdAt: eventGuest.createdAt,
