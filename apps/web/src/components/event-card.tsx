@@ -33,7 +33,7 @@ function whenShort(e: Pick<CardEvent, "dateLabel" | "startTime">) {
 
 /**
  * One event on a dashboard: cover with a badge, date, title, the response
- * bar and two actions. `actions` is whatever the page wants at the bottom.
+ * bar and its actions. `actions` is whatever the page wants at the bottom.
  *
  * The whole card opens the event -- a draft opens in the editor, since
  * there is nothing to see yet. The title is the one real link, stretched

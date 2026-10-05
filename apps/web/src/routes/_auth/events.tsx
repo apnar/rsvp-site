@@ -204,7 +204,8 @@ function HostDashboard() {
 											>
 												Nudge {event.totals.waiting}
 											</Button>
-										) : event.status === "canceled" ? (
+										) : null}
+										{event.status === "canceled" ? (
 											<Link
 												to="/e/$eventId"
 												params={{ eventId: event.id }}
