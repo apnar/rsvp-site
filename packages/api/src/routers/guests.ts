@@ -1,13 +1,11 @@
 import { ORPCError } from "@orpc/server";
 import { remember } from "@rsvp-site/db/address-book";
-import { parseGuests } from "@rsvp-site/db/addresses";
 import { arrivalOf } from "@rsvp-site/db/arrival";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import { pickable } from "@rsvp-site/db/families";
-import { findOrCreatePeople, nameOnlyFromBook } from "@rsvp-site/db/people";
+import { findOrCreatePeople } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
-import { contactGroup, contactGroupMember } from "@rsvp-site/db/schema/contact";
 import {
 	eventGuest,
 	GUEST_RESPONSES,
@@ -39,6 +37,7 @@ import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { hostProcedure, personProcedure } from "../index";
 import { emailSchema, idInput, idSchema } from "../inputs";
 import { sendInvites } from "../mail";
+import { typedPeople } from "../typed-people";
 import { recordView } from "../views";
 
 export const guestsRouter = {
@@ -85,16 +84,15 @@ export const guestsRouter = {
 
 	/**
 	 * Put people on the list: pasted addresses, picks from what the host can
-	 * see (address book, families, shared groups), whole contact groups, or
-	 * any mix. New addresses become accounts, and
-	 * everybody the host adds goes into their address book. Nobody is
+	 * see (address book, families, shared groups), or both. New addresses
+	 * become accounts, and everybody the host adds goes into their address
+	 * book. Nobody is
 	 * emailed here -- the host sends when ready.
 	 */
 	add: hostProcedure
 		.input(
 			idInput.extend({
 				emails: z.string().max(20_000).default(""),
-				groupIds: z.array(idSchema).max(50).default([]),
 				/** People the caller can see: book, families, own or shared groups. Anybody else is ignored. */
 				userIds: z.array(idSchema).max(1000).default([]),
 				/**
@@ -107,85 +105,43 @@ export const guestsRouter = {
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
-			// Lines with a name and no address: on a paper event anybody (the
-			// card is their invitation), elsewhere only with a phone to text.
-			const parsed = parseGuests(input.emails);
-			const typed = parsed.flatMap((t) =>
-				t.email ? [{ ...t, email: t.email }] : [],
-			);
-			const names = parsed.filter((t) => !t.email && (row.paper || t.phone));
-			if (!row.paper && names.length > 0 && !input.textsOk) {
-				throw new ORPCError("BAD_REQUEST", {
-					message:
-						"People added by phone get the invitation by text. Tick the box to say they expect one from you.",
-				});
-			}
-
-			// Groups only count if they are the caller's own -- or anybody's, for
-			// an admin -- so a guessed group id reveals and adds nothing.
-			let members: { userId: string }[] = [];
-			if (input.groupIds.length > 0) {
-				members = await context.db
-					.select({ userId: contactGroupMember.userId })
-					.from(contactGroupMember)
-					.innerJoin(
-						contactGroup,
-						eq(contactGroup.id, contactGroupMember.groupId),
-					)
-					.where(
-						and(
-							inArray(contactGroupMember.groupId, input.groupIds),
-							isAdmin(context.me)
-								? undefined
-								: eq(contactGroup.ownerId, context.me.id),
-						),
-					)
-					.all();
-			}
-
 			// Picks only count from what the caller can see -- their book,
 			// families they can see, their own or shared groups -- so a guessed
 			// user id adds nobody, and nobody deactivated is added.
 			const picked = await pickable(context.db, context.me, input.userIds);
 
-			// The cap is on everybody this one request adds, however they were
-			// named: typed lines, picks and whole groups, a person in two of
-			// those counted once. Checked before anybody is created, so a
-			// refused request leaves no accounts behind.
-			const known = new Set([...picked, ...members.map((m) => m.userId)]);
-			const total = typed.length + names.length + known.size;
-			if (total > 500) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: `That's ${total} people, counting groups and picks. Add them 500 at a time.`,
-				});
-			}
-			const people = await findOrCreatePeople(context.db, typed, "host", {
-				id: context.me.id,
-				host: !isAdmin(context.me),
+			// Lines with a name and no address: on a paper event anybody (the
+			// card is their invitation), elsewhere only with a phone to text.
+			// The cap is on everybody this one request adds, typed lines and
+			// picks both, a person in two of those counted once.
+			const typed = await typedPeople(context.db, input.emails, {
+				source: "host",
+				by: { id: context.me.id, host: !isAdmin(context.me) },
+				keepName: (t) => row.paper || Boolean(t.phone),
+				bookOwnerId: context.me.id,
+				refuseNames:
+					row.paper || input.textsOk
+						? undefined
+						: "People added by phone get the invitation by text. Tick the box to say they expect one from you.",
+				cap: {
+					max: 500,
+					extra: picked.size,
+					message: (total) =>
+						`That's ${total} people, counting picks. Add them 500 at a time.`,
+				},
 			});
-			const named = await nameOnlyFromBook(
-				context.db,
-				context.me.id,
-				names,
-				"host",
-			);
 
-			const usable = people.filter((p) => p.status !== "deactivated");
 			const rows = [
-				...usable.map((p) => ({ userId: p.id, source: "host" as const })),
-				...[...picked].map((userId) => ({
-					userId,
-					source: "host" as const,
-				})),
-				...named.map((p) => ({ userId: p.id, source: "host" as const })),
-				...members.map((m) => ({ userId: m.userId, source: "group" as const })),
+				...typed.people.map((p) => p.id),
+				...picked,
+				...typed.named.map((p) => p.id),
 			];
-			const unique = [...new Map(rows.map((r) => [r.userId, r])).values()];
-			const guestRows = unique.map((r) => ({
+			const unique = [...new Set(rows)];
+			const guestRows = unique.map((userId) => ({
 				id: crypto.randomUUID(),
 				eventId: row.id,
-				userId: r.userId,
-				source: r.source,
+				userId,
+				source: "host" as const,
 				addedBy: context.me.id,
 			}));
 			// One batch: the list lands whole or not at all.
@@ -201,33 +157,14 @@ export const guestsRouter = {
 			);
 			const added = inserted.flat().length;
 			// Whoever the host chose is in their book from now on.
-			await remember(
-				context.db,
-				context.me.id,
-				unique.map((r) => r.userId),
-			);
-			if (input.textsOk) {
-				const phoned = new Set(
-					typed.flatMap((t) => (t.phone ? [t.email] : [])),
-				);
-				await vouchForTexts(
-					context.db,
-					[
-						...usable.filter((p) => phoned.has(p.email)).map((p) => p.id),
-						...named.filter((p) => p.phone).map((p) => p.id),
-					],
-					context.me.id,
-				);
-			}
+			await remember(context.db, context.me.id, unique);
+			if (input.textsOk) await typed.vouch(context.me.id);
 			return {
 				added,
 				already: unique.length - added,
-				created: people.filter((p) => p.created).length + named.length,
-				refused: people.length - usable.length,
-				invalid:
-					Boolean(input.emails.trim()) &&
-					typed.length === 0 &&
-					named.length === 0,
+				created: typed.created,
+				refused: typed.refused,
+				invalid: Boolean(input.emails.trim()) && typed.lineCount === 0,
 			};
 		}),
 

@@ -1,9 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
-import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, insertChunks } from "@rsvp-site/db/batch";
 import { listFamilies } from "@rsvp-site/db/families";
-import { createNameOnlyPeople, findOrCreatePeople } from "@rsvp-site/db/people";
 import { user } from "@rsvp-site/db/schema/auth";
 import { family, familyMember } from "@rsvp-site/db/schema/family";
 import { and, eq, inArray } from "drizzle-orm";
@@ -11,6 +9,7 @@ import { z } from "zod";
 
 import { adminProcedure } from "../index";
 import { idSchema } from "../inputs";
+import { typedPeople } from "../typed-people";
 
 const familyInput = z.object({ familyId: idSchema });
 const nameSchema = z.string().trim().min(1, "Name it.").max(80);
@@ -92,26 +91,17 @@ export const familiesRouter = {
 		)
 		.handler(async ({ context, input }) => {
 			const row = await requireFamily(context.db, input.familyId);
-			const typed = parseGuests(input.lines);
-			if (typed.length + input.userIds.length > 100) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "That's a lot of family. Add them 100 at a time.",
-				});
-			}
-			const emailed = typed.flatMap((t) =>
-				t.email ? [{ ...t, email: t.email }] : [],
-			);
-			const [people, named, picked] = await Promise.all([
-				findOrCreatePeople(context.db, emailed, "admin", {
-					id: context.me.id,
-					host: false,
+			const [typed, picked] = await Promise.all([
+				typedPeople(context.db, input.lines, {
+					source: "admin",
+					by: { id: context.me.id, host: false },
+					keepName: () => true,
+					cap: {
+						max: 100,
+						extra: input.userIds.length,
+						message: () => "That's a lot of family. Add them 100 at a time.",
+					},
 				}),
-				createNameOnlyPeople(
-					context.db,
-					typed.filter((t) => !t.email),
-					"admin",
-					context.me.id,
-				),
 				input.userIds.length
 					? context.db
 							.select({ id: user.id, status: user.status })
@@ -122,8 +112,7 @@ export const familiesRouter = {
 			]);
 			const ids = [
 				...new Set([
-					...people.filter((p) => p.status !== "deactivated").map((p) => p.id),
-					...named.map((p) => p.id),
+					...typed.ids,
 					...picked.filter((p) => p.status !== "deactivated").map((p) => p.id),
 				]),
 			];
@@ -166,7 +155,7 @@ export const familiesRouter = {
 				elsewhere: elsewhere
 					.filter((e) => e.familyId !== row.id)
 					.map(({ name, familyName }) => ({ name, familyName })),
-				invalid: Boolean(input.lines.trim()) && typed.length === 0,
+				invalid: Boolean(input.lines.trim()) && typed.lineCount === 0,
 			};
 		}),
 

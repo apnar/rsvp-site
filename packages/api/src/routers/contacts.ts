@@ -1,7 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { inBook, remember, repointEntry } from "@rsvp-site/db/address-book";
-import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, insertChunks } from "@rsvp-site/db/batch";
 import {
 	canEditDetails,
@@ -15,11 +14,7 @@ import {
 	listFamilies,
 	sharedGroups,
 } from "@rsvp-site/db/families";
-import {
-	findOrCreatePeople,
-	nameOnlyFromBook,
-	type Person,
-} from "@rsvp-site/db/people";
+import { findOrCreatePeople, type Person } from "@rsvp-site/db/people";
 import { notDeactivated, shownEmail } from "@rsvp-site/db/reach";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
@@ -30,7 +25,6 @@ import {
 	contactGroupShare,
 } from "@rsvp-site/db/schema/contact";
 import { familyMember } from "@rsvp-site/db/schema/family";
-import { vouchForTexts } from "@rsvp-site/db/sms-status";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
@@ -45,6 +39,7 @@ import {
 } from "../details";
 import { adminProcedure, hostProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
+import { typedPeople } from "../typed-people";
 
 const groupInput = z.object({ groupId: idSchema });
 const nameSchema = z.string().trim().min(1, "Name it.").max(80);
@@ -83,39 +78,16 @@ async function addToBook(
 	raw: string,
 	textsOk = false,
 ): Promise<string[]> {
-	const typed = parseGuests(raw);
-	if (typed.length > 500) {
-		throw new ORPCError("BAD_REQUEST", { message: "Add them 500 at a time." });
-	}
-	const emailed = typed.flatMap((t) =>
-		t.email ? [{ ...t, email: t.email }] : [],
-	);
-	const people = (
-		await findOrCreatePeople(context.db, emailed, "host", {
-			id: context.me.id,
-			host: !isAdmin(context.me),
-		})
-	).filter((p) => p.status !== "deactivated");
-	const named = await nameOnlyFromBook(
-		context.db,
-		ownerId,
-		typed.filter((t) => !t.email),
-		"host",
-	);
-	const ids = [...people, ...named].map((p) => p.id);
-	await remember(context.db, ownerId, ids);
-	if (textsOk) {
-		const phoned = new Set(emailed.flatMap((t) => (t.phone ? [t.email] : [])));
-		await vouchForTexts(
-			context.db,
-			[
-				...people.filter((p) => phoned.has(p.email)).map((p) => p.id),
-				...named.filter((p) => p.phone).map((p) => p.id),
-			],
-			ownerId,
-		);
-	}
-	return ids.filter((id) => id !== ownerId);
+	const typed = await typedPeople(context.db, raw, {
+		source: "host",
+		by: { id: context.me.id, host: !isAdmin(context.me) },
+		keepName: () => true,
+		bookOwnerId: ownerId,
+		cap: { max: 500, message: () => "Add them 500 at a time." },
+	});
+	await remember(context.db, ownerId, typed.ids);
+	if (textsOk) await typed.vouch(ownerId);
+	return typed.ids.filter((id) => id !== ownerId);
 }
 
 /**
