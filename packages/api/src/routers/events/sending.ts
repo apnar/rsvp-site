@@ -1,6 +1,4 @@
 import { ORPCError } from "@orpc/server";
-import type { Db } from "@rsvp-site/db";
-import { inChunks } from "@rsvp-site/db/batch";
 import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
 import { nudgeEmail } from "@rsvp-site/email";
@@ -12,17 +10,18 @@ import { z } from "zod";
 import { needsQr } from "../../design-rules";
 import { savedDesign } from "../../designs-store";
 import { callOff } from "../../endings";
-import {
-	type EventRow,
-	emailsHeld,
-	findEvent,
-	requireOpen,
-} from "../../events";
+import { emailsHeld } from "../../event-rules";
+import { type EventRow, findEvent, requireOpen } from "../../events";
 import { withHostEvent, withLiveHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
 import { idInput, idSchema } from "../../inputs";
-import { deliver, eventFacts, sendInvites } from "../../mail";
-import { hostNameOf, textFactsOf } from "../../texting";
+import {
+	deliver,
+	eventFacts,
+	releaseGuestClaim,
+	sendInvites,
+} from "../../mail";
+import { textFactsFor } from "../../texting";
 
 /** How long before the same person can be nudged again. */
 const NUDGE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
@@ -32,31 +31,6 @@ function requirePublishable(row: EventRow) {
 		throw new ORPCError("BAD_REQUEST", {
 			message: "Give it a date before sending.",
 		});
-	}
-}
-
-/**
- * Give back a nudge's claim, keyed on its own stamp like `releaseInvites`,
- * so a send that never left leaves the guests nudgeable instead of waiting
- * out twelve hours for an email they never got.
- */
-async function releaseNudges(
-	db: Db,
-	eventId: string,
-	stamp: Date,
-	guestIds: readonly string[],
-) {
-	for (const slice of inChunks(guestIds)) {
-		await db
-			.update(eventGuest)
-			.set({ nudgedAt: null })
-			.where(
-				and(
-					eq(eventGuest.eventId, eventId),
-					eq(eventGuest.nudgedAt, stamp),
-					inArray(eventGuest.id, slice),
-				),
-			);
 	}
 }
 
@@ -212,15 +186,13 @@ export const sendingRouter = {
 				return { sent: 0, waiting: true };
 			}
 			const giveBack = () =>
-				releaseNudges(
-					context.db,
-					row.id,
-					now,
-					claimed.map((c) => c.id),
-				);
+				releaseGuestClaim(context.db, row.id, "nudgedAt", now, {
+					by: "id",
+					ids: claimed.map((c) => c.id),
+				});
 			let result: Awaited<ReturnType<typeof deliver>>;
 			try {
-				const facts = textFactsOf(row, await hostNameOf(context.db, row));
+				const facts = await textFactsFor(context.db, row);
 				result = await deliver(context.db, {
 					kind: "nudge",
 					eventId: row.id,
@@ -240,12 +212,10 @@ export const sendingRouter = {
 			if (!result) await giveBack();
 			else if (result.failedIds.length > 0) {
 				const lost = new Set(result.failedIds);
-				await releaseNudges(
-					context.db,
-					row.id,
-					now,
-					claimed.filter((c) => lost.has(c.userId)).map((c) => c.id),
-				);
+				await releaseGuestClaim(context.db, row.id, "nudgedAt", now, {
+					by: "id",
+					ids: claimed.filter((c) => lost.has(c.userId)).map((c) => c.id),
+				});
 			}
 			return { sent: result?.sent ?? 0, waiting: false };
 		}),

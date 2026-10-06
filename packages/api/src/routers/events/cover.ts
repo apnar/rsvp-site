@@ -6,7 +6,13 @@ import { withLiveHostEvent } from "../../host-event";
 import { sniffImage } from "../../image-type";
 import { hostProcedure } from "../../index";
 import { idInput } from "../../inputs";
-import { fileBytes, imageFile, mmsImage, putImage } from "../../media";
+import {
+	fileBytes,
+	imageFile,
+	mmsImage,
+	putImage,
+	putMmsTwin,
+} from "../../media";
 
 export const coverRouter = {
 	/**
@@ -31,19 +37,10 @@ export const coverRouter = {
 				eventId: row.id,
 				uploadedBy: context.me.id,
 			});
-			// Optional, and dropped rather than refused if it isn't a JPEG: the
-			// sender falls back to the cover itself when that is small enough.
-			let mmsKey: string | null = null;
-			if (input.mms) {
-				const small = await fileBytes(input.mms);
-				if (sniffImage(small) === "image/jpeg") {
-					mmsKey = key.replace(/\.[a-z]+$/, "-mms.jpg");
-					await context.env.MEDIA.put(mmsKey, small, {
-						httpMetadata: { contentType: "image/jpeg" },
-						customMetadata: { eventId: row.id, uploadedBy: context.me.id },
-					});
-				}
-			}
+			const mmsKey = await putMmsTwin(context.env, key, input.mms, {
+				eventId: row.id,
+				uploadedBy: context.me.id,
+			});
 			await context.db
 				.update(event)
 				.set({ coverKey: key, coverMmsKey: mmsKey })

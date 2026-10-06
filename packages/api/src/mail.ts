@@ -415,17 +415,20 @@ export async function sendInvites(
 			sentBy,
 		});
 	} catch (error) {
-		await releaseInvites(db, row.id, now);
+		await releaseGuestClaim(db, row.id, "invitedAt", now);
 		throw error;
 	}
 	if (!result || result.sent === 0) {
-		await releaseInvites(db, row.id, now);
+		await releaseGuestClaim(db, row.id, "invitedAt", now);
 		return { sent: 0, failed: result?.attempted ?? 0, skipped };
 	}
 	// Somebody no channel reached gets their row back, so the next Send
 	// tries them and nobody else.
 	if (result.failedIds.length > 0) {
-		await releaseInvites(db, row.id, now, result.failedIds);
+		await releaseGuestClaim(db, row.id, "invitedAt", now, {
+			by: "userId",
+			ids: result.failedIds,
+		});
 	}
 	await stampVia(db, row.id, now, result);
 	return {
@@ -463,24 +466,30 @@ async function stampVia(
 	}
 }
 
-async function releaseInvites(
+/**
+ * Give back a claim on guest rows, keyed on the claim's own timestamp, so a
+ * failed send returns exactly the rows it took and nothing a concurrent
+ * send stamped. Used for the invitation stamp and the nudge's: a send that
+ * never left must leave its guests sendable, not waiting out a cooldown for
+ * a message they never got.
+ */
+export async function releaseGuestClaim(
 	db: Db,
 	eventId: string,
+	column: "invitedAt" | "nudgedAt",
 	stamp: Date,
-	/** Only these people's rows; everything the claim took when omitted. */
-	userIds?: readonly string[],
+	/** Only these rows, by guest id or person id; everything the claim took when omitted. */
+	only?: { by: "id" | "userId"; ids: readonly string[] },
 ) {
-	// Keyed on the claim's own timestamp, so a failed send gives back exactly
-	// the rows it took and nothing a concurrent send stamped.
-	for (const slice of userIds ? inChunks(userIds) : [undefined]) {
+	for (const slice of only ? inChunks(only.ids) : [undefined]) {
 		await db
 			.update(eventGuest)
-			.set({ invitedAt: null })
+			.set({ [column]: null })
 			.where(
 				and(
 					eq(eventGuest.eventId, eventId),
-					eq(eventGuest.invitedAt, stamp),
-					slice ? inArray(eventGuest.userId, slice) : undefined,
+					eq(eventGuest[column], stamp),
+					only && slice ? inArray(eventGuest[only.by], slice) : undefined,
 				),
 			);
 	}

@@ -22,9 +22,12 @@ import {
 	type Env,
 	fileBytes,
 	imageFile,
+	isMms,
 	listPrefix,
 	mmsImage,
+	mmsTwin,
 	putImage,
+	putMmsTwin,
 } from "../media";
 
 /** Uploads an event may hold at once, card images aside. */
@@ -60,19 +63,6 @@ function isCard(key: string, prefix: string): boolean {
 }
 
 /**
- * The small picture-text twin of a card is `card-<uuid>-mms.jpg`, so it is
- * a card to every rule here (pruned with the others, never mistaken for an
- * unused upload) but not one more card to count: it follows its original.
- */
-const MMS_SUFFIX = "-mms.jpg";
-function isMms(key: string): boolean {
-	return key.endsWith(MMS_SUFFIX);
-}
-function mmsTwin(key: string): string {
-	return key.replace(/\.[a-z]+$/, MMS_SUFFIX);
-}
-
-/**
  * Delete uploads no design uses (once they are old enough that nobody is
  * mid-edit with them) and card images beyond the newest few.
  */
@@ -91,12 +81,11 @@ async function prune(env: Env, eventId: string, keep: Set<string>) {
 		drop.push(o.key, mmsTwin(o.key));
 	}
 	// A twin whose card is gone (or was never kept) goes too, unless live.
-	const have = new Set(objects.map((o) => o.key));
+	const twins = new Set(
+		objects.filter((o) => !isMms(o.key)).map((o) => mmsTwin(o.key)),
+	);
 	for (const o of objects) {
-		if (isMms(o.key) && !keep.has(o.key)) {
-			const original = [...have].find((k) => !isMms(k) && mmsTwin(k) === o.key);
-			if (!original) drop.push(o.key);
-		}
+		if (isMms(o.key) && !keep.has(o.key) && !twins.has(o.key)) drop.push(o.key);
 	}
 	if (drop.length > 0) await env.MEDIA.delete(drop);
 }
@@ -424,19 +413,10 @@ export const designsRouter = {
 				{ eventId: row.id, uploadedBy: context.me.id },
 				"card-",
 			);
-			// The rendition is a courtesy: one that doesn't pass is dropped, and
-			// the sender falls back to the card itself if that is small enough.
-			let mmsKey: string | null = null;
-			if (input.mms) {
-				const small = await fileBytes(input.mms);
-				if (sniffImage(small) === "image/jpeg") {
-					mmsKey = mmsTwin(key);
-					await context.env.MEDIA.put(mmsKey, small, {
-						httpMetadata: { contentType: "image/jpeg" },
-						customMetadata: { eventId: row.id, uploadedBy: context.me.id },
-					});
-				}
-			}
+			const mmsKey = await putMmsTwin(context.env, key, input.mms, {
+				eventId: row.id,
+				uploadedBy: context.me.id,
+			});
 			await context.db
 				.update(event)
 				.set({ cardKey: key, cardMmsKey: mmsKey, cardBasis: input.basis })

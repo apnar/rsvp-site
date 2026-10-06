@@ -49,6 +49,10 @@ export async function hostNameOf(db: Db, row: EventRow): Promise<string> {
 	return host?.firstName || host?.name || "";
 }
 
+export async function textFactsFor(db: Db, row: EventRow): Promise<TextFacts> {
+	return textFactsOf(row, await hostNameOf(db, row));
+}
+
 export function textFactsOf(row: EventRow, hostName: string): TextFacts {
 	const labels = labelsOf(row);
 	return {

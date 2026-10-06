@@ -7,13 +7,9 @@ import type { Access, EventRow } from "./events";
 import { startsAt } from "./schedule";
 import { formatDate, formatTimeRange } from "./time";
 
-/**
- * A paper event whose host has not pressed "Start emails" yet: no guest
- * email of any kind may go, so the printed card arrives first.
- */
-export function emailsHeld(row: Pick<EventRow, "paper" | "emailsReleasedAt">) {
-	return row.paper && row.emailsReleasedAt === null;
-}
+// Defined in schedule.ts, which must stay free of this file's imports, and
+// re-exported so every caller reaches the rule through event-rules.
+export { emailsHeld } from "./schedule";
 
 /**
  * Why nothing can be asked of an event's guests right now, or null while it

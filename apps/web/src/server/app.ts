@@ -2,6 +2,7 @@ import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { SimpleCsrfProtectionHandlerPlugin } from "@orpc/server/plugins";
 import { createContext } from "@rsvp-site/api/context";
+import { callerIp } from "@rsvp-site/api/limits";
 import { appRouter } from "@rsvp-site/api/routers/index";
 import { createAuth } from "@rsvp-site/auth";
 import { logError } from "@rsvp-site/db/errors";
@@ -93,7 +94,7 @@ export function throttleKey(rawUrl: string): string {
 app.on(["GET", "POST"], "/auth/*", async (c) => {
 	const door = throttleKey(c.req.url);
 	if (THROTTLED.has(door)) {
-		const ip = c.req.header("cf-connecting-ip") ?? "local";
+		const ip = callerIp(c.req.raw.headers);
 		const { success } = await env.AUTH_LIMITER.limit({
 			key: `${door}:${ip}`,
 		});

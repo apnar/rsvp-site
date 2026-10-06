@@ -8,11 +8,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { adminProcedure } from "../index";
-import { idSchema } from "../inputs";
+import { idSchema, nameSchema } from "../inputs";
 import { typedPeople } from "../typed-people";
 
 const familyInput = z.object({ familyId: idSchema });
-const nameSchema = z.string().trim().min(1, "Name it.").max(80);
 
 async function requireFamily(db: Db, familyId: string) {
 	const row = await db

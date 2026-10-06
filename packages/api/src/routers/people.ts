@@ -24,6 +24,7 @@ import { detailsPatch, saveDetails, saveEmail } from "../details";
 import { erasePerson, removalPlan } from "../endings";
 import { adminProcedure, publicProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
+import { callerIp, requireUnderLimit } from "../limits";
 import { sendWelcome } from "../mail";
 import { avatarFile } from "../media";
 import { textSignIn } from "../texting";
@@ -312,15 +313,10 @@ export const peopleRouter = {
 					message: "That doesn't look like a US mobile number.",
 				});
 			}
-			const ip = context.headers.get("cf-connecting-ip") ?? "local";
-			const { success } = await context.env.AUTH_LIMITER.limit({
-				key: `request-link:${ip}`,
-			});
-			if (!success) {
-				throw new ORPCError("TOO_MANY_REQUESTS", {
-					message: "Too many tries. Wait a minute and try again.",
-				});
-			}
+			await requireUnderLimit(
+				context.env.AUTH_LIMITER,
+				`request-link:${callerIp(context.headers)}`,
+			);
 			const db = context.db;
 			waitUntil(
 				textSignIn(db, phone).catch((error) =>
@@ -339,15 +335,10 @@ export const peopleRouter = {
 	requestLink: publicProcedure
 		.input(z.object({ email: emailSchema }))
 		.handler(async ({ context, input }) => {
-			const ip = context.headers.get("cf-connecting-ip") ?? "local";
-			const { success } = await context.env.AUTH_LIMITER.limit({
-				key: `request-link:${ip}`,
-			});
-			if (!success) {
-				throw new ORPCError("TOO_MANY_REQUESTS", {
-					message: "Too many tries. Wait a minute and try again.",
-				});
-			}
+			await requireUnderLimit(
+				context.env.AUTH_LIMITER,
+				`request-link:${callerIp(context.headers)}`,
+			);
 			const row = await findReachablePersonByEmail(context.db, input.email);
 			const cooledOff =
 				!row?.linkSentAt || Date.now() - row.linkSentAt.getTime() > 10 * 60_000;

@@ -1,17 +1,15 @@
-import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { relativesOnEvent } from "@rsvp-site/db/families";
 import { findPaperInvite } from "@rsvp-site/db/paper";
-import { z } from "zod";
 import { answer, answerInput } from "../answers";
 import { contactInput, fillContact } from "../contact-ask";
 import { dietsInput, saveDiets } from "../diet";
 import { type Access, type Addressee, findEvent, notFound } from "../events";
 import { publicProcedure } from "../index";
+import { tokenInput } from "../inputs";
+import { callerIp, requireUnderLimit } from "../limits";
 import { recordView } from "../views";
 import { invitePayload } from "./events/invite-payload";
-
-const tokenInput = z.object({ token: z.string().min(1).max(64) });
 
 /**
  * A printed card's QR code opens its one invitation, and nothing else.
@@ -104,15 +102,10 @@ export const paperRouter = {
 		.handler(async ({ context, input }) => {
 			// Anybody holding a card can try an address, and each try sends
 			// an email, so the same limit as the sign-in doors, per caller.
-			const ip = context.headers.get("cf-connecting-ip") ?? "local";
-			const { success } = await context.env.AUTH_LIMITER.limit({
-				key: `contact:${ip}`,
-			});
-			if (!success) {
-				throw new ORPCError("TOO_MANY_REQUESTS", {
-					message: "Slow down a little, then try again.",
-				});
-			}
+			await requireUnderLimit(
+				context.env.AUTH_LIMITER,
+				`contact:${callerIp(context.headers)}`,
+			);
 			const { access, who } = await paperAccess(context.db, input.token);
 			if (access.event.status === "canceled") throw notFound();
 			const { token: _, ...details } = input;

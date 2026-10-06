@@ -37,12 +37,12 @@ import {
 	saveDetails,
 	saveEmail,
 } from "../details";
+import { groupBy } from "../events";
 import { adminProcedure, hostProcedure } from "../index";
-import { emailSchema, idSchema } from "../inputs";
+import { emailSchema, idSchema, nameSchema } from "../inputs";
 import { typedPeople } from "../typed-people";
 
 const groupInput = z.object({ groupId: idSchema });
-const nameSchema = z.string().trim().min(1, "Name it.").max(80);
 const emailsSchema = z.string().max(20_000);
 const IN_FAMILY =
 	"They're in a family, so the site's admins keep their details.";
@@ -204,14 +204,8 @@ export const contactsRouter = {
 			.where(eq(contactGroup.ownerId, context.me.id))
 			.all();
 		// Grouped once, not filtered per person and per group.
-		const groupsOf = new Map<string, string[]>();
-		const countOf = new Map<string, number>();
-		for (const m of members) {
-			const mine = groupsOf.get(m.userId);
-			if (mine) mine.push(m.groupId);
-			else groupsOf.set(m.userId, [m.groupId]);
-			countOf.set(m.groupId, (countOf.get(m.groupId) ?? 0) + 1);
-		}
+		const groupsOf = groupBy(members, (m) => m.userId);
+		const countOf = groupBy(members, (m) => m.groupId);
 
 		return {
 			people: people.map(
@@ -245,13 +239,13 @@ export const contactsRouter = {
 						// A placeholder address is never shown, not even to its host.
 						email: shownEmail(p),
 						unsubscribed: unsubscribedAt !== null,
-						groupIds: groupsOf.get(p.userId) ?? [],
+						groupIds: (groupsOf.get(p.userId) ?? []).map((m) => m.groupId),
 					};
 				},
 			),
 			groups: groups.map((g) => ({
 				...g,
-				count: countOf.get(g.id) ?? 0,
+				count: countOf.get(g.id)?.length ?? 0,
 			})),
 		};
 	}),
@@ -502,17 +496,12 @@ export const contactsRouter = {
 				.all(),
 		]);
 		const n = new Map(counts.map((c) => [c.groupId, c.n]));
-		const sharedWith = new Map<string, string[]>();
-		for (const { groupId, userId } of shares) {
-			const list = sharedWith.get(groupId);
-			if (list) list.push(userId);
-			else sharedWith.set(groupId, [userId]);
-		}
+		const sharedWith = groupBy(shares, (s) => s.groupId);
 		return {
 			groups: groups.map((g) => ({
 				...g,
 				count: n.get(g.id) ?? 0,
-				sharedWith: sharedWith.get(g.id) ?? [],
+				sharedWith: (sharedWith.get(g.id) ?? []).map((s) => s.userId),
 			})),
 			hosts: hosts
 				.filter((h) => canHost(h))

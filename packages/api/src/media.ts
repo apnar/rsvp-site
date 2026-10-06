@@ -7,7 +7,7 @@ import { designPrefix } from "@rsvp-site/design/schema";
 import { z } from "zod";
 
 import type { Context } from "./context";
-import type { ImageType } from "./image-type";
+import { type ImageType, sniffImage } from "./image-type";
 
 /** The Worker's bindings, as a procedure's context carries them. */
 export type Env = Context["env"];
@@ -73,6 +73,41 @@ export async function putImage(
 		customMetadata: meta,
 	});
 	return key;
+}
+
+/**
+ * The small picture-text twin of a card or cover is `<name>-mms.jpg`, so
+ * it is one of that picture's own keys to every rule that prunes by prefix
+ * but not one more picture to count: it follows its original.
+ */
+const MMS_SUFFIX = "-mms.jpg";
+export function isMms(key: string): boolean {
+	return key.endsWith(MMS_SUFFIX);
+}
+export function mmsTwin(key: string): string {
+	return key.replace(/\.[a-z]+$/, MMS_SUFFIX);
+}
+
+/**
+ * Store the rendition next to `key` and return its key. A courtesy: one
+ * that isn't a JPEG is dropped (null) rather than refused, and the sender
+ * falls back to the picture itself when that is small enough.
+ */
+export async function putMmsTwin(
+	env: Env,
+	key: string,
+	file: z.output<typeof mmsImage> | undefined,
+	meta: Record<string, string>,
+): Promise<string | null> {
+	if (!file) return null;
+	const small = await fileBytes(file);
+	if (sniffImage(small) !== "image/jpeg") return null;
+	const twin = mmsTwin(key);
+	await env.MEDIA.put(twin, small, {
+		httpMetadata: { contentType: "image/jpeg" },
+		customMetadata: meta,
+	});
+	return twin;
 }
 
 export async function listPrefix(

@@ -12,12 +12,11 @@ import { event, eventHost } from "@rsvp-site/db/schema/event";
 import { cancelEmail } from "@rsvp-site/email";
 import { cancelText } from "@rsvp-site/sms";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
-
-import { type OwnedEvent, planRemoval } from "./event-rules";
-import { type EventRow, emailsHeld, stillComing } from "./events";
+import { emailsHeld, type OwnedEvent, planRemoval } from "./event-rules";
+import { type EventRow, stillComing } from "./events";
 import { deliver, eventFacts, type Notice, notice } from "./mail";
 import { deleteDesignMedia, type Env } from "./media";
-import { hostNameOf, textFactsOf } from "./texting";
+import { textFactsFor } from "./texting";
 
 /**
  * Cancel a sent event, and tell everybody still coming if asked. Returns how
@@ -42,7 +41,7 @@ export async function callOff(
 	if (!opts.notify || emailsHeld(row)) return quiet;
 	const shown = opts.pictures ? row : { ...row, coverKey: null, cardKey: null };
 	return notice(`cancel ${row.id}`, async () => {
-		const facts = textFactsOf(row, await hostNameOf(db, row));
+		const facts = await textFactsFor(db, row);
 		return deliver(db, {
 			kind: "cancel",
 			eventId: row.id,

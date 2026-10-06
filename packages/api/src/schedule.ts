@@ -77,6 +77,16 @@ export function dayBeforeAt(e: Pick<ScheduleEvent, "date">): Date | null {
 	return e.date ? siteInstant(addDays(e.date, -1), REMINDER_TIME) : null;
 }
 
+/**
+ * A paper event whose host has not pressed "Start emails" yet: no guest
+ * email of any kind may go, so the printed card arrives first.
+ */
+export function emailsHeld(
+	row: Pick<ScheduleEvent, "paper" | "emailsReleasedAt">,
+): boolean {
+	return row.paper && row.emailsReleasedAt === null;
+}
+
 export function dueEmails(e: ScheduleEvent, now: Date): Due[] {
 	if (e.status !== "published" || !e.publishedAt) return [];
 	const due: Due[] = [];
@@ -85,7 +95,7 @@ export function dueEmails(e: ScheduleEvent, now: Date): Due[] {
 	// When guests first heard from us by email: publishing, or for a paper
 	// event the host's "Start emails". Until then a paper event's guests get
 	// nothing -- their card is meant to arrive first.
-	const held = e.paper && e.emailsReleasedAt === null;
+	const held = emailsHeld(e);
 	const published = (
 		e.paper ? (e.emailsReleasedAt ?? e.publishedAt) : e.publishedAt
 	).getTime();

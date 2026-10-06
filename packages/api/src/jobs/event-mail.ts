@@ -41,7 +41,7 @@ import { answersOf } from "../answer-words";
 import { cleanTheme, type EventRow, guestCountsOf, hostIdsOf } from "../events";
 import { deliver, eventFacts, hostTotals } from "../mail";
 import { type Due, digestSince, dueEmails } from "../schedule";
-import { hostNameOf, textFactsOf } from "../texting";
+import { textFactsFor } from "../texting";
 import { addDays, todayOnSite } from "../time";
 
 export type MailOutcome = {
@@ -167,7 +167,7 @@ async function runDue(
 		due.kind === "deadline_reminder"
 			? deadlineReminderEmail(facts)
 			: dayBeforeEmail(facts);
-	const said = textFactsOf(row, await hostNameOf(db, row));
+	const said = await textFactsFor(db, row);
 	const text =
 		due.kind === "deadline_reminder"
 			? (link: string) => deadlineReminderText(said, link)

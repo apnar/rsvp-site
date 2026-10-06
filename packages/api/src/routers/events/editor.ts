@@ -21,13 +21,13 @@ import { answersOf, answerWordsInput, toStored } from "../../answer-words";
 import { callOff, deleteEventMedia } from "../../endings";
 import {
 	describeChanges,
+	emailsHeld,
 	expectingGuests,
 	movesGuestFacts,
 	rearmFor,
 } from "../../event-rules";
 import {
 	designedCard,
-	emailsHeld,
 	findEvent,
 	guestsOf,
 	hostsOf,
@@ -45,7 +45,7 @@ import {
 import { hostProcedure } from "../../index";
 import { emailSchema, idInput, idSchema } from "../../inputs";
 import { deliver, eventFacts, notice } from "../../mail";
-import { hostNameOf, textFactsOf } from "../../texting";
+import { textFactsFor } from "../../texting";
 
 // A real calendar date and clock time, not just the right shape: 2026-13-01
 // would otherwise be stored and then throw in formatDate on every page.
@@ -219,7 +219,7 @@ export const editorRouter = {
 				return { ok: true, notified: 0, noticeFailed: false };
 			}
 			const told = await notice(`update ${after.id}`, async () => {
-				const facts = textFactsOf(after, await hostNameOf(context.db, after));
+				const facts = await textFactsFor(context.db, after);
 				return deliver(context.db, {
 					kind: "update",
 					eventId: after.id,

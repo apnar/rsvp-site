@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import { normalizeEmail } from "@rsvp-site/db/addresses";
 import {
 	findOrCreatePeople,
@@ -16,7 +15,8 @@ import { z } from "zod";
 import { findEventByShareToken, labelsOf, notFound } from "../../events";
 import { withHostEvent } from "../../host-event";
 import { hostProcedure, personProcedure, publicProcedure } from "../../index";
-import { emailSchema, idInput } from "../../inputs";
+import { emailSchema, idInput, tokenInput, tokenSchema } from "../../inputs";
+import { callerIp, requireUnderLimit } from "../../limits";
 import { lookOf, signInUrl } from "../../mail";
 
 /** How long before somebody can ask a share link for another email. */
@@ -25,7 +25,7 @@ const JOIN_COOLDOWN_MS = 2 * 60 * 1000;
 export const shareRouter = {
 	/** What a share link shows before anybody signs in: the outside of the envelope. */
 	teaser: publicProcedure
-		.input(z.object({ token: z.string().min(1).max(64) }))
+		.input(tokenInput)
 		.handler(async ({ context, input }) => {
 			const row = await findEventByShareToken(context.db, input.token);
 			if (!row?.shareEnabled || row.status === "draft") throw notFound();
@@ -59,7 +59,7 @@ export const shareRouter = {
 	join: publicProcedure
 		.input(
 			z.object({
-				token: z.string().min(1).max(64),
+				token: tokenSchema,
 				email: emailSchema,
 			}),
 		)
@@ -68,13 +68,10 @@ export const shareRouter = {
 			if (!row?.shareEnabled || row.status !== "published") {
 				throw notFound();
 			}
-			const ip = context.headers.get("cf-connecting-ip") ?? "local";
-			const { success } = await context.env.JOIN_LIMITER.limit({ key: ip });
-			if (!success) {
-				throw new ORPCError("TOO_MANY_REQUESTS", {
-					message: "Too many tries. Wait a minute and try again.",
-				});
-			}
+			await requireUnderLimit(
+				context.env.JOIN_LIMITER,
+				callerIp(context.headers),
+			);
 			const email = normalizeEmail(input.email);
 			const existing = await findReachablePersonByEmail(context.db, email);
 			if (
@@ -116,7 +113,7 @@ export const shareRouter = {
 	 * no invitation email on top.
 	 */
 	claimJoin: personProcedure
-		.input(z.object({ token: z.string().min(1).max(64) }))
+		.input(tokenInput)
 		.handler(async ({ context, input }) => {
 			const row = await findEventByShareToken(context.db, input.token);
 			if (!row?.shareEnabled || row.status !== "published") throw notFound();

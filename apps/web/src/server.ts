@@ -1,4 +1,5 @@
 import { runEventMail } from "@rsvp-site/api/jobs/event-mail";
+import { callerIp } from "@rsvp-site/api/limits";
 import { pruneTelnyxEvents } from "@rsvp-site/api/texting";
 import { createDb } from "@rsvp-site/db";
 import { logError } from "@rsvp-site/db/errors";
@@ -42,7 +43,7 @@ const entry = createServerEntry({
  * since been replaced opens nothing.
  */
 async function textLink(request: Request, code: string): Promise<Response> {
-	const ip = request.headers.get("cf-connecting-ip") ?? "local";
+	const ip = callerIp(request.headers);
 	const { success } = await env.AUTH_LIMITER.limit({ key: `/t:${ip}` });
 	if (!success) return new Response("Too many tries.", { status: 429 });
 	let found: Awaited<ReturnType<typeof redeemTextLink>> = null;

@@ -53,11 +53,9 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 import { answersOf } from "./answer-words";
 import { readTheme, savedDesign } from "./designs-store";
-import { emailsHeld, mayDelete, openRefusal } from "./event-rules";
+import { mayDelete, openRefusal } from "./event-rules";
 import { type GuestCounts, potluckLines, tally } from "./headcount";
 import { formatDate, formatTimeRange } from "./time";
-
-export { emailsHeld };
 
 /** A row as D1 hands it over: the theme is unchecked JSON. */
 export type RawEventRow = typeof event.$inferSelect;
@@ -388,7 +386,7 @@ async function lastTexts(db: Db, eventId: string) {
 }
 
 /** Rows under their key, in the order they came. */
-function groupBy<T>(rows: readonly T[], key: (row: T) => string) {
+export function groupBy<T>(rows: readonly T[], key: (row: T) => string) {
 	const groups = new Map<string, T[]>();
 	for (const row of rows) {
 		const k = key(row);

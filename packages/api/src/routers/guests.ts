@@ -17,11 +17,11 @@ import { z } from "zod";
 import { answersOf } from "../answer-words";
 import { answer, answerInput } from "../answers";
 import { hostOf, saveEmail } from "../details";
+import { emailsHeld } from "../event-rules";
 import {
 	type Access,
 	accessTo,
 	designFormatOf,
-	emailsHeld,
 	guestsOf,
 	potluckOf,
 } from "../events";
@@ -36,6 +36,7 @@ import {
 import { withHostEvent, withLiveHostEvent } from "../host-event";
 import { hostProcedure, personProcedure } from "../index";
 import { emailSchema, idInput, idSchema } from "../inputs";
+import { requireUnderLimit } from "../limits";
 import { sendInvites } from "../mail";
 import { typedPeople } from "../typed-people";
 import { recordView } from "../views";
@@ -390,14 +391,10 @@ export const guestsRouter = {
 			// Per person, not per IP: the cap bounds one guest's invitations to
 			// one party, this bounds the attempts (each can mint an account) and
 			// shares AUTH_LIMITER's 10 a minute, which no honest guest reaches.
-			const { success } = await context.env.AUTH_LIMITER.limit({
-				key: `invite:${context.me.id}`,
-			});
-			if (!success) {
-				throw new ORPCError("TOO_MANY_REQUESTS", {
-					message: "Slow down a little, then try again.",
-				});
-			}
+			await requireUnderLimit(
+				context.env.AUTH_LIMITER,
+				`invite:${context.me.id}`,
+			);
 			const access = await accessTo(context.db, context.me, input.eventId);
 			const row = access.event;
 			const guest = requireInviter(access);
