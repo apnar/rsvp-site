@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId, useMemo, useState } from "react";
 
+import { TextsOkCheckbox } from "@/components/texts-copy";
 import { matchesPerson } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
@@ -365,17 +366,10 @@ export function GuestPicker({
 				onChange={(ev) => onChange({ ...value, emails: ev.target.value })}
 			/>
 			{phoneLines(value.emails).any ? (
-				<label className="flex cursor-pointer items-start gap-3 text-[14px] text-soft">
-					<input
-						type="checkbox"
-						checked={value.textsOk}
-						onChange={(ev) =>
-							onChange({ ...value, textsOk: ev.target.checked })
-						}
-						className="mt-1 size-4 accent-lime"
-					/>
-					The people whose numbers I added expect a text from me about this.
-				</label>
+				<TextsOkCheckbox
+					checked={value.textsOk}
+					onChange={(textsOk) => onChange({ ...value, textsOk })}
+				/>
 			) : null}
 			<span className="text-[13px] text-haze">
 				{paper

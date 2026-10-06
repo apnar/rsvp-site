@@ -58,14 +58,13 @@ export function CallOff({
 					onChange={(ev) => setNote(ev.target.value)}
 				/>
 			</Field>
-			<div className="flex items-center gap-3 text-[14px]">
-				<Switch
-					label="Email the guests"
-					checked={notify}
-					onChange={setNotify}
-				/>
+			<Switch
+				checked={notify}
+				onChange={setNotify}
+				className="w-fit text-[14px]"
+			>
 				Email the {plural(stillComing, "guest")} who haven't said no
-			</div>
+			</Switch>
 		</ConfirmAction>
 	);
 }

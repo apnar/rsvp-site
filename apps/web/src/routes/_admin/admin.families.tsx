@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Switch } from "@/components/controls";
 import { Panel } from "@/components/page";
+import { RenameInput } from "@/components/rename-input";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { familySearchTerm, matchesPerson, plural } from "@/lib/format";
@@ -108,10 +109,13 @@ function CreateFamily({ onCreated }: { onCreated: (id: string) => void }) {
 					onChange={(e) => setName(e.target.value)}
 					className="min-h-11 min-w-0 flex-[1_1_200px] rounded-full py-2.5"
 				/>
-				<span className="flex items-center gap-2 text-[14px] text-soft">
-					<Switch checked={shared} onChange={setShared} label="Shared" />
+				<Switch
+					checked={shared}
+					onChange={setShared}
+					className="gap-2 text-[14px] text-soft"
+				>
 					Shared with hosts
-				</span>
+				</Switch>
 				<Button type="submit" disabled={create.isPending || !name.trim()}>
 					Make it
 				</Button>
@@ -135,7 +139,6 @@ function FamilyPanel({
 }) {
 	const [open, setOpen] = useState(startOpen);
 	const bodyId = useId();
-	const [name, setName] = useState(family.name);
 	const rename = useMutation(orpc.families.rename.mutationOptions());
 	const setShared = useMutation(orpc.families.setShared.mutationOptions());
 	const remove = useMutation(orpc.families.remove.mutationOptions());
@@ -165,17 +168,16 @@ function FamilyPanel({
 						{plural(family.members.length, "person", "people")}
 					</span>
 				</button>
-				<span className="flex items-center gap-2 text-[14px] text-soft">
-					<Switch
-						checked={family.shared}
-						disabled={setShared.isPending}
-						onChange={(shared) =>
-							setShared.mutate({ familyId: family.id, shared })
-						}
-						label={`Share ${family.name} with hosts`}
-					/>
-					Shared
-				</span>
+				<Switch
+					checked={family.shared}
+					disabled={setShared.isPending}
+					onChange={(shared) =>
+						setShared.mutate({ familyId: family.id, shared })
+					}
+					className="gap-2 text-[14px] text-soft"
+				>
+					Shared<span className="sr-only"> with hosts: {family.name}</span>
+				</Switch>
 				<ConfirmAction
 					size="xs"
 					confirm="Delete"
@@ -199,16 +201,13 @@ function FamilyPanel({
 						>
 							Name
 						</label>
-						<Input
+						<RenameInput
 							id={`family-${family.id}`}
-							value={name}
+							value={family.name}
 							maxLength={80}
-							onChange={(e) => setName(e.target.value)}
-							onBlur={() => {
-								if (name.trim() && name !== family.name) {
-									rename.mutate({ familyId: family.id, name });
-								}
-							}}
+							onCommit={(name) =>
+								rename.mutateAsync({ familyId: family.id, name })
+							}
 							className="min-h-11 rounded-full py-2.5"
 						/>
 					</div>
@@ -227,20 +226,20 @@ function FamilyPanel({
 											{m.noEmail ? "No email" : m.email}
 										</span>
 									</span>
-									<span className="flex items-center gap-2 text-[14px] text-soft">
-										<Switch
-											checked={m.child}
-											onChange={(child) =>
-												setChild.mutate({
-													familyId: family.id,
-													userId: m.id,
-													child,
-												})
-											}
-											label={`${m.name} is a child`}
-										/>
-										Child
-									</span>
+									<Switch
+										checked={m.child}
+										disabled={setChild.isPending}
+										onChange={(child) =>
+											setChild.mutate({
+												familyId: family.id,
+												userId: m.id,
+												child,
+											})
+										}
+										className="gap-2 text-[14px] text-soft"
+									>
+										Child<span className="sr-only">: {m.name}</span>
+									</Switch>
 									<ConfirmAction
 										size="xs"
 										confirm="Remove"
@@ -392,14 +391,13 @@ function AddMembers({
 					onChange={(e) => setLines(e.target.value)}
 				/>
 				<div className="flex flex-wrap items-center gap-3">
-					<span className="flex items-center gap-2 text-[14px] text-soft">
-						<Switch
-							checked={child}
-							onChange={setChild}
-							label="The people being added are children"
-						/>
+					<Switch
+						checked={child}
+						onChange={setChild}
+						className="gap-2 text-[14px] text-soft"
+					>
 						These are children
-					</span>
+					</Switch>
 					<Button
 						type="submit"
 						size="sm"

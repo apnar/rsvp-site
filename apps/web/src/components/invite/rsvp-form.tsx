@@ -206,6 +206,7 @@ export function RsvpForm({
 								saved={r.response}
 								size="sm"
 								name={`family-${r.guestId}`}
+								legend={`Is ${r.name} coming?`}
 								value={r.shown}
 								onChange={(a) => setTouched((t) => ({ ...t, [r.guestId]: a }))}
 							/>

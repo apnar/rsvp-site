@@ -113,24 +113,22 @@ function GroupRow({
 						</p>
 					) : null}
 					{others.map((h) => (
-						<span
+						<Switch
 							key={h.id}
-							className="flex items-center gap-3 py-1 text-[14px]"
+							checked={shared.has(h.id)}
+							disabled={setShare.isPending}
+							onChange={(on) =>
+								setShare.mutate({
+									groupId: g.id,
+									userId: h.id,
+									shared: on,
+								})
+							}
+							className="w-fit py-1 text-[14px]"
 						>
-							<Switch
-								checked={shared.has(h.id)}
-								disabled={setShare.isPending}
-								onChange={(on) =>
-									setShare.mutate({
-										groupId: g.id,
-										userId: h.id,
-										shared: on,
-									})
-								}
-								label={`Share ${g.name} with ${h.name}`}
-							/>
 							{h.name}
-						</span>
+							<span className="sr-only">: can use {g.name}</span>
+						</Switch>
 					))}
 				</div>
 			) : null}

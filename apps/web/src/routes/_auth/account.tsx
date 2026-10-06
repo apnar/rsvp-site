@@ -31,6 +31,7 @@ import {
 	DetailFields,
 	draftOf,
 } from "@/components/person-details";
+import { TextsDisclosure } from "@/components/texts-copy";
 import { pageTitle } from "@/content/site";
 import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/utils/orpc";
@@ -380,6 +381,7 @@ function ReachPrefs() {
 					<Switch
 						label="Invitations by email"
 						checked={emailOn}
+						disabled={setEmail.isPending}
 						onChange={(value) => setEmail.mutate({ on: value })}
 					/>
 				</SettingRow>
@@ -447,9 +449,7 @@ function ReachPrefs() {
 				</SettingRow>
 			) : null}
 			<p className="m-0 border-line border-t pt-3.5 text-[12px] text-haze">
-				Texts come from {me.textingFrom}. Message and data rates may apply.
-				Reply STOP to stop, HELP for help. See our <a href="/terms">terms</a>{" "}
-				and <a href="/privacy">privacy policy</a>.
+				Texts come from {me.textingFrom}. <TextsDisclosure />
 			</p>
 		</Panel>
 	);

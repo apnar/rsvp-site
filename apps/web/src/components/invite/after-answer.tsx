@@ -13,6 +13,7 @@ import {
 	dietSummary,
 	sameDiet,
 } from "@/components/diet";
+import { TextsDisclosure } from "@/components/texts-copy";
 import type { Outputs } from "@/lib/api-types";
 import type { RsvpValues } from "./rsvp-form";
 import type { Invite } from "./types";
@@ -308,21 +309,19 @@ export function AfterAnswer({
 							onChange={(ev) => setPhone(ev.target.value)}
 						/>
 					</Field>
-					<div className="flex items-center gap-3">
+					<div className="flex flex-col gap-1">
 						<Switch
-							label="Text me invitations and reminders too"
 							checked={texts}
 							disabled={phone.trim() === ""}
 							onChange={setTexts}
-						/>
-						<span className="text-[14px]">
+							className="w-fit text-[14px]"
+						>
 							Text me invitations and reminders too
-							{/* Carriers read what people saw when they said yes. */}
-							<span className="block text-[12px] text-haze">
-								Message and data rates may apply. Reply STOP to stop, HELP for
-								help. See our <a href="/terms">terms</a> and{" "}
-								<a href="/privacy">privacy policy</a>.
-							</span>
+						</Switch>
+						{/* Carriers read what people saw when they said yes. Kept out of
+						    the switch's label so it isn't the switch's name. */}
+						<span className="pl-[62px] text-[12px] text-haze">
+							<TextsDisclosure />
 						</span>
 					</div>
 				</>

@@ -21,6 +21,8 @@ import {
 	type DetailsPatch,
 	PersonDetailsDialog,
 } from "@/components/person-details";
+import { RenameInput } from "@/components/rename-input";
+import { TextsOkCheckbox } from "@/components/texts-copy";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
 import { initials, matchesPerson, plural } from "@/lib/format";
@@ -184,7 +186,9 @@ function InlineEdit({
 		// Put focus back where the keyboard was.
 		requestAnimationFrame(() => pencil.current?.focus());
 	};
-	const commit = async () => {
+	// `refocus` only for Enter: a blur commit means the keyboard went
+	// somewhere on purpose, and the pencil must not take it back.
+	const commit = async (refocus: boolean) => {
 		const changed = Object.fromEntries(
 			inputs
 				.filter((i) => (draft[i.key] ?? "").trim() !== i.value.trim())
@@ -194,7 +198,8 @@ function InlineEdit({
 		setBusy(true);
 		try {
 			await onSave(changed);
-			setEditing(false);
+			if (refocus) stop();
+			else setEditing(false);
 		} catch {
 			// Already toasted; keep the input so it can be fixed.
 		} finally {
@@ -209,7 +214,7 @@ function InlineEdit({
 				className="m-0 flex gap-1.5 border-0 p-0"
 				onBlur={(e) => {
 					if (!e.currentTarget.contains(e.relatedTarget) && !busy) {
-						void commit();
+						void commit(false);
 					}
 				}}
 			>
@@ -227,7 +232,7 @@ function InlineEdit({
 						onKeyDown={(e) => {
 							if (e.key === "Enter") {
 								e.preventDefault();
-								void commit();
+								void commit(true);
 							} else if (e.key === "Escape") {
 								e.preventDefault();
 								stop();
@@ -314,7 +319,7 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 					/>
 					<InlineEdit
 						label={`${p.name}'s email`}
-						editable={p.editable}
+						editable={p.editable && p.reachEditable}
 						className="text-[13px] text-haze"
 						display={
 							p.noEmail
@@ -329,12 +334,16 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 								value: p.noEmail ? "" : p.email,
 							},
 						]}
-						onSave={(v) => saveEmail(v.email ?? "")}
+						onSave={async (v) => {
+							// An emptied box is "never mind", not an address to set.
+							const email = v.email?.trim();
+							if (email) await saveEmail(email);
+						}}
 					/>
-					{p.editable || p.phone ? (
+					{(p.editable && p.reachEditable) || p.phone ? (
 						<InlineEdit
 							label={`${p.name}'s phone`}
-							editable={p.editable}
+							editable={p.editable && p.reachEditable}
 							className="text-[13px] text-haze"
 							display={p.phone ? formatPhone(p.phone) : "Add a phone"}
 							inputs={[
@@ -378,6 +387,7 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 				<PersonDetailsDialog
 					person={p}
 					editable={p.editable}
+					reachEditable={p.reachEditable}
 					lockedReason={reason}
 					pending={update.isPending || setEmail.isPending}
 					onSave={saveDetails}
@@ -453,15 +463,7 @@ function AddPeople() {
 				/>
 			</Field>
 			{phones.any ? (
-				<label className="flex cursor-pointer items-start gap-3 text-[14px] text-soft">
-					<input
-						type="checkbox"
-						checked={textsOk}
-						onChange={(e) => setTextsOk(e.target.checked)}
-						className="mt-1 size-4 accent-lime"
-					/>
-					The people whose numbers I added expect a text from me about this.
-				</label>
+				<TextsOkCheckbox checked={textsOk} onChange={setTextsOk} />
 			) : null}
 			<p className="m-0 text-[13px] text-haze">
 				Name, email and phone, one person per line. A name alone is fine for
@@ -533,7 +535,6 @@ function Groups({ groups }: { groups: Group[] }) {
 }
 
 function GroupRow({ group }: { group: Group }) {
-	const [name, setName] = useState(group.name);
 	const rename = useMutation(orpc.contacts.rename.mutationOptions());
 	const remove = useMutation(orpc.contacts.remove.mutationOptions());
 	return (
@@ -541,16 +542,11 @@ function GroupRow({ group }: { group: Group }) {
 			<label htmlFor={`group-${group.id}`} className="sr-only">
 				Name of the group {group.name}
 			</label>
-			<Input
+			<RenameInput
 				id={`group-${group.id}`}
-				value={name}
+				value={group.name}
 				maxLength={80}
-				onChange={(e) => setName(e.target.value)}
-				onBlur={() => {
-					if (name.trim() && name !== group.name) {
-						rename.mutate({ groupId: group.id, name });
-					}
-				}}
+				onCommit={(name) => rename.mutateAsync({ groupId: group.id, name })}
 				className="min-h-9 flex-1 border-transparent bg-transparent px-0 font-bold hover:border-transparent focus-visible:border-line-strong focus-visible:px-3"
 			/>
 			<span className="text-[13px] text-haze">{group.count}</span>

@@ -32,6 +32,7 @@ export function AnswerPicker({
 	pending = false,
 	size = "lg",
 	name = "answer",
+	legend = "Are you coming?",
 }: {
 	answers: AnswerSet;
 	saved?: Answer | null;
@@ -40,10 +41,12 @@ export function AnswerPicker({
 	pending?: boolean;
 	size?: "lg" | "sm";
 	name?: string;
+	/** For a screen reader; say whose answer it is when it is not the viewer's. */
+	legend?: string;
 }) {
 	return (
 		<fieldset className="m-0 flex gap-1 rounded-full border-0 bg-night p-1.5">
-			<legend className="sr-only">Are you coming?</legend>
+			<legend className="sr-only">{legend}</legend>
 			{offered(answers, saved).map((a) => (
 				<label
 					key={a}
@@ -181,30 +184,49 @@ export function Stepper({
 	);
 }
 
-/** The lime toggle switch from "What to ask". A checkbox underneath. */
+/**
+ * The lime toggle switch from "What to ask". A checkbox underneath. With
+ * `children` those words are the visible caption inside the same label, so
+ * pressing them toggles it and they are its accessible name; a bare switch
+ * (its words are elsewhere, say in a SettingRow) is named by `label`.
+ */
 export function Switch({
 	checked,
 	onChange,
 	label,
 	disabled = false,
+	className,
+	children,
 }: {
 	checked: boolean;
 	onChange: (checked: boolean) => void;
-	label: string;
+	label?: string;
 	disabled?: boolean;
+	/** For the label, to size and colour the caption. */
+	className?: string;
+	children?: ReactNode;
 }) {
 	return (
-		<label className="relative inline-flex h-7 w-[50px] flex-none cursor-pointer rounded-full has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime has-[:focus-visible]:outline-offset-2">
-			<input
-				type="checkbox"
-				className="peer sr-only"
-				checked={checked}
-				disabled={disabled}
-				onChange={(e) => onChange(e.target.checked)}
-				aria-label={label}
-			/>
-			<span className="absolute inset-0 rounded-full bg-line-strong transition-colors peer-checked:bg-lime" />
-			<span className="absolute top-[3px] left-[3px] size-[22px] rounded-full bg-night transition-transform peer-checked:translate-x-[22px]" />
+		<label
+			className={cn(
+				"inline-flex items-center gap-3",
+				disabled ? "cursor-not-allowed" : "cursor-pointer",
+				className,
+			)}
+		>
+			<span className="relative inline-flex h-7 w-[50px] flex-none rounded-full has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-lime has-[:focus-visible]:outline-offset-2">
+				<input
+					type="checkbox"
+					className="peer sr-only"
+					checked={checked}
+					disabled={disabled}
+					onChange={(e) => onChange(e.target.checked)}
+					aria-label={children ? undefined : label}
+				/>
+				<span className="absolute inset-0 rounded-full bg-line-strong transition-colors peer-checked:bg-lime" />
+				<span className="absolute top-[3px] left-[3px] size-[22px] rounded-full bg-night transition-transform peer-checked:translate-x-[22px]" />
+			</span>
+			{children}
 		</label>
 	);
 }

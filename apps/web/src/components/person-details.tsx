@@ -90,6 +90,7 @@ export function DetailFields({
 	draft,
 	onChange,
 	readOnly,
+	reachReadOnly = readOnly,
 	autoComplete,
 	firstRef,
 	email,
@@ -98,6 +99,8 @@ export function DetailFields({
 	draft: Record<DetailKey, string>;
 	onChange: (key: DetailKey, value: string) => void;
 	readOnly?: boolean;
+	/** The phone alone, for callers who may change the rest but not how to reach them. */
+	reachReadOnly?: boolean;
 	autoComplete: "profile" | "off";
 	firstRef?: RefObject<HTMLInputElement | null>;
 	email: ReactNode;
@@ -128,7 +131,7 @@ export function DetailFields({
 			</div>
 			{email}
 			<Field label={DETAIL_LABELS.phone} htmlFor={`${idPrefix}-phone`}>
-				<Input {...input("phone")} type="tel" />
+				<Input {...input("phone")} readOnly={reachReadOnly} type="tel" />
 			</Field>
 			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
 				<legend className="mb-2 p-0 font-bold text-[14px]">
@@ -203,6 +206,12 @@ export function PersonDetailsDialog({
 type DetailsFormProps = {
 	person: DetailsPerson;
 	editable: boolean;
+	/**
+	 * Whether this caller may change their email and phone. Not the same as
+	 * `editable`: a host who didn't first add somebody may fix their name
+	 * and address but not where their invitations go.
+	 */
+	reachEditable?: boolean;
 	lockedReason?: string;
 	pending: boolean;
 	onSave: (patch: DetailsPatch) => Promise<unknown>;
@@ -214,6 +223,7 @@ type DetailsFormProps = {
 function DetailsForm({
 	person,
 	editable,
+	reachEditable = true,
 	lockedReason,
 	pending,
 	onSave,
@@ -270,6 +280,11 @@ function DetailsForm({
 					{lockedReason ?? "These aren't yours to change."}
 				</p>
 			)}
+			{editable && !reachEditable ? (
+				<p className="m-0 text-[14px] text-haze">
+					Only the host who first added them can change their email or phone.
+				</p>
+			) : null}
 			{picture ? (
 				<AvatarField {...picture} name={person.name} mine={false} />
 			) : null}
@@ -278,6 +293,7 @@ function DetailsForm({
 				draft={draft}
 				onChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
 				readOnly={!editable}
+				reachReadOnly={!editable || !reachEditable}
 				firstRef={firstRef}
 				autoComplete="off"
 				email={
@@ -286,7 +302,7 @@ function DetailsForm({
 							id={`${id}-email`}
 							type="email"
 							value={email}
-							readOnly={!editable}
+							readOnly={!editable || !reachEditable}
 							placeholder={person.noEmail ? "No email yet" : undefined}
 							onChange={(e) => setEmail(e.target.value)}
 							autoComplete="off"
