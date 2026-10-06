@@ -70,12 +70,12 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 			);
 		}
 		let id = eventId ?? createdId.current ?? undefined;
-		let notified = 0;
+		let told = { notified: 0, noticeFailed: false };
 		if (!id) {
 			id = (await client.events.create(fields)).id;
 			createdId.current = id;
 		} else {
-			notified = (await client.events.update({ eventId: id, fields })).notified;
+			told = await client.events.update({ eventId: id, fields });
 		}
 		if (coverFile) {
 			const mms = await shrinkCoverForText(coverFile);
@@ -122,8 +122,11 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 			// The card picture bakes in the date, place and title.
 			await refreshCard(id, true).catch(() => {});
 		}
-		if (notified > 0)
-			toast.success(`Told ${plural(notified, "guest")} about the change.`);
+		if (told.noticeFailed) {
+			toast.warning("Saved, but the message about the change didn't go.");
+		} else if (told.notified > 0) {
+			toast.success(`Told ${plural(told.notified, "guest")} about the change.`);
+		}
 		draft.setCoverFile(null);
 		draft.setDropCover(false);
 		if (eventId) {

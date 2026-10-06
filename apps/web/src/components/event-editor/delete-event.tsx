@@ -29,13 +29,17 @@ export function DeleteEvent({
 	const remove = useMutation(
 		orpc.events.remove.mutationOptions({
 			onSuccess: (r) => {
-				toast.success(
-					draft
-						? "Draft deleted."
-						: r.notified > 0
-							? `Deleted. Told ${plural(r.notified, "guest")} it's off.`
-							: "Deleted.",
-				);
+				if (r.noticeFailed) {
+					toast.warning("Deleted, but the message to guests didn't go.");
+				} else {
+					toast.success(
+						draft
+							? "Draft deleted."
+							: r.notified > 0
+								? `Deleted. Told ${plural(r.notified, "guest")} it's off.`
+								: "Deleted.",
+					);
+				}
 				navigate({ to: "/events" });
 			},
 		}),

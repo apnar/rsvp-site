@@ -80,11 +80,15 @@ export function CancelEvent({
 	const cancel = useMutation(
 		orpc.events.cancel.mutationOptions({
 			onSuccess: (r) => {
-				toast.success(
-					r.notified > 0
-						? `Canceled. Told ${plural(r.notified, "guest")}.`
-						: "Canceled.",
-				);
+				if (r.noticeFailed) {
+					toast.warning("Canceled, but the message to guests didn't go.");
+				} else {
+					toast.success(
+						r.notified > 0
+							? `Canceled. Told ${plural(r.notified, "guest")}.`
+							: "Canceled.",
+					);
+				}
 				navigate({ to: "/events" });
 			},
 		}),
