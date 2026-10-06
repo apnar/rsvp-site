@@ -80,10 +80,41 @@ describe("createTexter", () => {
 			to: "+1555",
 			text: `t${i}`,
 		}));
-		const out = await t.sendMany(ms, 3);
+		const heard: number[] = [];
+		const out = await t.sendMany(ms, {
+			concurrency: 3,
+			onOutcome: (i) => {
+				heard.push(i);
+			},
+		});
 		expect(out.map((o) => (o.ok ? o.id : "x"))).toEqual(ms.map((m) => m.text));
 		expect(peak).toBeLessThanOrEqual(3);
 		expect(peak).toBeGreaterThan(1);
+		expect([...heard].sort((a, b) => a - b)).toEqual(ms.map((_, i) => i));
 		expect(await t.sendMany([])).toEqual([]);
+	});
+
+	it("sendMany carries on past an onOutcome that throws", async () => {
+		const lines: string[] = [];
+		const t = createTexter({
+			from: "+1",
+			allowDryRun: true,
+			log: (line) => lines.push(line),
+		});
+		const out = await t.sendMany(
+			[
+				{ to: "+1555", text: "a" },
+				{ to: "+1555", text: "b" },
+			],
+			{
+				concurrency: 1,
+				onOutcome: () => {
+					throw new Error("params: +13015550100");
+				},
+			},
+		);
+		expect(out.every((o) => o.ok)).toBe(true);
+		expect(lines.filter((l) => l.includes("onOutcome failed"))).toHaveLength(2);
+		expect(lines.join("\n")).not.toContain("+13015550100");
 	});
 });

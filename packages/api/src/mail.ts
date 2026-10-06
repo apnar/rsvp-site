@@ -1,5 +1,6 @@
 import type { Db } from "@rsvp-site/db";
 import { inChunks, mapChunks } from "@rsvp-site/db/batch";
+import { logError } from "@rsvp-site/db/errors";
 import {
 	countRecipients,
 	listRecipients,
@@ -48,7 +49,13 @@ import {
 	labelsOf,
 } from "./events";
 import { type GuestCounts, headcount, tally } from "./headcount";
-import { hostNameOf, mmsUrlOf, sendTexts, textFactsOf } from "./texting";
+import {
+	hostNameOf,
+	mmsUrlOf,
+	prepareTexts,
+	sendPrepared,
+	textFactsOf,
+} from "./texting";
 
 export type { EmailKind };
 
@@ -185,7 +192,7 @@ async function sendEmails(
 			sentBy: opts.sentBy ?? null,
 		});
 	} catch (error) {
-		console.error("email_send row not written", opts.kind, sendId, error);
+		logError(`email_send row not written (${opts.kind} ${sendId})`, error);
 	}
 	return { ...result, sendId };
 }
@@ -198,7 +205,7 @@ export type Delivery = {
 	sent: number;
 	/** People every one of whose channels failed. */
 	failedIds: string[];
-	/** How it went to each person tried. */
+	/** How it reached each person it reached. */
 	via: Map<string, Via>;
 };
 
@@ -268,8 +275,18 @@ export async function deliver(
 	}
 	if (via.size === 0) return null;
 
+	// The links are made before anything leaves: a D1 error here fails the
+	// whole send with nothing sent, and the callers give their claims back.
+	// Thrown after the email, the same error would hand back claims for
+	// mail already delivered, and the next pass would send it again.
+	const texts =
+		toText.length > 0 && opts.text
+			? await prepareTexts(db, toText, opts.path)
+			: null;
+
 	// Who each channel actually reached; a person is lost only when none did.
-	const reached = new Set<string>();
+	const mailed = new Set<string>();
+	const texted = new Set<string>();
 	if (toMail.length > 0) {
 		const result = await sendEmails(db, toMail, {
 			kind: opts.kind,
@@ -279,27 +296,54 @@ export async function deliver(
 			audience: HOST_KINDS.has(opts.kind) ? "hosts" : "guests",
 		});
 		const refused = new Set(result.failed.flatMap((f) => f.emails));
-		for (const p of toMail) if (!refused.has(p.email)) reached.add(p.id);
+		for (const p of toMail) if (!refused.has(p.email)) mailed.add(p.id);
 	}
-	if (toText.length > 0 && opts.text) {
-		const write = opts.text;
-		const result = await sendTexts(db, toText, {
+	if (texts && opts.text) {
+		const result = await sendPrepared(db, texts, {
 			kind: opts.kind,
 			eventId: opts.eventId,
-			path: opts.path,
 			mediaUrl: opts.mediaUrl,
-			body: (link) => write(link),
+			body: opts.text,
 		});
 		const refused = new Set(result.failedIds);
-		for (const p of toText) if (!refused.has(p.id)) reached.add(p.id);
+		for (const p of toText) if (!refused.has(p.id)) texted.add(p.id);
+	}
+	// What actually reached each person, not what was planned: a text that
+	// failed beside a delivered email is an email invitation.
+	const reached = new Map<string, Via>();
+	for (const id of via.keys()) {
+		const v = viaOf({ email: mailed.has(id), text: texted.has(id) });
+		if (v) reached.set(id, v);
 	}
 	const lost = [...via.keys()].filter((id) => !reached.has(id));
 	return {
 		attempted: via.size,
-		sent: via.size - lost.length,
+		sent: reached.size,
 		failedIds: lost,
-		via,
+		via: reached,
 	};
+}
+
+/** What a notice after a saved change came to. */
+export type Notice = { notified: number; noticeFailed: boolean };
+
+/**
+ * Send a notice about a change already written: an update, a
+ * cancellation. The change stands either way, so a failure here is logged
+ * and reported, never thrown -- thrown, it would tell the host their save
+ * failed, and a retry finds nothing left to notify about.
+ */
+export async function notice(
+	label: string,
+	send: () => Promise<Delivery | null>,
+): Promise<Notice> {
+	try {
+		const result = await send();
+		return { notified: result?.sent ?? 0, noticeFailed: false };
+	} catch (error) {
+		logError(`${label} notice failed`, error);
+		return { notified: 0, noticeFailed: true };
+	}
 }
 
 export type InviteOutcome = { sent: number; failed: number; skipped: number };
@@ -489,7 +533,7 @@ export async function alertHosts(
 			path: `/e/${row.id}/guests`,
 		});
 	} catch (error) {
-		console.error("host alert failed", error);
+		logError("host alert failed", error);
 	}
 }
 

@@ -15,7 +15,7 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
 import { type OwnedEvent, planRemoval } from "./event-rules";
 import { type EventRow, emailsHeld, stillComing } from "./events";
-import { deliver, eventFacts } from "./mail";
+import { deliver, eventFacts, type Notice, notice } from "./mail";
 import { deleteDesignMedia, type Env } from "./media";
 import { hostNameOf, textFactsOf } from "./texting";
 
@@ -29,28 +29,30 @@ export async function callOff(
 	db: Db,
 	row: EventRow,
 	opts: { note: string; notify: boolean; sentBy: string; pictures: boolean },
-): Promise<number> {
+): Promise<Notice> {
+	const quiet = { notified: 0, noticeFailed: false };
 	const result = await db
 		.update(event)
 		.set({ status: "canceled", canceledAt: new Date() })
 		.where(and(eq(event.id, row.id), eq(event.status, "published")))
 		.run();
-	if (result.meta.changes !== 1) return 0;
+	if (result.meta.changes !== 1) return quiet;
 	// Held paper events tell nobody by email; the host knows who has a card
 	// and can tell them.
-	if (!opts.notify || emailsHeld(row)) return 0;
+	if (!opts.notify || emailsHeld(row)) return quiet;
 	const shown = opts.pictures ? row : { ...row, coverKey: null, cardKey: null };
-	const facts = textFactsOf(row, await hostNameOf(db, row));
-	const sent = await deliver(db, {
-		kind: "cancel",
-		eventId: row.id,
-		people: await stillComing(db, row.id),
-		rendered: cancelEmail(eventFacts(shown), opts.note),
-		text: (link) => cancelText(facts, opts.note, link),
-		path: `/e/${row.id}`,
-		sentBy: opts.sentBy,
+	return notice(`cancel ${row.id}`, async () => {
+		const facts = textFactsOf(row, await hostNameOf(db, row));
+		return deliver(db, {
+			kind: "cancel",
+			eventId: row.id,
+			people: await stillComing(db, row.id),
+			rendered: cancelEmail(eventFacts(shown), opts.note),
+			text: (link) => cancelText(facts, opts.note, link),
+			path: `/e/${row.id}`,
+			sentBy: opts.sentBy,
+		});
 	});
-	return sent?.sent ?? 0;
 }
 
 /** An erased event's pictures: the cover, and everything under its designs. */

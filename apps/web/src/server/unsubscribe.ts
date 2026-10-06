@@ -1,4 +1,5 @@
 import { createDb } from "@rsvp-site/db";
+import { logError } from "@rsvp-site/db/errors";
 import {
 	resubscribe,
 	unsubscribe as unsubscribePerson,
@@ -136,7 +137,7 @@ unsubscribe.post("/:token/back", async (c) => {
 	try {
 		await getMailer().unblock(person.email);
 	} catch (error) {
-		console.error("Brevo unblock failed after resubscribe", error);
+		logError("Brevo unblock failed after resubscribe", error);
 	}
 	return html(
 		page({

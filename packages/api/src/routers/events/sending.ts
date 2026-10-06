@@ -163,13 +163,12 @@ export const sendingRouter = {
 					message: "Only a sent event can be canceled. Delete a draft instead.",
 				});
 			}
-			const notified = await callOff(context.db, row, {
+			return callOff(context.db, row, {
 				note: input.note,
 				notify: input.notify,
 				sentBy: context.me.id,
 				pictures: true,
 			});
-			return { notified };
 		}),
 
 	/**
@@ -235,9 +234,19 @@ export const sendingRouter = {
 				await giveBack();
 				throw error;
 			}
-			// Nothing went out (nobody reachable, or every batch refused): the
-			// stamp was only a claim on sending, so it goes back.
-			if (!result || result.sent === 0) await giveBack();
+			// The stamp was only a claim on sending: it goes back for whoever
+			// nothing reached (nobody reachable, or every channel refused), so
+			// they aren't left waiting twelve hours for a nudge they never got.
+			if (!result) await giveBack();
+			else if (result.failedIds.length > 0) {
+				const lost = new Set(result.failedIds);
+				await releaseNudges(
+					context.db,
+					row.id,
+					now,
+					claimed.filter((c) => lost.has(c.userId)).map((c) => c.id),
+				);
+			}
 			return { sent: result?.sent ?? 0, waiting: false };
 		}),
 };

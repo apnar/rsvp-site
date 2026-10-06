@@ -44,7 +44,7 @@ import {
 } from "../../host-event";
 import { hostProcedure } from "../../index";
 import { emailSchema, idInput, idSchema } from "../../inputs";
-import { deliver, eventFacts } from "../../mail";
+import { deliver, eventFacts, notice } from "../../mail";
 import { hostNameOf, textFactsOf } from "../../texting";
 
 // A real calendar date and clock time, not just the right shape: 2026-13-01
@@ -208,29 +208,29 @@ export const editorRouter = {
 			]);
 			const after = (await findEvent(context.db, before.id)) ?? before;
 
-			let notified = 0;
-			if (
+			const changes =
 				before.status === "published" &&
 				after.notifyChanges &&
 				moved &&
 				!emailsHeld(after)
-			) {
-				const changes = describeChanges(before, after);
-				if (changes.length > 0) {
-					const facts = textFactsOf(after, await hostNameOf(context.db, after));
-					const result = await deliver(context.db, {
-						kind: "update",
-						eventId: after.id,
-						people: await stillComing(context.db, after.id),
-						rendered: updateEmail(eventFacts(after), changes),
-						text: (link) => updateText(facts, changes, link),
-						path: `/e/${after.id}`,
-						sentBy: context.me.id,
-					});
-					notified = result?.sent ?? 0;
-				}
+					? describeChanges(before, after)
+					: [];
+			if (changes.length === 0) {
+				return { ok: true, notified: 0, noticeFailed: false };
 			}
-			return { ok: true, notified };
+			const told = await notice(`update ${after.id}`, async () => {
+				const facts = textFactsOf(after, await hostNameOf(context.db, after));
+				return deliver(context.db, {
+					kind: "update",
+					eventId: after.id,
+					people: await stillComing(context.db, after.id),
+					rendered: updateEmail(eventFacts(after), changes),
+					text: (link) => updateText(facts, changes, link),
+					path: `/e/${after.id}`,
+					sentBy: context.me.id,
+				});
+			});
+			return { ok: true, ...told };
 		}),
 
 	/**
@@ -348,16 +348,16 @@ export const editorRouter = {
 					message: "Only the owner can delete it. You can cancel it.",
 				});
 			}
-			const notified = expectingGuests(row)
+			const told = expectingGuests(row)
 				? await callOff(context.db, row, {
 						note: input.note,
 						notify: input.notify,
 						sentBy: context.me.id,
 						pictures: false,
 					})
-				: 0;
+				: { notified: 0, noticeFailed: false };
 			await context.db.delete(event).where(eq(event.id, row.id));
 			await deleteEventMedia(context.env, row);
-			return { notified };
+			return told;
 		}),
 };

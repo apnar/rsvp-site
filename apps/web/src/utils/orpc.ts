@@ -6,6 +6,7 @@ import { createRouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { createContext } from "@rsvp-site/api/context";
 import { appRouter } from "@rsvp-site/api/routers/index";
+import { logError } from "@rsvp-site/db/errors";
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
@@ -80,7 +81,7 @@ const getORPCClient = createIsomorphicFn()
 						return await next();
 					} catch (error) {
 						if (error instanceof ORPCError) throw error;
-						console.error(error);
+						logError("rpc during render", error);
 						throw new ORPCError("INTERNAL_SERVER_ERROR");
 					}
 				},

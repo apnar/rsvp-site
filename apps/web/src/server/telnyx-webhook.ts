@@ -1,9 +1,12 @@
+import { waitUntil } from "cloudflare:workers";
 import {
 	answerOnce,
+	firstDelivery,
 	peopleByPhone,
 	recordStatus,
 } from "@rsvp-site/api/texting";
 import { createDb, type Db } from "@rsvp-site/db";
+import { logError } from "@rsvp-site/db/errors";
 import { formatPhone } from "@rsvp-site/db/phone";
 import { blockNumber, unblockNumber } from "@rsvp-site/db/sms-status";
 import { escapeHtml, SENDER } from "@rsvp-site/email";
@@ -59,14 +62,28 @@ telnyxWebhook.post("/", async (c) => {
 	const event = parseTelnyxEvent(body);
 	const db = createDb();
 	if (event.type === "status") {
-		const blocked = await recordStatus(db, event);
+		const { known, blocked } = await recordStatus(db, event);
 		if (blocked) {
 			console.log(
 				`telnyx webhook: ${event.errorCode} -> blocked ${redactPhone(blocked)}`,
 			);
 		}
+		// A report can beat its text's log row, which is written as each send
+		// returns. Asking Telnyx to come back later keeps the STOP or landline
+		// block it may carry; a report that is no text of ours runs out of
+		// retries harmlessly.
+		if (!known) return c.text("Not yet.", 503);
 	} else if (event.type === "received") {
-		await received(db, event.from, event.text);
+		// Acting twice would forward the text twice, so the event is claimed
+		// first. Telnyx gets its answer at once and the forwarding runs after:
+		// a slow mail send would otherwise make it retry what was taken.
+		if (await firstDelivery(db, event.eventId)) {
+			waitUntil(
+				received(db, event.from, event.text).catch((error) =>
+					logError("telnyx inbound text", error),
+				),
+			);
+		}
 	}
 	// Anything else (a type we don't use) is acknowledged, or Telnyx retries it.
 	return c.json({ ok: true });

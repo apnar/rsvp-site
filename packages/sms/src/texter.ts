@@ -10,10 +10,17 @@ export type OutgoingText = {
 export type Texter = {
 	dryRun: boolean;
 	send(m: OutgoingText): Promise<TextOutcome>;
-	/** Outcomes in the order of `ms`, at most `concurrency` in flight. */
+	/**
+	 * Outcomes in the order of `ms`, at most `concurrency` in flight.
+	 * `onOutcome` hears each one as it comes back, before the next goes on
+	 * that lane; it must not throw (anything it does is logged and dropped).
+	 */
 	sendMany(
 		ms: readonly OutgoingText[],
-		concurrency?: number,
+		opts?: {
+			concurrency?: number;
+			onOutcome?: (i: number, outcome: TextOutcome) => unknown;
+		},
 	): Promise<TextOutcome[]>;
 };
 
@@ -56,7 +63,13 @@ export function createTexter(opts: {
 
 	async function sendMany(
 		ms: readonly OutgoingText[],
-		concurrency = 6,
+		{
+			concurrency = 6,
+			onOutcome,
+		}: {
+			concurrency?: number;
+			onOutcome?: (i: number, outcome: TextOutcome) => unknown;
+		} = {},
 	): Promise<TextOutcome[]> {
 		const out: TextOutcome[] = new Array(ms.length);
 		let next = 0;
@@ -64,7 +77,19 @@ export function createTexter(opts: {
 			while (next < ms.length) {
 				const i = next++;
 				const m = ms[i];
-				if (m) out[i] = await send(m);
+				if (!m) continue;
+				const outcome = await send(m);
+				out[i] = outcome;
+				try {
+					await onOutcome?.(i, outcome);
+				} catch (error) {
+					// The text has left; a failed bookkeeping step mustn't stop
+					// the rest or read as a failed send. Only the error's name:
+					// a failed query's message carries its parameters.
+					log(
+						`[texter] onOutcome failed: ${error instanceof Error ? error.name : "unknown"}`,
+					);
+				}
 			}
 		};
 		await Promise.all(

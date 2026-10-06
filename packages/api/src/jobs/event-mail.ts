@@ -1,3 +1,4 @@
+import { logError } from "@rsvp-site/db/errors";
 /**
  * The half-hourly pass over upcoming events: deadline reminders, day-before
  * reminders and host digests. `schedule.ts` decides what is due; this reads,
@@ -325,7 +326,7 @@ export async function runEventMail(
 				const outcome = await runDue(db, row, due, now);
 				if (outcome) outcomes.push(outcome);
 			} catch (error) {
-				console.error(`event mail ${row.id} ${due.kind} failed`, error);
+				logError(`event mail ${row.id} ${due.kind} failed`, error);
 			}
 		}
 	}

@@ -4,8 +4,10 @@ import { SimpleCsrfProtectionHandlerPlugin } from "@orpc/server/plugins";
 import { createContext } from "@rsvp-site/api/context";
 import { appRouter } from "@rsvp-site/api/routers/index";
 import { createAuth } from "@rsvp-site/auth";
+import { logError } from "@rsvp-site/db/errors";
 import { env } from "@rsvp-site/env/server";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 
 import { brevoWebhook } from "./brevo-webhook";
@@ -21,7 +23,7 @@ const rpcHandler = new RPCHandler(appRouter, {
 		onError((error) => {
 			// NOT_FOUND, FORBIDDEN and the like are answers, not faults.
 			if (error instanceof ORPCError && error.status < 500) return;
-			console.error(error);
+			logError("rpc", error);
 		}),
 	],
 });
@@ -36,6 +38,15 @@ export const app = new Hono().basePath("/api");
 // Workers Logs already records every request with its status; the line
 // per request is for the dev console only.
 if (import.meta.env.DEV) app.use(logger());
+
+// Hono's default handler logs whatever was thrown, whole, and a failed
+// query's message carries its parameters. The route's pattern, not its
+// path, names it: an unsubscribe path holds a token.
+app.onError((error, c) => {
+	if (error instanceof HTTPException) return error.getResponse();
+	logError(`${c.req.method} ${c.req.routePath}`, error);
+	return c.text("Something went wrong.", 500);
+});
 
 /**
  * The doors somebody could knock on all night: guessing passwords, mailing

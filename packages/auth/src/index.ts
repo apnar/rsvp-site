@@ -1,5 +1,6 @@
 import { createDb } from "@rsvp-site/db";
 import { markClaimed } from "@rsvp-site/db/details";
+import { logError } from "@rsvp-site/db/errors";
 import * as schema from "@rsvp-site/db/schema/auth";
 import { stampTokens } from "@rsvp-site/db/tokens";
 import { resetPasswordEmail, scrubEmails } from "@rsvp-site/email";
@@ -59,7 +60,7 @@ export function createAuth() {
 							// Hooks run after the transaction commits, so a throw
 							// here would surface as a failed sign-up with a real row
 							// already written. ensureLinkToken picks up the slack.
-							console.error("token stamp failed", error);
+							logError("token stamp failed", error);
 						}
 					},
 				},
@@ -74,7 +75,7 @@ export function createAuth() {
 						try {
 							await markClaimed(db, session.userId);
 						} catch (error) {
-							console.error("claim stamp failed", error);
+							logError("claim stamp failed", error);
 						}
 					},
 				},

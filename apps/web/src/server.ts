@@ -1,5 +1,7 @@
 import { runEventMail } from "@rsvp-site/api/jobs/event-mail";
+import { pruneTelnyxEvents } from "@rsvp-site/api/texting";
 import { createDb } from "@rsvp-site/db";
+import { logError } from "@rsvp-site/db/errors";
 import { redeemTextLink } from "@rsvp-site/db/text-links";
 import { env } from "@rsvp-site/env/server";
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
@@ -43,7 +45,13 @@ async function textLink(request: Request, code: string): Promise<Response> {
 	const ip = request.headers.get("cf-connecting-ip") ?? "local";
 	const { success } = await env.AUTH_LIMITER.limit({ key: `/t:${ip}` });
 	if (!success) return new Response("Too many tries.", { status: 429 });
-	const found = await redeemTextLink(createDb(), code);
+	let found: Awaited<ReturnType<typeof redeemTextLink>> = null;
+	try {
+		found = await redeemTextLink(createDb(), code);
+	} catch (error) {
+		// Logged here, without the code: thrown, the error would carry it.
+		logError("text link", error);
+	}
 	const to = found
 		? `/api/auth/link?k=${found.linkToken}&to=${encodeURIComponent(found.path)}&via=text`
 		: "/login?error=link";
@@ -82,12 +90,18 @@ export default {
 		ctx: { waitUntil(promise: Promise<unknown>): void },
 	) {
 		const now = new Date(controller.scheduledTime);
+		const db = createDb();
 		ctx.waitUntil(
-			runEventMail(createDb(), now).then(
+			pruneTelnyxEvents(db, now).catch((error) =>
+				logError("telnyx event prune failed", error),
+			),
+		);
+		ctx.waitUntil(
+			runEventMail(db, now).then(
 				(result) =>
 					result.length > 0 &&
 					console.log("event mail", JSON.stringify(result)),
-				(error) => console.error("event mail failed", error),
+				(error) => logError("event mail failed", error),
 			),
 		);
 	},

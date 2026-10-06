@@ -2,6 +2,7 @@ import { waitUntil } from "cloudflare:workers";
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import type { Db } from "@rsvp-site/db";
+import { logError } from "@rsvp-site/db/errors";
 import { splitName } from "@rsvp-site/db/names";
 import {
 	findOrCreatePeople,
@@ -323,7 +324,7 @@ export const peopleRouter = {
 			const db = context.db;
 			waitUntil(
 				textSignIn(db, phone).catch((error) =>
-					console.error("sign-in text failed", error),
+					logError("sign-in text failed", error),
 				),
 			);
 			return { ok: true };
@@ -357,7 +358,7 @@ export const peopleRouter = {
 				const db = context.db;
 				waitUntil(
 					sendWelcome(db, row.id, { email: input.email, name: null }).catch(
-						(error) => console.error("sign-in link send failed", error),
+						(error) => logError("sign-in link send failed", error),
 					),
 				);
 			}

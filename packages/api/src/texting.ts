@@ -1,9 +1,10 @@
 import type { Db } from "@rsvp-site/db";
 import { insertChunks } from "@rsvp-site/db/batch";
+import { logError } from "@rsvp-site/db/errors";
 import { notDeactivated, type TextRecipient } from "@rsvp-site/db/people";
 import { textablePhone } from "@rsvp-site/db/phone";
 import { user } from "@rsvp-site/db/schema/auth";
-import { type SmsKind, smsSend } from "@rsvp-site/db/schema/sms";
+import { type SmsKind, smsSend, telnyxEvent } from "@rsvp-site/db/schema/sms";
 import { blockNumber, blockOf } from "@rsvp-site/db/sms-status";
 import { textLinksFor } from "@rsvp-site/db/text-links";
 import { mediaUrl } from "@rsvp-site/email";
@@ -19,9 +20,11 @@ import {
 	testText,
 } from "@rsvp-site/sms";
 import { getTexter } from "@rsvp-site/sms/worker";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, lt } from "drizzle-orm";
 
 import { type EventRow, labelsOf } from "./events";
+
+const DAY_MS = 24 * 60 * 60_000;
 
 /** Over this a carrier may refuse a picture text; 600 KB is the safe line. */
 const MMS_MAX_BYTES = 600 * 1024;
@@ -82,8 +85,6 @@ export async function mmsUrlOf(
 export type TextJob = {
 	kind: SmsKind;
 	eventId: string | null;
-	/** Where each person's `/t/` link lands. */
-	path: string;
 	mediaUrl?: string | null;
 	body: (link: string, person: TextRecipient) => string;
 };
@@ -95,47 +96,71 @@ export type TextResult = {
 	failedIds: string[];
 };
 
+/** People with their own `/t/` link, ready to text; `unlinked` got none. */
+export type PreparedTexts = {
+	ready: { person: TextRecipient; link: string }[];
+	unlinked: string[];
+};
+
 /**
- * Text each of these people their own link, and log every text in
- * `sms_send`. A refusal that says something about the number itself (it
- * said STOP, it is a landline) blocks it, so it is not tried again.
+ * Each person's own link to `path`. The only part of a text send that
+ * writes to D1 before anything leaves, so a caller sending email too does
+ * this first (`deliver`).
  */
-export async function sendTexts(
+export async function prepareTexts(
 	db: Db,
 	people: readonly TextRecipient[],
+	path: string,
+): Promise<PreparedTexts> {
+	if (people.length === 0) return { ready: [], unlinked: [] };
+	const codes = await textLinksFor(db, people, path);
+	return {
+		ready: people.flatMap((p) => {
+			const code = codes.get(p.id);
+			return code ? [{ person: p, link: textLinkUrl(code) }] : [];
+		}),
+		unlinked: people.filter((p) => !codes.has(p.id)).map((p) => p.id),
+	};
+}
+
+/**
+ * Text each prepared person, logging every text in `sms_send` the moment
+ * Telnyx answers for it: its delivery report can arrive while the rest
+ * are still going out, and one that finds no row is lost, along with the
+ * STOP or landline block it carried. A refusal that says something about
+ * the number itself blocks it, so it is not tried again. Never throws:
+ * the texts that left have left.
+ */
+export async function sendPrepared(
+	db: Db,
+	prepared: PreparedTexts,
 	job: TextJob,
 ): Promise<TextResult> {
-	if (people.length === 0) return { attempted: 0, sent: 0, failedIds: [] };
-	const codes = await textLinksFor(db, people, job.path);
-	const ready = people.flatMap((p) => {
-		const code = codes.get(p.id);
-		return code ? [{ person: p, link: textLinkUrl(code) }] : [];
-	});
+	const { ready, unlinked } = prepared;
 	const outcomes = await getTexter().sendMany(
 		ready.map(({ person, link }) => ({
 			to: person.phone,
 			text: job.body(link, person),
 			mediaUrl: job.mediaUrl ?? null,
 		})),
-	);
-	await recordTexts(
-		db,
-		ready.map(({ person }, i) => ({
-			userId: person.id,
-			phone: person.phone,
-			outcome: outcomes[i],
-		})),
-		job,
+		{
+			onOutcome: (i, outcome) => {
+				const person = ready[i]?.person;
+				if (!person) return;
+				return recordTexts(
+					db,
+					[{ userId: person.id, phone: person.phone, outcome }],
+					job,
+				);
+			},
+		},
 	);
 	const failedIds = [
-		...people.filter((p) => !codes.has(p.id)).map((p) => p.id),
+		...unlinked,
 		...ready.flatMap(({ person }, i) => (outcomes[i]?.ok ? [] : [person.id])),
 	];
-	return {
-		attempted: people.length,
-		sent: people.length - failedIds.length,
-		failedIds,
-	};
+	const attempted = ready.length + unlinked.length;
+	return { attempted, sent: attempted - failedIds.length, failedIds };
 }
 
 /**
@@ -171,7 +196,7 @@ export async function recordTexts(
 			if (reason) await blockNumber(db, phone, reason);
 		}
 	} catch (error) {
-		console.error("sms_send rows not written", job.kind, error);
+		logError(`sms_send rows not written (${job.kind})`, error);
 	}
 }
 
@@ -254,22 +279,24 @@ export async function sendTestText(
 }
 
 /**
- * A status from Telnyx's webhook onto the text's log row. Returns the
+ * A status from Telnyx's webhook onto the text's log row. `blocked` is the
  * number when the failure condemned it (STOP, landline, not a number) and
- * it was newly blocked.
+ * it was newly blocked; `known` is false when no text of ours has that id.
  */
 export async function recordStatus(
 	db: Db,
 	e: Extract<TelnyxEvent, { type: "status" }>,
-): Promise<string | null> {
+): Promise<{ known: boolean; blocked: string | null }> {
 	const row = await db
 		.select({ id: smsSend.id, phone: smsSend.phone, status: smsSend.status })
 		.from(smsSend)
 		.where(eq(smsSend.telnyxId, e.messageId))
 		.get();
-	if (!row) return null;
+	if (!row) return { known: false, blocked: null };
 	// `message.sent` can arrive after the final word; it never undoes it.
-	if (e.status === "sent" && row.status !== "queued") return null;
+	if (e.status === "sent" && row.status !== "queued") {
+		return { known: true, blocked: null };
+	}
 	await db
 		.update(smsSend)
 		.set({
@@ -279,9 +306,29 @@ export async function recordStatus(
 		})
 		.where(eq(smsSend.id, row.id));
 	const reason = e.status === "failed" ? blockFor(e.errorCode) : null;
-	return reason && (await blockNumber(db, row.phone, reason))
-		? row.phone
-		: null;
+	const blocked = reason && (await blockNumber(db, row.phone, reason));
+	return { known: true, blocked: blocked ? row.phone : null };
+}
+
+/**
+ * Claim a Telnyx event by its id: true the first time, false for every
+ * redelivery of it. Telnyx redelivers anything it isn't sure we took.
+ */
+export async function firstDelivery(db: Db, eventId: string): Promise<boolean> {
+	const claimed = await db
+		.insert(telnyxEvent)
+		.values({ id: eventId })
+		.onConflictDoNothing()
+		.returning({ id: telnyxEvent.id })
+		.all();
+	return claimed.length === 1;
+}
+
+/** A week of event ids is far longer than Telnyx keeps retrying. */
+export async function pruneTelnyxEvents(db: Db, now: Date): Promise<void> {
+	await db
+		.delete(telnyxEvent)
+		.where(lt(telnyxEvent.createdAt, new Date(now.getTime() - 7 * DAY_MS)));
 }
 
 /** Whoever a texted-in number belongs to, a household at most. */
@@ -295,7 +342,7 @@ export function peopleByPhone(db: Db, phone: string) {
 }
 
 /** One "we can't read replies" per number per day, never a conversation. */
-const REPLY_EVERY_MS = 24 * 60 * 60_000;
+const REPLY_EVERY_MS = DAY_MS;
 
 /**
  * Tell a guest once a day that nobody reads this number, so a "yes!" sent
@@ -307,6 +354,8 @@ export async function answerOnce(
 	from: string,
 	people: readonly { id: string }[],
 ): Promise<void> {
+	// Telnyx refuses a number that said STOP; asking would only pay for that.
+	if (await blockOf(db, from)) return;
 	const recent = await db
 		.select({ id: smsSend.id })
 		.from(smsSend)
