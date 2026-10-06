@@ -48,12 +48,9 @@ export const contactGroup = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
 		name: text("name").notNull(),
-		/**
-		 * Unused: sharing is per host now, in `contact_group_share`. Kept one
-		 * deploy so the old code still runs against the new schema while CI
-		 * migrates; drop it in a migration of its own.
-		 */
-		shared: integer("shared", { mode: "boolean" }).notNull().default(false),
+		// `shared` (unused since `contact_group_share`) is still in D1 until
+		// 0027 drops it; the code stopped naming it a deploy earlier, so the
+		// Worker running while CI migrates never inserts or selects it.
 		createdAt: integer("created_at", { mode: "timestamp_ms" })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),
