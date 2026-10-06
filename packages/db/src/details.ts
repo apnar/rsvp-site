@@ -103,7 +103,7 @@ export function canEditReach(
  * touches an address or number, so somebody signing in between the check
  * and the write keeps their record.
  */
-function editable(
+export function editable(
 	id: string,
 	host: string | null,
 	reach: boolean,
@@ -187,7 +187,7 @@ export async function updateDetails(
 export type DietBy = { admin: true } | { admin: false; userId: string };
 
 /** Where a diet may land for this writer; repeated in the UPDATE against races. */
-function dietWritable(id: string, by: DietBy): SQL | undefined {
+export function dietWritable(id: string, by: DietBy): SQL | undefined {
 	if (by.admin) return eq(user.id, id);
 	if (by.userId === id) {
 		return and(eq(user.id, id), stillIn());
@@ -411,7 +411,7 @@ export function gapsOf(row: {
 }
 
 /** Where a blank may be filled. Never a deactivated row, like every self-service write. */
-function fillable(id: string, by: FilledBy): SQL | undefined {
+export function fillable(id: string, by: FilledBy): SQL | undefined {
 	if (by !== "self" && by.card === null) return sql`0`;
 	return and(editable(id, by === "self" ? null : by.card, true), stillIn());
 }
