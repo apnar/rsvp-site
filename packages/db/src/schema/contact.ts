@@ -48,9 +48,6 @@ export const contactGroup = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
 		name: text("name").notNull(),
-		// `shared` (unused since `contact_group_share`) is still in D1 until
-		// 0027 drops it; the code stopped naming it a deploy earlier, so the
-		// Worker running while CI migrates never inserts or selects it.
 		createdAt: integer("created_at", { mode: "timestamp_ms" })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),

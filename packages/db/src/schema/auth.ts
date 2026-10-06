@@ -93,7 +93,7 @@ export const user = sqliteTable(
 		/**
 		 * What they eat, about themselves only (a party's uninvited others are
 		 * `event_guest.party_diet`): ids from `DIETS`, read through `dietsOf`,
-		 * and a free note. Written only by `setDiet` and `updateDetails`, which
+		 * and a free note. Written only by `setDiets` and `updateDetails`, which
 		 * stamp `diet_at`; null there means nobody has ever said, so the next
 		 * answer asks in full rather than "still right?".
 		 */

@@ -1,94 +1,409 @@
-# rsvp-site
+# Botch RSVP
 
-Botch RSVP: party invitations with RSVPs, at https://rsvp.botch.com. A host
-makes an event (cover photo, when and where, what to ask, a potluck), invites
-people by email or from a contact group, and watches the answers come in --
-yes, maybe or can't, with plus-ones, kids, dietary needs and a note to the
-host.
+Party invitations with RSVPs, at **https://rsvp.botch.com**.
 
-It started as a copy of [pickup-bball](https://github.com/apnar/pickup-bball), the app behind a weekly basketball run, and the bones are the same: one Cloudflare Worker, D1, R2, Better Auth with emailed sign-in links, and Brevo for the mail. The model on top is its own: per-event guest lists, three roles, and emails scheduled from each event's own dates.
+A host makes an event (a cover photo or a card they design, when and where,
+what to ask, a potluck), invites people by email, text, a contact group or a
+printed card, and watches the answers come in: yes, maybe or can't, with
+plus-ones, kids, dietary needs and a note to the host. Reminders, change
+notices and a morning digest go out on their own, from each event's own dates.
+
+It started as a copy of [pickup-bball](https://github.com/apnar/pickup-bball),
+the app behind a weekly basketball run, and the bones are the same: one
+Cloudflare Worker, D1, R2, Better Auth with emailed sign-in links, and Brevo
+for the mail. The model on top is its own: per-event guest lists, three roles,
+households, paper invitations, a card designer and texts.
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Stack](#stack)
+- [Repository layout](#repository-layout)
+- [Getting started](#getting-started)
+- [How it is put together](#how-it-is-put-together)
+- [People, roles and access](#people-roles-and-access)
+- [Events and guests](#events-and-guests)
+- [Invitation designs](#invitation-designs)
+- [Email](#email)
+- [The email schedule](#the-email-schedule)
+- [Text messages](#text-messages)
+- [Security in brief](#security-in-brief)
+- [Database changes](#database-changes)
+- [Deploying](#deploying)
+
+## What it does
+
+**For hosts**
+
+- Make an event in a stepped editor: basics and cover photo, who's invited,
+  the questions (plus-ones up to N, kids, dietary needs, a note), the answer
+  words ("In / Maybe / Out", or the host's own, with maybe optional), a
+  potluck, co-hosts and the email settings. Drafts save without a date.
+- Design the invitation itself on a free canvas, from a template or blank,
+  and have the guest page take on its colours and fonts.
+- Invite by pasting lines in any shape (`Pat Smith <pat@x.com>`,
+  `Pat Smith 301-555-0101`, a mail client's address list), from a private
+  address book, from contact groups, or from families and groups an admin
+  shared. Nobody hears anything until Send, and Send never invites anybody
+  twice.
+- Go paper instead: add guests by name alone, print a PDF of cards with a QR
+  code on each, and start emails later, or never.
+- Watch a live guest list in sections (yes, maybe, can't, viewed with no
+  reply, not viewed), with headcounts, kids, diets by name, potluck claims,
+  who answered for whom, how each guest arrived (email, text, card, direct),
+  and a CSV export. Record an answer somebody phoned in. Nudge the quiet
+  ones.
+- Turn on a share link for strangers, or let chosen guests bring a few
+  friends of their own.
+- Cancel with a note to everyone still coming, or delete for good.
+
+**For guests**
+
+- No sign-up and no password: every link in every email or text signs them
+  in. A password is there for anyone who wants one.
+- Answer in a tap, change it until the party starts, claim a potluck slot,
+  answer for relatives on the same list, and keep their own dietary needs on
+  their profile, asked once and confirmed after.
+- Choose email, texts or both, and unsubscribe in one click.
+
+**For admins**
+
+- Manage people (add, roles, pictures, new sign-in links, deactivate,
+  delete), households (families), shared contact groups, and every event.
+- Write to everyone, see the email log and the text log, and send a test text.
 
 ## Stack
 
-TanStack Start (React, SSR) and a Hono API in one Cloudflare Worker, with oRPC between them; D1 through Drizzle; R2 for pictures; Better Auth with this site's own emailed sign-in links; Brevo for mail; Telnyx for texts; Tailwind with the After Dark tokens in `packages/ui`; Turborepo, Biome and Vitest. The scaffold came from [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack).
+| Layer | What |
+|---|---|
+| Runtime | One Cloudflare Worker (free plan), Workers Assets for static files, a half-hourly Cron Trigger |
+| Pages | [TanStack Start](https://tanstack.com/start) (React 19, SSR) built with the Cloudflare Vite plugin |
+| API | [Hono](https://hono.dev) at `/api/*`, [oRPC](https://orpc.unnoq.com) procedures at `/api/rpc`, TanStack Query on the client |
+| Data | Cloudflare D1 (SQLite) through [Drizzle](https://orm.drizzle.team); R2 for pictures |
+| Auth | [Better Auth](https://better-auth.com) with this site's own sign-in-link plugin |
+| Messages | [Brevo](https://www.brevo.com) for email, [Telnyx](https://telnyx.com) for SMS/MMS |
+| UI | Tailwind 4, base-ui/shadcn primitives, the "After Dark" tokens in `packages/ui` |
+| Paper | pdf-lib in the host's browser; generated font metrics so SVG, PDF and canvas lay text out identically |
+| Tooling | pnpm workspaces + Turborepo, Biome, Vitest, TypeScript (strict), GitHub Actions |
 
-## Getting Started
+The scaffold came from
+[Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack).
 
-Install dependencies:
+## Repository layout
 
-```bash
-pnpm install
+```
+rsvp-site/
+├── apps/
+│   └── web/            The one app: TanStack Start pages, the Hono API, the Worker entry
+│       ├── src/routes/       Pages (file routes) and the /api catch-all
+│       ├── src/components/   Shared pieces; editor, designer, guest list, invite, paper
+│       ├── src/lib/          Pure helpers with tests (PDF layout, crop maths, formats)
+│       ├── src/server/       Hono app, webhooks, unsubscribe pages, throttling
+│       ├── src/server.ts     Worker module: fetch, /t/ links, canonical host, cron
+│       ├── scripts/          Font-metric generator, PDF sample renderer
+│       └── wrangler.jsonc    Worker name, bindings, vars, cron, rate limits
+├── packages/
+│   ├── api/            oRPC routers and the rules behind them: access, sending, schedule, headcount
+│   ├── auth/           Better Auth factory and the email-link plugin
+│   ├── db/             Drizzle schema, D1 migrations, and the modules that own a person's state
+│   ├── design/         Invitation designs: schema, fonts and metrics, text layout, scene, templates
+│   ├── email/          Brevo client, mailer, email templates, webhook decisions
+│   ├── sms/            Telnyx client, text templates, segments, webhook signature and parsing
+│   ├── env/            Typed Worker env, the site's origin, the dry-run gate
+│   ├── ui/             Design tokens (globals.css) and shared primitives
+│   └── config/         The shared tsconfig
+└── .github/workflows/deploy.yml   Check on every push and PR; migrate and deploy from main
 ```
 
-## How it is hosted
+Libraries are consumed as TypeScript source through `exports` subpaths
+(`@rsvp-site/db/people`, `@rsvp-site/ui/components/button`); only `apps/web`
+builds.
 
-The whole site runs as a single Cloudflare Worker on the free plan:
+## Getting started
 
-- `apps/web` is a TanStack Start app built with the Cloudflare Vite plugin. Static assets are served by Workers Assets and pages are server-rendered in the Worker.
-- The Hono API lives inside the same Worker at `/api/*` (`apps/web/src/server/app.ts`, mounted by `apps/web/src/routes/api/$.ts`). Same origin means no CORS and ordinary same-site cookies.
-  - `/api/auth/*` - Better Auth
-  - `/api/rpc` - oRPC (the web app calls this from the browser and calls the router directly during SSR)
-  - `/api/unsubscribe/:token` - one-click unsubscribe pages for list emails
-  - `/api/brevo/webhook` - Brevo tells the app who unsubscribed, bounced or complained
-  - `/api/telnyx/webhook` - Telnyx reports each text's fate and forwards texts people send back
-  - `/api/health` - health check
-- `/api/covers/:name`, `/api/designs/:eventId/:name` and `/api/avatars/:name` serve cover photos, design images and cards, and profile pictures from the `MEDIA` R2 bucket.
-- `/t/<code>` is the short link in a text. The Worker entry answers it before TanStack does and redirects to the sign-in link it stands for.
-- A Cron Trigger runs the Worker's `scheduled` handler (`apps/web/src/server.ts`) every half hour. It sends each event's due reminders and host digests. See "The email schedule" below.
-- The database is Cloudflare D1 (SQLite) accessed through Drizzle via the `DB` binding. Env vars, secrets and bindings come from `cloudflare:workers` (typed in `packages/env/env.d.ts`, which must match `apps/web/wrangler.jsonc`).
+You need Node 24 and pnpm 10 (`corepack enable` picks up the version pinned in
+`package.json`). Nothing else: wrangler and workerd come in as dependencies,
+and the local D1 and R2 live under `apps/web/.wrangler/`.
 
-## Local development
+1. Install:
 
-1. Create `apps/web/.dev.vars` from `apps/web/.dev.vars.example` and set a random `BETTER_AUTH_SECRET`. `BREVO_API_KEY` is optional: without it every email is printed to the dev server's console instead of sent, which is the normal local setup.
-2. Apply the migrations to the local D1 database (stored under `apps/web/.wrangler/`):
+   ```bash
+   pnpm install
+   ```
+
+2. Create `apps/web/.dev.vars` from `apps/web/.dev.vars.example` and set a
+   random `BETTER_AUTH_SECRET` (`openssl rand -base64 32`). Leave
+   `BREVO_API_KEY` and `TELNYX_API_KEY` empty: every email and text is then
+   printed to the dev server's console, with the placeholders filled in so the
+   sign-in link is clickable. That dry run only happens on localhost; anywhere
+   else a missing key fails the send.
+
+3. Apply the migrations to the local database:
+
+   ```bash
+   cd apps/web && pnpm exec wrangler d1 migrations apply DB --local
+   ```
+
+   (`pnpm run db:migrate:local` from the root does the same in a real
+   terminal; turbo refuses it without one.)
+
+4. Start the dev server. Vite runs the server side inside workerd, so the
+   bindings behave as they do in production:
+
+   ```bash
+   pnpm run dev
+   ```
+
+   Open http://localhost:3001.
+
+5. Make yourself an admin. Nobody can sign up, so the first account is
+   written by hand, as described in
+   [The first account](#the-first-account-on-an-empty-database) (drop
+   `--remote`).
+
+### Commands
+
+| Command | What |
+|---|---|
+| `pnpm run dev` | Dev server, pages and API, at http://localhost:3001 |
+| `pnpm run build` | Build the Worker bundle and static assets |
+| `pnpm run check` | Biome: format, lint, organise imports (writes) |
+| `pnpm exec biome ci .` | What CI runs; stricter than `check` |
+| `pnpm run check-types` | `tsc --noEmit` across the workspace (builds the web app first for its route tree) |
+| `pnpm run test` | Vitest in every package with tests |
+| `pnpm run db:generate` | Generate a D1 migration from the Drizzle schema |
+| `pnpm run db:migrate:local` / `:remote` | Apply migrations locally or to production |
+| `pnpm run deploy` | Build and `wrangler deploy` |
+
+Run one test file or one test:
 
 ```bash
-pnpm run db:migrate:local
+pnpm --filter @rsvp-site/email exec vitest run src/links.test.ts
+pnpm --filter @rsvp-site/api exec vitest run -t "dueEmails"
 ```
 
-3. Start the dev server. Vite runs the server side inside workerd, so bindings behave as they do in production:
+Run the cron against the dev server (it uses the real clock, so move an
+event's dates in D1 to make something due):
 
 ```bash
-pnpm run dev
+curl "http://localhost:3001/cdn-cgi/local/scheduled?cron=0+*+*+*+*"
 ```
 
-Open [http://localhost:3001](http://localhost:3001).
+Peek at the local database:
 
-## Who sees what
+```bash
+pnpm --filter web exec wrangler d1 execute DB --local --command "select email, role from user"
+```
 
-There is one table of people, `user`: the accounts, the guests and the mailing list at once. Each person has a **role**:
+### Tests
+
+Every package with logic has tests, all of them pure: the email and text
+templates, Brevo and Telnyx request shaping, sign-in link paths, address
+parsing, roles, who can be reached, the SQL guards on who may edit whom,
+headcount and potluck arithmetic, the schedule's timezone maths, event rules,
+the webhooks' decisions, design validation, text layout, the scene, the
+designer's editing logic and the web app's helpers. Nothing touches D1 or the
+network, so a mistake only D1 makes (a raw-SQL batch, a statement over 100
+parameters) shows up only when something writes through the dev server.
+CI also renders every design template to PDF:
+
+```bash
+pnpm --filter web exec tsx scripts/render-design-samples.ts <out dir>
+```
+
+## How it is put together
+
+The whole site is one Cloudflare Worker. `apps/web/src/server.ts` is its
+module: it 301s any other host to the canonical one, answers `/t/<code>` text
+links, hands everything else to TanStack Start, and runs the half-hourly
+`scheduled` handler.
+
+```
+browser ──► Worker (server.ts)
+              ├─ /t/<code>        → 302 to the sign-in link it stands for
+              ├─ /api/*           → Hono (src/server/app.ts)
+              │    ├─ /api/auth/*       Better Auth (+ the email-link plugin)
+              │    ├─ /api/rpc          oRPC → packages/api routers → D1, R2, Brevo, Telnyx
+              │    ├─ /api/covers|designs|avatars/…   pictures from R2
+              │    ├─ /api/unsubscribe/:token          one-click unsubscribe pages
+              │    ├─ /api/brevo/webhook, /api/telnyx/webhook
+              │    └─ /api/health
+              └─ everything else  → TanStack Start (SSR pages)
+cron (0,30 * * * *) ──► scheduled → runEventMail, prune old Telnyx events
+```
+
+Pages and the API share an origin, so there is no CORS and the cookies are
+ordinary same-site ones. During server rendering the pages call the oRPC
+router directly, with no HTTP hop; in the browser they post to `/api/rpc`
+with oRPC's CSRF header, which the handler requires.
+
+### Pages
+
+| Path | What | Who |
+|---|---|---|
+| `/` | Landing page | strangers (signed-in people go to `/events`) |
+| `/login`, `/forgot-password`, `/reset-password` | Sign in by emailed or texted link, or password | anyone |
+| `/terms`, `/privacy` | The legal pages | anyone |
+| `/i/<token>` | A share link's teaser and join form | anyone with the link |
+| `/p/<key>` | A printed card's invitation and answer form | whoever holds the card |
+| `/confirm-email?k=` | Add an address a guest gave us, by button | whoever got the link |
+| `/events` | Host dashboard (drafts, upcoming, past) or a guest's invitations; `?all=true` for an admin's every event | signed in |
+| `/e/<id>` | The invitation and RSVP; hosts see it as a guest does, under a strip of controls | the event's guests, hosts, admins |
+| `/e/new`, `/e/<id>/edit` | The event editor | hosts |
+| `/e/<id>/guests` | The guest list | the event's hosts, admins |
+| `/e/<id>/design` | The card designer (browser only) | the event's hosts, admins |
+| `/contacts` | Address book and contact groups | hosts |
+| `/account` | Details, picture, password, email/text choice, sign out everywhere | signed in |
+| `/admin/users`, `/admin/families`, `/admin/groups`, `/admin/email` | People, households, shared groups, broadcast and logs | admins |
+
+The route guards (`_auth`, `_admin`) only decide what renders; every
+procedure checks again on the server, and an event you may not see answers
+the same "not found" as one that doesn't exist.
+
+### The API
+
+The oRPC routers live in `packages/api/src/routers`:
+
+| Router | For | What |
+|---|---|---|
+| `events.*` | hosts, guests, public | the dashboard, the editor, covers, sending and nudges, paper exports, the share link |
+| `designs.*` | hosts | the design document, its images, the card picture, on/off |
+| `guests.*` | hosts, guests | the list, adding and removing, recording answers; a guest's answer, views and friends |
+| `contacts.*` | hosts, admins | the address book, groups, sharing groups |
+| `families.*` | admins | households |
+| `people.*` | admins, public | managing people; "email/text me my link" |
+| `account.*` | signed in | the person's own details, picture, password, contact choice |
+| `contact.*`, `diet.*` | guests | giving us a missing address or number; dietary needs for themselves and family |
+| `paper.*` | a card's key | reading and answering one printed invitation |
+| `mail.*` | admins | broadcast, previews, logs, a test text |
+
+They are built on `publicProcedure`, `personProcedure`, `hostProcedure` and
+`adminProcedure` (`packages/api/src/index.ts`). Every procedure that grants
+anything re-reads the caller from D1, so a demoted host stops hosting on
+their next request.
+
+## People, roles and access
+
+There is one table of people, `user`: the accounts, the guests and the mailing
+list at once. Each person has a **role**:
 
 | Role | Can |
 |---|---|
 | `user` (a guest) | answer the invitations they have, see those events, manage their own account |
-| `host` | everything a guest can, plus make events, invite anybody by email, keep contact groups |
-| `admin` | everything a host can, plus see and manage every event, add people, set roles, deactivate or delete people |
+| `host` | everything a guest can, plus make events, invite anybody, keep an address book and contact groups |
+| `admin` | everything a host can, plus see and manage every event, add people, set roles, keep families and shared groups, deactivate or delete people |
 
-Roles live in `user.role` (null reads as `user`) and are read through `roleOf` / `canHost` / `isAdmin` in `packages/db/src/roles.ts`, which the web app and the API share. Better Auth's admin plugin only knows `admin` and `user`, so roles are written by `people.setRole`, not by its `setRole`.
+Roles live in `user.role` (null reads as `user`) and are read through
+`roleOf` / `canHost` / `isAdmin` in `packages/db/src/roles.ts`, which the web
+app and the API share. Better Auth's admin plugin only knows `admin` and
+`user`, so roles are written by `setRole` in `packages/db/src/status.ts`
+(behind the admin's `people.setRole`), not by the plugin's.
 
-- **Strangers** get the landing page, and a share link's teaser if they have one: cover, title, date and the host line. Never the address, the details or who is coming.
-- **Guests** see an event only if they are on its list, and never a draft. A wrong id and an event that is not yours answer the same "no such event", so ids cannot be probed. Other guests' names show only when the host leaves "Show who's coming" on; counts always show; notes, dietary needs and addresses are for hosts, and dietary needs only on events that ask about them.
-- **Families** (`family`, `family_member`) are households, kept by admins on `/admin/families`; a person is in at most one. Anybody in a family may answer, from the invite page or their printed card, for relatives who are on the same event's list and nobody else, and hosts see who answered on the guest list (`event_guest.answered_by`). A member flagged a child counts as a kid, not an adult, when a relative answers for them; a family may hold name-only people (young kids) who are never emailed. Only an admin or the person themselves edits a family member's details, so a host cannot change them even with them in their book.
-- **Hosts** see and run the events they host -- the creator (owner) and any co-hosts, who must themselves be hosts. Admins see everything.
-- **Views**: hosts see when each guest first opened their invitation (`event_guest.viewed_at`, and `last_viewed_at` in the CSV), on the guest list and in a "Viewed, no reply" filter. The host's list is in sections -- yes, maybe, can't, viewed with no reply, not viewed -- alphabetical inside each. Guests are never shown it. Only the guest's own visit counts, from the invite page or their card, and only once the page is on screen in a browser: the server's read records nothing, so mail scanners fetching a link don't count, and a host or admin looking at the page doesn't either. Each first look and each answer also says how the guest came to it (`viewed_via`, `responded_via`): an email link, a text link, their card's QR code, the site directly, or, for an answer, a host recording it. The sign-in link leaves a two-hour `arrived_via` cookie saying which link it was; without one, a signed-in guest came directly.
+- **Strangers** get the landing page, and a share link's teaser if they have
+  one: cover, title, date and the host line. Never the address, the details or
+  who is coming.
+- **Guests** see an event only if they are on its list, and never a draft. A
+  wrong id and an event that is not yours answer the same "no such event", so
+  ids cannot be probed. Other guests' names show only when the host leaves
+  "Show who's coming" on; counts always show; notes, dietary needs and
+  addresses are for hosts, and dietary needs only on events that ask about
+  them.
+- **Hosts** see and run the events they host: the creator (owner) and any
+  co-hosts, who must themselves be hosts. Admins see everything.
+- **Families** (`family`, `family_member`) are households, kept by admins on
+  `/admin/families`; a person is in at most one. Anybody in a family may
+  answer, from the invite page or their printed card, for relatives who are on
+  the same event's list and nobody else, and hosts see who answered
+  (`event_guest.answered_by`). A member flagged a child counts as a kid when a
+  relative answers for them; a family may hold name-only people (young kids)
+  who are never emailed. Only an admin or the person themselves edits a family
+  member's details.
+- **Views.** Hosts see when each guest first opened their invitation
+  (`event_guest.viewed_at`, and `last_viewed_at` in the CSV), and a "Viewed,
+  no reply" filter. Only the guest's own visit counts, from the invite page or
+  their card, and only once the page is on screen in a browser: the server's
+  read records nothing, so mail scanners fetching a link don't count, and a
+  host or admin looking at the page doesn't either. Each first look and each
+  answer also records how the guest came (`viewed_via`, `responded_via`): an
+  email link, a text link, their card's QR code, the site directly, or, for an
+  answer, a host recording it. A sign-in link leaves a two-hour `arrived_via`
+  cookie saying which kind it was.
 
-**Nobody needs to sign up.** Public sign-up is closed (`emailAndPassword.disableSignUp`). An account exists the moment somebody's address is typed in: by a host inviting them or adding them to a group, by an admin on `/admin/users`, or by the person themselves on a share link. `findOrCreatePeople` in `packages/db/src/people.ts` writes the row directly, tokens included -- Better Auth's `createUser` is an admin endpoint and would refuse a host -- and keeps what was typed with the address. Wherever a host adds people the box is free-form, one person per line: `parseGuests` in `packages/db/src/addresses.ts` pulls out the address, a phone number and the name (split into first and last at the last word; one word, or a household like "The Parks", is a first name), and also reads a mail client's `"Linh" <linh@x.com>, "Bo" <bo@x.com>` on one line.
+### Accounts
 
-**A person's details are theirs once they sign in.** First and last name, mobile phone and mailing address live on the `user` row, one copy every host sees (`name` is kept as the two joined). Until somebody first signs in (`claimed_at`, stamped by the session hook in `packages/auth`), a host who has them in their address book may correct any of it on `/contacts`, one field at a time or in the edit pop-up, the only place a host sees an address. A pasted list only fills blanks on people who already exist. After the first sign-in only the person (on `/account`) and an admin (on `/admin/users`) can change it. Hosts never edit another host's or an admin's record. An email address or phone number is more than a detail -- "email me my link" and "text me my link" send a way in there -- so before the first sign-in only the host who typed the person in (`user.created_by`, `canEditReach` in `packages/db/src/details.ts`) may change those two, and a pasted number fills a blank only on such a record; any host with them in their book may still fix the name or address. Changing a real address replaces both of the person's tokens (a name-only guest's first address keeps them: nothing was ever sent to the placeholder); changing it to an address that is already somebody's moves that host's book entry and groups to that person instead.
+**Nobody needs to sign up.** Public sign-up is closed
+(`emailAndPassword.disableSignUp`). An account exists the moment somebody's
+address or number is typed in: by a host inviting them or adding them to a
+group, by an admin on `/admin/users`, or by the person themselves on a share
+link. `findOrCreatePeople` in `packages/db/src/people.ts` writes the row
+directly, tokens included (Better Auth's `createUser` is an admin endpoint and
+would refuse a host), and records who typed them in (`user.created_by`).
+Wherever a host adds people the box is free-form, one person per line:
+`parseGuests` in `packages/db/src/addresses.ts` pulls out the address, a phone
+number and the name (split into first and last at the last word; one word, or
+a household like "The Parks", is a first name), and also reads a mail client's
+`"Linh" <linh@x.com>, "Bo" <bo@x.com>` on one line.
 
-**A profile picture is the person's own.** They put one up on `/account` (pick a photo, then drag, zoom and turn it inside the circle), and an admin can do it for anybody from the edit pop-up on `/admin/users`; hosts can't, even for people who haven't signed in. It shows wherever the initials did: the header, the guest list, the contacts and the admin list. The picture URL carries nothing but a random key, like a cover photo.
+**A person's details are theirs once they sign in.** First and last name,
+mobile number and mailing address live on the `user` row, one copy every host
+sees. Until somebody first signs in (`claimed_at`, stamped by the session
+hook in `packages/auth`), a host who has them in their address book may
+correct their name and address on `/contacts`. A pasted list only fills blanks
+on people who already exist. After the first sign-in only the person (on
+`/account`) and an admin (on `/admin/users`) can change anything. Hosts never
+edit another host's or an admin's record. An address or a number is more than
+a detail ("email me my link" and "text me my link" send a way in there), so
+before the first sign-in only the host who typed the person in may change
+those two (`canEditReach` in `packages/db/src/details.ts`). Changing a real
+address replaces both of the person's tokens; changing it to an address that
+is already somebody's moves that host's book entry and groups to that person
+instead.
 
-**Every link in every email signs the reader in.** It carries their `link_token`, a bearer credential, which is why the emails say not to forward them. Cover photo URLs deliberately carry nothing. Passwords are optional: anyone can set one on `/account`, and "Email me a link" on `/login` sends a fresh link at most every ten minutes, saying the same thing whether or not the address exists.
+**Guests fill their own gaps.** After answering, a guest with no address or
+no number is asked for it. A number is saved at once; an address gets a signed
+link first, and is added by the button on `/confirm-email`.
 
-Sessions last 180 days and roll forward. There is no session cookie cache: every request checks its session in D1, so signing out everywhere, a new sign-in link or a deactivation ends the person's other sessions at once. Every procedure that grants anything (`hostProcedure`, `adminProcedure`, event access) also re-reads the person from D1.
+**A profile picture is the person's own.** They put one up on `/account`
+(pick a photo, then drag, zoom and turn it inside the circle), and an admin can
+do it for anybody; hosts can't. It shows wherever the initials did. The
+picture URL carries nothing but a random key.
 
-**Two switches, not states.** A person is `active` or `deactivated`; separately, they may be **unsubscribed** (`unsubscribed_at`, with a reason: self, bounce, spam, invalid).
+**Every link in every email signs the reader in.** It carries their
+`link_token`, a bearer credential, which is why the emails say not to forward
+them. Passwords are optional: anyone can set one on `/account`, and the login
+page sends a fresh link by email or text at most every ten minutes, saying
+the same thing whether or not the address exists.
 
-- *Unsubscribed* stops the email and nothing else: they still sign in, and invitations still show up on the site and on the hosts' lists (marked "No email"). Set by the footer link, the account page, or Brevo's webhook; lifted from the account page or the footer's undo, which also lift Brevo's blocklist.
-- *Deactivated* is the lockout, and only an admin sets or lifts it. It sets Better Auth's `banned` in the same statement (closing the password door), revokes every session, and makes emailed links land on `/login?error=revoked`. Nothing is deleted.
-- *Deleted* is for good, and also admin only (People → Delete): the row goes, and D1's cascades take their invitations, answers, family membership, address-book entries, groups and sessions with it, so the address can come back later as a stranger. Events they own pass to the co-host who has hosted longest (if one may still host); events they host alone are deleted with them, and one guests are still expecting blocks the delete until it is canceled or given a co-host. The confirmation lists all of that first (`people.removal`). Brevo is not told: its blocklist keeps an address that unsubscribed or bounced unmailable if a host adds it again.
+Sessions last 180 days and roll forward. There is no session cookie cache:
+every request checks its session in D1, so signing out everywhere, a new
+sign-in link or a deactivation ends the person's other sessions at once.
 
-**The first account on an empty database** cannot come from the site. Write your own row, then click your own link:
+**Two switches, not states.** A person is `active` or `deactivated`;
+separately, they may be **unsubscribed** (`unsubscribed_at`, with a reason:
+self, bounce, spam, invalid).
+
+- *Unsubscribed* stops the email and nothing else: they still sign in, and
+  invitations still show up on the site and on the hosts' lists (marked "No
+  email"). Set by the footer link, the account page, or Brevo's webhook;
+  lifted from the account page or the footer's undo, which also lift Brevo's
+  blocklist.
+- *Deactivated* is the lockout, and only an admin sets or lifts it. It sets
+  Better Auth's `banned` in the same statement (closing the password door),
+  revokes every session, and makes emailed links land on
+  `/login?error=revoked`. Nothing is deleted.
+- *Deleted* is for good, and also admin only (People → Delete): the row goes,
+  and D1's cascades take their invitations, answers, family membership,
+  address-book entries, groups and sessions with it, so the address can come
+  back later as a stranger. Events they own pass to the co-host who has hosted
+  longest (if one may still host); events they host alone are deleted with
+  them, and one guests are still expecting blocks the delete until it is
+  canceled or given a co-host. The confirmation lists all of that first
+  (`people.removal`). Brevo is not told: its blocklist keeps an address that
+  unsubscribed or bounced unmailable if a host adds it again.
+
+### The first account on an empty database
+
+It cannot come from the site. Write your own row, then click your own link:
 
 ```bash
 # 1. Put yourself in, as an admin, with a token to get in with.
@@ -98,83 +413,229 @@ pnpm --filter web exec wrangler d1 execute DB --remote --command "insert into us
 pnpm --filter web exec wrangler d1 execute DB --remote --command "select link_token from user where email='you@example.com'"
 ```
 
-Open `https://rsvp.botch.com/api/auth/link?k=<that token>`. Then make hosts from `/admin/users`. Drop `--remote` to do the same locally.
+Open `https://rsvp.botch.com/api/auth/link?k=<that token>` (or
+`http://localhost:3001/...` locally, without `--remote` above). Then make
+hosts from `/admin/users`.
 
-## Events, guests and the potluck
+## Events and guests
 
-- **An event** (`event`) is a draft until a host sends it. A draft can be saved without a date; sending needs one. Dates are `YYYY-MM-DD` and times `HH:MM` on the site's clock (America/New_York, `packages/api/src/time.ts`). Its settings say what to ask (plus-ones up to N, kids, dietary notes, a note to the host), whether guests see each other's names, the potluck, the share link and the email schedule. A published event can be canceled (with an optional note to everyone still coming), and any event deleted for good, guest list, answers, potluck and pictures included. Any host may delete a draft; once it has gone out only the owner or an admin may (co-hosts can still cancel). Deleting one guests are still expecting cancels it first, with the same note and email, sent without its pictures since they are about to go (`callOff` in `packages/api/src/endings.ts`).
-- **Details** come in two kinds. "The details" go wherever the invitation does: the invite page, the invitation and day-before emails, printed cards, and `{details}` on a designed card. "More details, on the invite page only" (`event.extra_details`) are shown only to guests who open the invite, under "Good to know": never emailed, printed or on the public share page, so a gate code or parking note stays with the people invited.
-- **Hosts** are rows in `event_host`; the creator is `is_owner`. Co-hosts are added in the editor's "Hosts" step, by address or from the hosts in your address book, on a new event (added when the draft is first saved) or an existing one. They must already be hosts on the site -- an admin makes somebody a host on `/admin/users`.
-- **The guest list** is `event_guest`: one row per person per event, and the invitation and the answer in one row -- `response` null means "no reply". `invited_at` records when their invitation went out; `source` says how they got on (typed by a host, from a group, or through the share link). Hosts add people on the editor or the guest list; nobody is emailed until the host presses Send, which mails everyone not yet invited, exactly once.
-- **Answering** (`guests.respond`) saves the answer, the party (adults including the guest, clamped to the event's plus-ones; kids), a dietary note for the uninvited people they bring, the note and potluck picks in one go. Each person's own dietary needs (six presets and a note) are on their profile, not the answer: after a yes or maybe the guest is asked whether theirs, and those of the relatives they answered for, are still right, and the guest list shows them by each name with yes-only counts under the headcount. Answers stay open until the party starts; the deadline is what the host asks for, not a lock. The numbers every page and email show come from `packages/api/src/headcount.ts`: households by answer, and people expected (adults and kids on every yes).
-- **Paper invitations** are chosen per event while it is a draft (Email / Paper under "Who's invited"). The host can add guests by email or **by name alone** -- a name-only guest is a `user` with `no_email` and a unique placeholder address at `no-email.invalid`, never mailed and never shown -- and downloads a PDF of cards from the guest list: one guest's card, or everybody's in one file, at 5x7, letter, or half-letter two to a sheet. The PDF is built in the host's browser (`apps/web/src/lib/paper-pdf*.ts`; the Worker's CPU budget is far too small), loaded only when asked for. Each card's QR code is `/p/<event_guest.paper_token>`: a key per invitation, issued on first download and kept after, so printing again never breaks a mailed card. Because the host holds these keys, a key **signs nobody in**: it opens that one invitation and answers it, and for anything else the guest signs in with their email. Keys do nothing on drafts or for deactivated people, and the old `/api/auth/paper?k=` codes on cards already printed forward to the new page. Until the host presses **Start emails**, a paper event sends guests nothing: no invitation, reminder, nudge, change or cancel notice (`emailsHeld` in `packages/api/src/schedule.ts`, which the schedule uses too). Start emails sends the invitation to everyone with an address who has not already answered from their card, and from then on the event behaves like any other. Host alerts are never held, and friends a guest invites get email at once, since they have no card.
-- **Guests bringing guests** is off by default. With "Guests can invite others" on, a guest the host chose -- typed in, or from one of the host's groups -- gets a "Bring someone" form on the invite page and may add up to the event's limit (default 3). Their friend goes on the list with `source = 'guest'` and `added_by` set, and gets the invitation at once, naming who brought them. People a guest adds, and people who came in on the share link, can never invite anyone: one level and no further. The rule is `canInviteOthers` in `packages/api/src/guest-invites.ts`; the limit is checked inside the INSERT, so two quick invites cannot slip past it. A guest can take back an invitation until it is answered; after that only a host removes it. The host's guest list and CSV say who added whom.
-- **The potluck** is `potluck_item` (label, how many) and `potluck_claim` (one per guest per item). A claim is an `INSERT ... SELECT` that only writes while the item has room, so two guests taking the last slot cannot both get it; the loser is told.
-- **The address book** (`contact`) is each host's own list of people: everybody they have put on one of their events or in a group, plus anyone they add on `/contacts`. It fills itself (`remember` in `packages/db/src/address-book.ts`, called wherever a host adds somebody), and migration 0013 backfilled it from past events and groups. When adding guests, the host can pick from it with a search box, alongside pasted addresses and groups; picks are checked against the caller's own book, so a guessed id adds nobody. Removing somebody from the book takes them out of that host's groups but not off any event. Friends a guest brings and share-link joiners are not the host's choices and do not land in the book.
-- **Contact groups** (`contact_group`, `contact_group_member`) are made from the book: a person is ticked into one or more groups from their row on `/contacts`, and only somebody in the host's book can be put in their group. Adding a group to an event copies its members onto the list. Both book and groups are private to their owner. An admin can **share** a family with every host, or a group with the hosts they pick on `/admin/groups` (`contact_group_share`): those hosts may then add its members to their events from the picker (`pickable` in `packages/db/src/families.ts` replaces the book check for them), but only a group's owner or an admin edits it. A shared family or group is how a host gets people who are not in their own book.
-- **Hosts can record answers.** The pencil on a guest row sets their answer (yes, maybe, can't, or back to no reply) and their adults and kids, for the guest who phoned it in. The host is not held to the event's plus-one limit, no host alert fires, and a "can't" drops their potluck claims as it would for the guest (`guests.setAnswer`).
-- **The share link** `/i/<share_token>` is off by default. A stranger sees the teaser and types their address; `events.join` (rate-limited by IP with the `JOIN_LIMITER` binding, and per address by `link_sent_at`) emails them a sign-in link back to the same page, and landing there signed in puts them on the list. A host can make a new token, which kills the old link and nothing else.
-- **Cover photos** are scaled down in the browser and stored in the `MEDIA` R2 bucket under a random key, served at `/api/covers/<key>` with immutable caching. A new photo gets a new key; the old object is deleted.
-- **Invitation designs** are per event and open to every host: "Design it" in the editor's first step opens the designer (`/e/<id>/design`), a free canvas over a fixed-shape card (5x7 either way, square, 8x10, half-letter, letter) where text, uploaded images, shapes, stickers and, on paper events, the QR code are dragged, resized and turned, with a page theme (five colours, two fonts) for the rest of the guest page. Text can carry `{title}`, `{date}`, `{time}`, `{location}`, `{host}`, `{rsvp by}`, `{details}`, `{guest}`, `{first name}` and `{last name}`, filled from the event (and the guest's from the reader, or the addressee on paper); `{guest's}` and `{first name's}` are the name made possessive the way it is written (Josh’s, James’s, The Nguyens’), by `possessive` in `packages/design/src/placeholders.ts`. The document is `event_design` (JSON, validated by `@rsvp-site/design` on every save, versioned so a co-host's save is never silently overwritten); `event.design_on` says whether guests see it. One scene, laid out in `packages/design` with generated font metrics (line breaks and every glyph's position, kerning included), is drawn three ways: SVG on the page (laid out on the server), pdf-lib for paper (in the host's browser, with native gradients, a shared form XObject per card and an optional print-shop bleed with crop marks) and a canvas JPEG for email, link previews and the dashboard. That picture (`event.card_key`) bakes in the event's facts, so it is redrawn after design saves and fact changes, and by the guest list whenever `card_basis` says it is stale. Images live in R2 under `designs/<event id>/` (served at `/api/designs/...`, uploads never SVG), are pruned when unused for an hour, and go with the event. A paper event's design must carry a QR code to save, switch on or send.
+- **An event** (`event`) is a draft until a host sends it. A draft can be
+  saved without a date; sending needs one. Dates are `YYYY-MM-DD` and times
+  `HH:MM` on the site's clock (America/New_York, `packages/api/src/time.ts`).
+  A published event can be canceled (with an optional note to everyone still
+  coming) and any event deleted for good, guest list, answers, potluck and
+  pictures included. Any host may delete a draft; once it has gone out only
+  the owner or an admin may (co-hosts can still cancel). Deleting one guests
+  are still expecting cancels it first, with the same note and email
+  (`callOff` in `packages/api/src/endings.ts`).
+- **Details** come in two kinds. "The details" go wherever the invitation
+  does: the invite page, the invitation and day-before emails, printed cards,
+  and `{details}` on a designed card. "More details, on the invite page only"
+  (`event.extra_details`) are shown only to guests who open the invite, under
+  "Good to know": never emailed, printed or on the public share page, so a
+  gate code stays with the people invited.
+- **Answer words** are the event's own. Stored answers are always yes, maybe
+  or no, but each event may call them anything (presets, or the host's words)
+  and may leave maybe out; every page, email and text says them the event's
+  way (`answersOf` in `packages/api/src/answer-words.ts`).
+- **Hosts** are rows in `event_host`; the creator is `is_owner`. Co-hosts are
+  added in the editor's "Hosts" step, by address or from the hosts in your
+  address book. They must already be hosts on the site.
+- **The guest list** is `event_guest`: one row per person per event, the
+  invitation and the answer in one row. `response` null means "no reply";
+  `invited_at` records when their invitation went out; `source` says how they
+  got on (typed by a host, from a group, a friend a guest brought, or the
+  share link). Nobody is contacted until the host presses Send, which reaches
+  everyone not yet invited, exactly once.
+- **Answering** (`guests.respond`) saves the answer, the party (adults
+  including the guest, clamped to the event's plus-ones; kids), a dietary note
+  for the uninvited people they bring, the note to the host and potluck picks
+  in one go. Each person's own dietary needs (presets and a note) are on their
+  profile, not the answer: after a yes or maybe the guest is asked whether
+  theirs, and those of the relatives they answered for, are still right.
+  Answers stay open until the party starts; the deadline is what the host asks
+  for, not a lock. Every count any page or email shows comes from
+  `packages/api/src/headcount.ts`.
+- **Hosts can record answers.** The pencil on a guest row sets their answer
+  and party, for the guest who phoned it in. The host is not held to the
+  plus-one limit, no host alert fires, and a "can't" drops their potluck
+  claims (`guests.setAnswer`).
+- **The potluck** is `potluck_item` (label, how many) and `potluck_claim` (one
+  per guest per item). A claim is an `INSERT ... SELECT` that only writes
+  while the item has room, so two guests taking the last slot cannot both get
+  it; the loser is told.
+- **Paper invitations** are chosen per event while it is a draft. The host can
+  add guests by email or **by name alone** (a `user` with `no_email` and a
+  placeholder address at `no-email.invalid`, never mailed and never shown),
+  and downloads a PDF of cards from the guest list: one guest's, or
+  everybody's, at 5x7, letter, or half-letter two to a sheet. The PDF is built
+  in the host's browser; the Worker's CPU budget is far too small. Each card's
+  QR code is `/p/<event_guest.paper_token>`, a key per invitation, issued on
+  first download and kept after, so printing again never breaks a mailed card.
+  Because the host holds these keys, a key **signs nobody in**: it opens and
+  answers that one invitation, and nothing else. Until the host presses
+  **Start emails**, a paper event sends guests nothing (`emailsHeld` in
+  `packages/api/src/schedule.ts`), and guests can't bring friends; Start
+  emails sends the invitation to everyone with an address who hasn't already
+  answered from their card. Host alerts and digests are never held.
+- **Guests bringing guests** is off by default. With it on, a guest the host
+  chose (typed in, or from one of the host's groups) gets a "Bring someone"
+  form and may add up to the event's limit (default 3). Their friend goes on
+  the list with `source = 'guest'`, gets the invitation at once naming who
+  brought them, and can never invite anyone: one level and no further. The
+  limit is checked inside the INSERT, so two quick invites cannot slip past
+  it (`canInviteOthers` in `packages/api/src/guest-invites.ts`).
+- **The share link** `/i/<share_token>` is off by default. A stranger sees the
+  teaser and types their address; `events.join` (rate-limited per IP, and per
+  address) emails them a sign-in link back to the same page, and a button
+  there puts them on the list. A new token kills the old link and nothing
+  else.
+- **The address book** (`contact`) is each host's own list: everybody they
+  have put on one of their events or in a group, plus anyone they add on
+  `/contacts`. It fills itself (`remember` in `packages/db/src/address-book.ts`).
+  Picks are checked against the caller's own book, so a guessed id adds
+  nobody. Friends a guest brings and share-link joiners are not the host's
+  choices and do not land in it.
+- **Contact groups** (`contact_group`, `contact_group_member`) are made from
+  the book; adding a group to an event copies its members onto the list. Both
+  are private to their owner. An admin can **share** a family with every host,
+  or a group with the hosts they pick (`contact_group_share`): those hosts may
+  add its members to their events (`pickable` in
+  `packages/db/src/families.ts`), but only the owner or an admin edits it.
+- **Cover photos** are scaled down in the browser and stored in R2 under a
+  random key, served at `/api/covers/<key>` with immutable caching. A new
+  photo gets a new key; the old object is deleted.
 
-The oRPC procedures are `account.*`, `events.*`, `designs.*`, `guests.*`, `contacts.*`, `contact.*` (a guest giving the address or number we lack), `diet.*`, `families.*`, `paper.*` (a printed card's page), `people.*` and `mail.*` under `packages/api/src/routers`, built on `publicProcedure`, `personProcedure`, `hostProcedure` and `adminProcedure` from `packages/api/src/index.ts`. Event access is decided in one place, `accessTo` / `hostAccessTo` in `packages/api/src/events.ts`.
+## Invitation designs
+
+Any host can open "Design it" in the editor's first step (`/e/<id>/design`): a
+free canvas over a fixed-shape card (5x7 either way, 5.5" square, 8x10,
+half-letter, letter) where text, uploaded images, shapes, stickers and, on
+paper events, the QR code are dragged, resized and turned, with layers,
+alignment, undo and keyboard shortcuts. Seven templates start it off (After
+Dark, Garden party, Confetti birthday, Minimal, Disco night, Photo poster,
+Night society). A page theme (five colours, two fonts from a curated 22)
+dresses the rest of the guest page, and its colours carry into the emails.
+
+Text can carry `{title}`, `{date}`, `{time}`, `{location}`, `{host}`,
+`{rsvp by}`, `{details}`, `{guest}`, `{first name}` and `{last name}`, filled
+from the event and the reader (or, on paper, the addressee); `{guest's}` and
+`{first name's}` are the name made possessive the way it is written (Josh’s,
+James’s, The Nguyens’).
+
+The document is `event_design` (JSON, validated by `@rsvp-site/design` on
+every save, versioned so a co-host's save is never silently overwritten);
+`event.design_on` says whether guests see it. One scene, laid out in
+`packages/design` with font metrics generated from the same font files the
+page and the PDF use (every line break and every glyph's position, kerning
+included), is drawn three ways:
+
+- **SVG** on the guest page (laid out on the server) and in the designer.
+- **pdf-lib** for paper, in the host's browser, with native gradients and an
+  optional print-shop bleed with crop marks.
+- **A canvas JPEG** (`event.card_key`) for emails, texts, link previews and the
+  dashboard. It bakes in the event's facts, so it is redrawn after design
+  saves and fact changes, and by the guest list whenever `card_basis` says it
+  is stale.
+
+Images live in R2 under `designs/<event id>/` (uploads never SVG), are pruned
+when unused for an hour, and go with the event. A paper event's design must
+carry a printable QR code to save, switch on or send.
 
 ## Email
 
 Brevo delivers; the app owns the list, the templates and the log.
 
-- **Who gets it.** `listRecipients` in `packages/db/src/people.ts` is the one query behind every list send, and it never returns anybody deactivated or unsubscribed, whatever ids are asked for. Each person has an `unsubscribe_token` for the footer link and a `link_token` for the sign-in links.
-- **How a link signs you in.** Every link in a list email points at `/api/auth/link?k=<link_token>&to=<path>`, a GET endpoint added by the `email-link` plugin in `packages/auth/src/link.ts`. It finds the person, marks the address verified (unless the link came by text, `via=text`, or the address is a placeholder), opens a session and redirects to `to`, checked by `safeReturnPath`. An unknown token lands on `/login?error=link`, a deactivated one on `/login?error=revoked`.
-- **Answer buttons never answer.** Yes / Maybe / Can't in an email land on `/e/<id>?a=yes`, which shows that answer picked and waits for a tap. Mail clients prefetch link targets; a GET that saved would answer for people who never clicked. The unsubscribe footer works the same way: the GET shows a button, the POST acts.
+- **Who gets it.** `listRecipients` (`packages/db/src/people.ts`) is the one
+  query behind every list send, and it never returns anybody deactivated or
+  unsubscribed, whatever ids are asked for. Event messages go through
+  `deliver` (`packages/api/src/mail.ts`), which picks email, text or both per
+  person.
+- **How a link signs you in.** Every link in a list email points at
+  `/api/auth/link?k=<link_token>&to=<path>`, a GET endpoint added by the
+  `email-link` plugin in `packages/auth/src/link.ts`. It finds the person,
+  marks the address verified (unless the link came by text or the address is a
+  placeholder), opens a session and redirects to `to`, checked by
+  `safeReturnPath`. An unknown token lands on `/login?error=link`, a
+  deactivated one on `/login?error=revoked`.
+- **Answer buttons never answer.** Yes / Maybe / Can't in an email land on
+  `/e/<id>?a=yes`, which shows that answer picked and waits for a tap. Mail
+  clients prefetch link targets; a GET that saved would answer for people who
+  never clicked. The unsubscribe footer works the same way: the GET shows a
+  button, the POST acts.
 - **What goes out.**
-  - *Invite* -- when a host presses Send, to everyone on the list not yet invited.
-  - *Deadline reminder*, *day before* -- from the cron; see "The email schedule".
-  - *Nudge* -- a host pressing Nudge, to people with the invitation and no answer; each person at most once every twelve hours.
-  - *Change of plans* -- when a sent event's date, time or place changes and "Tell guests about changes" is on, to everyone who has not said no. The editor says so on the button.
-  - *Canceled* -- to everyone who has not said no, with the host's note.
-  - *Host alert* / *host digest* -- to the event's hosts, for each reply or once a morning, per the event's setting.
-  - *Share link* -- the sign-in link a stranger asked for on `/i/<token>`. Concrete URL, sent to one person.
-  - *Welcome* -- an admin adding somebody or resending their link, or "Email me a link" on `/login`.
-  - *Message* -- an admin writing to everybody on `/admin/email`, with "Send to me first".
-  - *Account* -- Better Auth's password reset.
-- **Look.** The site is dark; the email body is not. Gmail and Outlook rewrite dark backgrounds in their own dark modes, so emails get a plum band with the wordmark, the cover photo, lime buttons and a white body (`packages/email/src/render.ts`).
-- **Sender.** `"Botch RSVP" <info@rsvp.botch.com>`, set in `packages/email/src/sender.ts`. The domain is authenticated in this site's own Brevo account, not pickup-bball's: that keeps the two sites' blocklists, webhooks and keys apart, since Brevo applies all three account-wide. Its DKIM records live in the `botch.com` Cloudflare zone, and Cloudflare Email Routing forwards replies to `info@` to a person.
-- **Log.** Every list send writes one `email_send` row (kind, event, subject, recipient count, failures, Brevo message ids). `/admin/email` shows the last thirty.
-- **Batching and personalisation.** One Brevo request carries up to 99 personalised copies (`messageVersions`). Each copy gets `params.name`, `params.unsubscribeUrl` and `params.key` -- the last turns the shared template's links into that one person's sign-in links. Without `BREVO_API_KEY` the email is printed instead, with the placeholders filled in from the first recipient so the link in the console is clickable.
-- **Brevo's own unsubscribe.** Brevo adds its own `List-Unsubscribe` header to every email, so people can also stop the mail from their mail app. Brevo tells the app through the webhook at `/api/brevo/webhook` (`apps/web/src/server/brevo-webhook.ts`): unsubscribe, hard bounce, spam complaint and invalid address all unsubscribe the address with that reason -- never a deactivation.
+  - *Invite*: when a host presses Send, to everyone on the list not yet invited.
+  - *Deadline reminder*, *day before*: from the cron; see below.
+  - *Nudge*: a host pressing Nudge, to people with the invitation and no
+    answer; each person at most once every twelve hours.
+  - *Change of plans*: when a sent event's date, time or place changes and
+    "Tell guests about changes" is on, to everyone who has not said no.
+  - *Canceled*: to everyone who has not said no, with the host's note.
+  - *Host alert* / *host digest*: to the event's hosts, for each reply or once
+    a morning, per the event's setting.
+  - *Share link*: the sign-in link a stranger asked for on `/i/<token>`.
+  - *Welcome*: an admin adding somebody or resending their link, or "Email me
+    a link" on `/login`.
+  - *Confirm address*: the link a guest gets after giving us their address.
+  - *Message*: an admin writing to everybody on `/admin/email`, with "Send to
+    me first".
+  - *Password reset*: Better Auth's.
+- **Look.** The site is dark; the email body is not. Gmail and Outlook rewrite
+  dark backgrounds in their dark modes, so emails get a plum band with the
+  wordmark, the cover or card, lime buttons and a white body
+  (`packages/email/src/render.ts`). An event with a design lends the email its
+  colours.
+- **Sender.** `"Botch RSVP" <info@rsvp.botch.com>`
+  (`packages/email/src/sender.ts`), in this site's own Brevo account, not
+  pickup-bball's: Brevo applies blocklists, webhooks and keys account-wide.
+  DKIM records live in the `botch.com` Cloudflare zone, and Cloudflare Email
+  Routing forwards replies to `info@` to a person.
+- **Log.** Every list send writes one `email_send` row (kind, event, subject,
+  recipient count, failures, Brevo message ids). `/admin/email` shows the last
+  thirty.
+- **Batching and personalisation.** One Brevo request carries up to 99
+  personalised copies (`messageVersions`). Each copy gets the recipient's name
+  and two params, `unsubscribeUrl` and `key`; the last turns the shared
+  template's links into that one person's sign-in links. A POST is retried
+  only on 429 and 503, which mean nothing was sent.
+- **Brevo's own unsubscribe.** Brevo adds a `List-Unsubscribe` header to every
+  email and tells the app through `/api/brevo/webhook`
+  (`apps/web/src/server/brevo-webhook.ts`): unsubscribe, hard bounce, spam
+  complaint and invalid address all unsubscribe the address with that reason,
+  never a deactivation.
 
 Setting it up:
 
 1. In Brevo, create a v3 API key (Account > SMTP & API > API keys).
 2. Production: `pnpm --filter web exec wrangler secret put BREVO_API_KEY`.
-3. Local sending (optional): put the same key in `apps/web/.dev.vars`.
-4. The webhook: pick a random token, set it with `pnpm --filter web exec wrangler secret put BREVO_WEBHOOK_SECRET`, then register the webhook once:
+3. The webhook: pick a random token, set it with
+   `pnpm --filter web exec wrangler secret put BREVO_WEBHOOK_SECRET`, then
+   register the webhook once:
 
    ```bash
    curl -H "api-key: $BREVO_API_KEY" -H "content-type: application/json" https://api.brevo.com/v3/webhooks \
      -d '{"url":"https://rsvp.botch.com/api/brevo/webhook","type":"transactional","events":["unsubscribed","hardBounce","spam","invalid"],"auth":{"type":"bearer","token":"<the token>"}}'
    ```
 
-   Without the secret the route answers 404, so a missing webhook never breaks anything else.
-5. To run the email schedule locally with the dev server running: `curl "http://localhost:3001/cdn-cgi/local/scheduled?cron=0+*+*+*+*"`. It runs at the real clock, so move an event's dates to make something due. **Leave `BREVO_API_KEY` unset while you do**, or the run mails everybody in the local database for real.
+   Without the secret the route answers 404, so a missing webhook never breaks
+   anything else.
 
-The templates and Brevo client in `packages/email` are pure functions with tests: `pnpm run test`.
+Keep `BREVO_API_KEY` out of the local `.dev.vars`. With a key there, a local
+"test" send (or a local cron run) mails everybody in the local database for
+real.
 
-Brevo also offers an MCP server for inspecting the account (senders, templates, delivery logs) from Claude Code. Register it once per machine, outside the repo, with an MCP token from the same API keys page:
-
-```bash
-claude mcp add --transport http --scope user brevo https://mcp.brevo.com/v1/brevo/mcp --header "Authorization: Bearer <MCP token>"
-```
-
-That registration is per machine, not per repo. On a machine where it already points at pickup-bball's Brevo account, it shows that account and not this one, so anything done through it changes the wrong site.
+Brevo offers an MCP server for inspecting an account from Claude Code. That
+registration is per machine, not per repo; on a machine where it points at
+pickup-bball's Brevo account, it shows that account and not this one, so
+anything done through it changes the wrong site.
 
 ## The email schedule
 
-Each event's own settings decide its automatic email. The half-hourly cron asks
-`dueEmails` in `packages/api/src/schedule.ts` what each published event has
-due, on the site's clock:
+Each event's own settings decide its automatic messages. The half-hourly cron
+asks `dueEmails` in `packages/api/src/schedule.ts` what each published event
+has due, on the site's clock:
 
-| Email | When | To |
+| Message | When | To |
 |---|---|---|
 | Deadline reminder | 10:00 AM, N days before the RSVP deadline (N per event, default 3) | invited, no answer |
 | Day before | 10:00 AM the day before | yes and maybe |
@@ -182,22 +643,56 @@ due, on the site's clock:
 
 Rules, all unit-tested in `packages/api/src/schedule.test.ts`:
 
-- **A stamp means resolved, not sent.** Each email stamps a column on `event` when it is handled. One whose moment has passed -- the deadline went by, the party started, or the event was only published after the reminder was due (so the invitation itself just went out) -- is stamped without sending, so the job does not retry it every half hour. `email_send` is the record of what went out.
-- **Moving the date or the deadline re-arms** the reminders that belonged to the old one.
-- **Read, claim, send.** `jobs/event-mail.ts` reads who it would go to, claims the stamp with `UPDATE ... WHERE col IS NULL` (`meta.changes === 1` is the lock), sends, and gives the stamp back if every batch failed. The digest repeats, so its claim is "older than this morning's slot" instead. Two overlapping passes cannot both send.
+- **A stamp means resolved, not sent.** Each message stamps a column on
+  `event` when it is handled. One whose moment has passed (the deadline went
+  by, the party started, or the event was only published after the reminder
+  was due) is stamped without sending, so the job does not retry it every
+  half hour. `email_send` is the record of what went out.
+- **Moving the date or the deadline re-arms** the reminders that belonged to
+  the old one.
+- **Read, claim, send.** `jobs/event-mail.ts` reads who it would go to, claims
+  the stamp with `UPDATE ... WHERE col IS NULL` (`meta.changes === 1` is the
+  lock), sends, and gives the stamp back if nothing went. The digest repeats,
+  so its claim is "older than this morning's slot" instead. Two overlapping
+  passes cannot both send.
 
 ## Text messages
 
-Telnyx delivers texts; the app decides who gets one, keeps the log and the opt-outs. Every event message goes through `deliver` in `packages/api/src/mail.ts`, which sends each person the channels `channelsFor` (`packages/api/src/channels.ts`) picks: their own choice on the account page (email, text or both), or by default email when they can get it and a text when they can't.
+Telnyx delivers texts; the app decides who gets one and keeps the log and the
+opt-outs. Every event message goes through `deliver`, which sends each person
+the channels `channelsFor` (`packages/api/src/channels.ts`) picks: their own
+choice on the account page (email, text or both), or by default email when
+they can get it and a text when they can't.
 
-- **Who can be texted.** `textableWhere` (`packages/db/src/reach.ts`, with its JS twin `isTextable`) and `listTextable` in `packages/db/src/people.ts`: a US number, not deactivated, texts not switched off, the number not in `sms_block`, and consent on record (`texts_ok_at`). Consent is a host ticking "they expect a text from me" when typing numbers (`guests.add`, `contacts.addPeople`, or "Allow texts" on a guest row), or the person switching texts on. A host's word only fills a blank on a record nobody has claimed, and goes when the number changes.
-- **Guests by phone.** "Pat Smith 301-555-0101" on its own line makes a name-only guest with that number, on any event. A number already in the host's book is that person.
-- **Links.** Each text carries `/t/<code>` (`text_link`), a 12-character stand-in for the email's `/api/auth/link?k=...`, which is where the Worker entry (`apps/web/src/server.ts`) redirects. A code holds a copy of the person's `link_token` and works only while they match, so a new sign-in link retires every code.
-- **Pictures.** Invitations go as MMS with the card (design on) or the cover: the small rendition (`card_mms_key` / `cover_mms_key`, drawn in the browser) or the original if it is under 600 KB, otherwise no picture. Everything else is plain SMS.
-- **STOP, START, HELP.** Telnyx answers them and blocks a STOPped number itself; the webhook (`apps/web/src/server/telnyx-webhook.ts`, Ed25519-signed with `TELNYX_PUBLIC_KEY`) mirrors that into `sms_block`, which is per number, not per person. A final failure that says landline or invalid number blocks it too. Anything else texted in is emailed to `info@` and gets one "we can't read replies" per day.
-- **Sign-in by text.** The login page's field takes a number: `people.requestTextLink` texts a link for each active person with it (at most three), once per ten minutes per number.
-- **Log.** One `sms_send` row per text, written as each send returns (a delivery report can beat the rest of a batch) and updated by the webhook (queued, sent, delivered, failed with Telnyx's code); a report for a text not yet logged is sent back for Telnyx to retry. Inbound texts are claimed by Telnyx's event id (`telnyx_event`, pruned weekly by the cron) and forwarded after the webhook has answered, so a redelivery forwards nothing twice. Hosts see the last one per guest; `/admin/email` lists the recent ones and sends a test to your own phone.
-- **Dry run.** Without `TELNYX_API_KEY` on localhost each text is printed to the dev console, link included. Anywhere else a missing key fails the send. The localhost check is `allowDryRun()` in `@rsvp-site/env/server`, shared with the mailer.
+- **Who can be texted.** `textableWhere` (`packages/db/src/reach.ts`, with its
+  JS twin `isTextable`): a US number, not deactivated, texts not switched off,
+  the number not in `sms_block`, and consent on record (`texts_ok_at`).
+  Consent is a host ticking "they expect a text from me" when adding numbers,
+  or the person switching texts on. A host's word only fills a blank on a
+  record nobody has claimed, and goes when the number changes.
+- **Guests by phone.** "Pat Smith 301-555-0101" on its own line makes a guest
+  with that number. A number already in the host's book is that person.
+- **Links.** Each text carries `/t/<code>` (`text_link`), a 12-character
+  stand-in for the email's sign-in link, which the Worker entry redirects to.
+  A code holds a copy of the person's `link_token` and works only while they
+  match, so a new sign-in link retires every code.
+- **Pictures.** Invitations go as MMS with the card (design on) or the cover:
+  a small rendition drawn in the browser, or the original if it is 600 KB or
+  less, otherwise no picture. Everything else is plain SMS, folded to GSM-7 so
+  one curly quote doesn't halve a segment.
+- **STOP, START, HELP.** Telnyx answers them and blocks a STOPped number
+  itself; the webhook (`apps/web/src/server/telnyx-webhook.ts`, Ed25519-signed)
+  mirrors that into `sms_block`, which is per number, not per person. A final
+  failure that says landline or invalid number blocks it too. Anything else
+  texted in is emailed to `info@` and gets one "we can't read replies" a day.
+- **Sign-in by text.** The login page's field takes a number:
+  `people.requestTextLink` texts a link for each active person with it (at
+  most three), once per ten minutes per number.
+- **Log.** One `sms_send` row per text, written as each send returns and
+  updated by the webhook (queued, sent, delivered, failed with Telnyx's code).
+  Inbound texts are claimed by Telnyx's event id (`telnyx_event`, kept a week)
+  so a redelivery forwards nothing twice. Hosts see the last text per guest;
+  `/admin/email` lists the recent ones and sends a test to your own phone.
 
 Setting it up:
 
@@ -208,13 +703,19 @@ Setting it up:
 | Vars | `TELNYX_FROM`, `TELNYX_PUBLIC_KEY` in `wrangler.jsonc` (the public key is from `GET /v2/public_key`) |
 | Secret | `TELNYX_API_KEY`: `pnpm --filter web exec wrangler secret put TELNYX_API_KEY < ~/.config/rsvp-site/telnyx-key` |
 
-To test the webhook locally, put a test key pair's public half in `.dev.vars` as `TELNYX_PUBLIC_KEY` and sign `<timestamp>|<body>` with the private half.
+To test the webhook locally, put a test key pair's public half in `.dev.vars`
+as `TELNYX_PUBLIC_KEY` and sign `<timestamp>|<body>` with the private half.
 
-Costs, roughly: $0.004 per SMS segment and $0.015 per MMS, plus carrier fees (about $0.003-0.005 per SMS, $0.007-0.01 per MMS). The profile has a daily spend limit ($5 when set up); a full MMS invitation to 200 people is about that.
+Costs, roughly: $0.004 per SMS segment and $0.015 per MMS, plus carrier fees
+(about $0.003-0.005 per SMS, $0.007-0.01 per MMS). The profile has a daily
+spend limit ($5 when set up); a full MMS invitation to 200 people is about
+that.
 
 ### 10DLC registration
 
-US carriers refuse texts from an unregistered local number (Telnyx error 40010). Registered through the API on 2026-10-05:
+US carriers refuse texts from an unregistered local number (Telnyx error
+40010). Registered through the API on 2026-10-05; until the campaign is
+approved every send fails with that code.
 
 | What | Value |
 |---|---|
@@ -222,7 +723,11 @@ US carriers refuse texts from an unregistered local number (Telnyx error 40010).
 | Campaign | `4b3001a1-0cb2-863b-6c18-b6c494eda28b`, use case `SOLE_PROPRIETOR` (the only one a sole-proprietor brand may use), sub-use case `ACCOUNT_NOTIFICATION`; $24 a year |
 | After approval | attach +1 301-279-8944 to the campaign (`POST /v2/10dlc/phone_number_campaigns`); a sole-proprietor campaign carries exactly one number. Carriers cap it at about 15 texts a minute on AT&T and 1,000 a day on T-Mobile |
 
-Two things that bit: the portal saved the brand's mobile number without its `1` (`+30...`, read as Greece), which the registry refused as "not a mobile", and an update didn't fix it, so the brand was deleted and created again through the API with `+1...`. And Telnyx won't submit a campaign with less than $30 on the account.
+Two things that bit: the portal saved the brand's mobile number without its
+`1` (`+30...`, read as Greece), which the registry refused as "not a mobile",
+and an update didn't fix it, so the brand was deleted and created again
+through the API with `+1...`. And Telnyx won't submit a campaign with less
+than $30 on the account.
 
 What the campaign says (`POST /v2/10dlc/campaignBuilder`):
 
@@ -240,61 +745,93 @@ What the campaign says (`POST /v2/10dlc/campaignBuilder`):
 - **Opt-in:** Botch RSVP: texts are back on. Msg&data rates may apply. Reply HELP for help, STOP to opt out.
 - **Opt-out:** Botch RSVP: you won't get more texts from us. Reply START to get them again.
 
+## Security in brief
+
+The site holds people's addresses, numbers and sign-in links, so a few rules
+run through all of it:
+
+- **Links are credentials.** `link_token` (in every email link), `text_link`
+  codes and printed-card keys are bearer secrets. They never go on a URL meant
+  to be shown around, never into a cookie the browser can read, and never into
+  a log. Workers' per-request logs are off for that reason, and errors are
+  logged through one helper that leaves out a failed query's bound
+  parameters (addresses, numbers, tokens).
+- **GETs don't write.** Mail clients and scanners prefetch links, so answer
+  buttons, unsubscribe links and views all wait for a tap or for the page to
+  be on screen; even a signed-in person on a share link joins by button.
+- **One answer for "no".** A stranger to an event gets the same "not found" as
+  a wrong id; "email me my link" says the same thing for any address and does
+  its work in the background, so timing says nothing either.
+- **Rate limits** (Cloudflare's, keyed by `cf-connecting-ip`) on password and
+  link sign-in, resets, text codes, the share link's form, a card's contact
+  form, guests inviting friends and anything else that emails or texts an
+  address somebody typed.
+- **Check and write together.** Who may change a record is repeated in the
+  UPDATE's own `WHERE`, so a sign-in or a role change between the check and
+  the write can't slip through; claims (`UPDATE ... WHERE x IS NULL`) make
+  every send happen once.
+- **CSRF.** `/api/rpc` requires oRPC's CSRF header, because other `botch.com`
+  sites are same-site and get the Lax cookies.
+- **Uploads** are sniffed by their bytes, never SVG, stored under random keys,
+  and served with immutable caching and nothing else attached.
+
 ## Database changes
 
 1. Edit the schema in `packages/db/src/schema`.
-2. Generate a migration: `pnpm run db:generate`. This writes SQL into `packages/db/src/migrations`, which is what wrangler applies.
-3. Apply it locally with `pnpm run db:migrate:local`, and to production with `pnpm run db:migrate:remote`.
+2. Generate a migration: `pnpm run db:generate`. It writes SQL into
+   `packages/db/src/migrations`, which is what wrangler applies. drizzle-kit
+   asks "created or renamed?" without a TTY; see CLAUDE.md for running it from
+   a script and for the hand edits D1 needs.
+3. Apply it locally (`pnpm exec wrangler d1 migrations apply DB --local` in
+   `apps/web`). CI applies it to production on the next push to `main`, before
+   the new Worker deploys, so a migration that drops something the running
+   code reads ships in two steps: first the code that stops reading it, then
+   the migration.
 
-Inspect the local database with `pnpm --filter web exec wrangler d1 execute DB --local --command "select * from user"`.
-
-## Deploying to Cloudflare
-
-One-time setup:
-
-1. Log in: `pnpm --filter web exec wrangler login`.
-2. Create the database: `pnpm --filter web exec wrangler d1 create rsvp-site-db` and paste the returned id into `database_id` in `apps/web/wrangler.jsonc`.
-3. Set the auth secret: `pnpm --filter web exec wrangler secret put BETTER_AUTH_SECRET`.
-   Set the Brevo key and webhook token the same way: `pnpm --filter web exec wrangler secret put BREVO_API_KEY` and `... put BREVO_WEBHOOK_SECRET` (see "Email").
-4. Create the cover photo bucket: `pnpm --filter web exec wrangler r2 bucket create rsvp-site-media`.
-5. Apply migrations to production: `pnpm run db:migrate:remote`.
-6. Deploy: `pnpm run deploy`.
-7. Set `BETTER_AUTH_URL` in `apps/web/wrangler.jsonc` `vars` to the URL wrangler printed (or your custom domain) and deploy again.
-8. Get yourself an account: on a brand new database, follow "The first account on an empty database" in "Who sees what". Otherwise ask an admin to add you on `/admin/users` and click the link they send you.
+## Deploying
 
 ### Automatic deploys
 
-`.github/workflows/deploy.yml` runs on every push and pull request. It lints with Biome, runs the unit tests, typechecks and builds. On pushes to `main` it then applies pending D1 migrations and deploys the Worker with Cloudflare's `wrangler-action`.
+`.github/workflows/deploy.yml` runs on pushes to `main`, on pull requests and
+by hand. The `check` job installs, runs `biome ci`, the unit tests, a build
+(which generates the route tree the typecheck needs), the typecheck, and
+renders every design template to PDF. On `main`, the `deploy` job then
+builds, applies pending D1 migrations and deploys the Worker with Cloudflare's
+`wrangler-action` (actions are pinned to commits, since that job holds the
+token).
 
-It needs one repository secret, `CLOUDFLARE_API_TOKEN`: a Cloudflare API token created from the "Edit Cloudflare Workers" template with **D1: Edit** and **Workers R2 Storage: Edit** added. Set it with `gh secret set CLOUDFLARE_API_TOKEN` or in the repository's Actions secrets. Until the secret exists the deploy job skips with a warning instead of failing. The account id is in `apps/web/wrangler.jsonc`, so no account secret is needed.
+It needs one repository secret, `CLOUDFLARE_API_TOKEN`: a token from the "Edit
+Cloudflare Workers" template with **D1: Edit** and **Workers R2 Storage:
+Edit** added. Without it the deploy job fails. The account id is in
+`apps/web/wrangler.jsonc`.
 
-You can still deploy by hand with `pnpm run deploy`.
+You can still deploy by hand from `apps/web` with `pnpm run deploy`.
 
-## Project Structure
+### Production
 
-```
-rsvp-site/
-├── apps/
-│   └── web/         # Fullstack app: TanStack Start pages + Hono API under /api (one Worker)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # oRPC router / business logic
-│   ├── auth/        # Better Auth configuration
-│   ├── db/          # Drizzle schema (people, events, guests, potluck, contacts, families, designs, email_send, sms), roles and D1 migrations
-│   ├── design/      # Invitation designs: schema, fonts and metrics, text layout, the scene, theme, templates
-│   ├── email/       # Brevo client, email templates and their tests
-│   ├── sms/         # Telnyx client, text templates, segments, the webhook's signature check and parsing
-│   └── env/         # Typed access to Worker env and bindings, the dry-run gate and the site's origin
-```
+| What | Value |
+|---|---|
+| Worker | `rsvp-site`, custom domain `rsvp.botch.com`; `rsvp-site.jlukens.workers.dev` 301s to it |
+| D1 | `rsvp-site-db` (binding `DB`) |
+| R2 | `rsvp-site-media` (binding `MEDIA`): `covers/`, `designs/<event id>/`, `avatars/` |
+| Rate limits | `JOIN_LIMITER` (5 a minute), `AUTH_LIMITER` (10 a minute) |
+| Cron | `0,30 * * * *` |
+| Secrets | `BETTER_AUTH_SECRET`, `BREVO_API_KEY`, `BREVO_WEBHOOK_SECRET`, `TELNYX_API_KEY` |
+| Vars | `BETTER_AUTH_URL`, `TELNYX_FROM`, `TELNYX_PUBLIC_KEY` |
 
-## Available Scripts
+### Setting up from nothing
 
-- `pnpm run dev`: Start the dev server (pages and API) at http://localhost:3001
-- `pnpm run build`: Build the Worker and static assets
-- `pnpm run check-types`: Check TypeScript types across the workspace
-- `pnpm run check`: Run Biome formatting and linting
-- `pnpm run test`: Run the unit tests (email and text templates, the Brevo and Telnyx clients, the webhooks' decisions, address parsing, roles, who can be reached, headcount, the schedule's timezone maths, event rules, the web app's pure helpers, and the invitation designs: validation, text layout, the scene, the editor)
-- `pnpm run db:generate`: Generate a D1 migration from the Drizzle schema
-- `pnpm run db:migrate:local`: Apply migrations to the local D1 database
-- `pnpm run db:migrate:remote`: Apply migrations to the production D1 database
-- `pnpm run deploy`: Build and deploy the Worker with wrangler
+1. Log in: `pnpm --filter web exec wrangler login`.
+2. Create the database: `pnpm --filter web exec wrangler d1 create rsvp-site-db`
+   and paste the returned id into `database_id` in `apps/web/wrangler.jsonc`.
+3. Create the bucket: `pnpm --filter web exec wrangler r2 bucket create rsvp-site-media`.
+4. Set the secrets: `pnpm --filter web exec wrangler secret put BETTER_AUTH_SECRET`,
+   and the same for `BREVO_API_KEY`, `BREVO_WEBHOOK_SECRET` (see
+   [Email](#email)) and `TELNYX_API_KEY` (see [Text messages](#text-messages)).
+5. Set `BETTER_AUTH_URL` in `wrangler.jsonc` `vars` to the site's URL; every
+   other host is redirected there.
+6. Apply the migrations (`pnpm exec wrangler d1 migrations apply DB --remote`
+   in `apps/web`) and deploy (`pnpm run deploy` there).
+7. Write the first admin by hand
+   ([The first account](#the-first-account-on-an-empty-database)), then add
+   everyone else from `/admin/users`.
