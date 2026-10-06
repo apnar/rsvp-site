@@ -19,6 +19,6 @@
 	"devDependencies": {
 		"@rsvp-site/config": "workspace:*",
 		"typescript": "catalog:",
-		"vitest": "^4.1.4"
+		"vitest": "catalog:"
 	}
 }
