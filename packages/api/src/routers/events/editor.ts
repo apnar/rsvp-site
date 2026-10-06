@@ -13,7 +13,7 @@ import {
 } from "@rsvp-site/db/schema/event";
 import { newToken } from "@rsvp-site/db/tokens";
 import { updateEmail } from "@rsvp-site/email";
-import { siteUrl } from "@rsvp-site/email/worker";
+import { siteUrl } from "@rsvp-site/env/server";
 import { updateText } from "@rsvp-site/sms";
 import { and, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";

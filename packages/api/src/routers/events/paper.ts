@@ -5,7 +5,7 @@ import { formatPhone } from "@rsvp-site/db/phone";
 import { user } from "@rsvp-site/db/schema/auth";
 import { eventGuest } from "@rsvp-site/db/schema/event";
 import { paperCardUrl } from "@rsvp-site/email/links";
-import { siteUrl } from "@rsvp-site/email/worker";
+import { siteUrl } from "@rsvp-site/env/server";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { answersOf, pickWord } from "../../answer-words";

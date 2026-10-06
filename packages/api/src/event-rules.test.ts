@@ -4,6 +4,7 @@ import {
 	csvCell,
 	describeChanges,
 	emailsHeld,
+	expectingGuests,
 	mayDelete,
 	movesGuestFacts,
 	openRefusal,
@@ -254,5 +255,29 @@ describe("viewedGuestId", () => {
 
 	it("needs an invitation to stamp", () => {
 		expect(viewedGuestId({ isHost: false, guest: null })).toBeNull();
+	});
+});
+
+describe("expectingGuests", () => {
+	const live = {
+		status: "published" as const,
+		date: "2026-10-24" as string | null,
+		startTime: "18:00" as string | null,
+	};
+	const before = siteInstant("2026-10-24", "17:59").getTime();
+	const after = siteInstant("2026-10-24", "18:00").getTime();
+
+	it("is true for a published event that has not started", () => {
+		expect(expectingGuests(live, before)).toBe(true);
+	});
+	it("is false once started, canceled or still a draft", () => {
+		expect(expectingGuests(live, after)).toBe(false);
+		expect(expectingGuests({ ...live, status: "canceled" }, before)).toBe(
+			false,
+		);
+		expect(expectingGuests({ ...live, status: "draft" }, before)).toBe(false);
+	});
+	it("is true for a published event with no date yet", () => {
+		expect(expectingGuests({ ...live, date: null }, after)).toBe(true);
 	});
 });

@@ -8,7 +8,8 @@ import { user } from "@rsvp-site/db/schema/auth";
 import { event, eventGuest } from "@rsvp-site/db/schema/event";
 import { newToken } from "@rsvp-site/db/tokens";
 import { joinLinkEmail, mediaUrl } from "@rsvp-site/email";
-import { getMailer, siteUrl } from "@rsvp-site/email/worker";
+import { getMailer } from "@rsvp-site/email/worker";
+import { siteUrl } from "@rsvp-site/env/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 

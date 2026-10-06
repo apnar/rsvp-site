@@ -11,7 +11,8 @@ import { findPerson } from "@rsvp-site/db/people";
 import { normalizePhone, textablePhone } from "@rsvp-site/db/phone";
 import { alsoByText, setTexts, vouchForTexts } from "@rsvp-site/db/sms-status";
 import { confirmEmailEmail } from "@rsvp-site/email";
-import { getMailer, siteUrl } from "@rsvp-site/email/worker";
+import { getMailer } from "@rsvp-site/email/worker";
+import { siteUrl } from "@rsvp-site/env/server";
 import { z } from "zod";
 
 import { CLAIM_TTL_MS, readEmailClaim, signEmailClaim } from "./email-claim";

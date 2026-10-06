@@ -85,11 +85,7 @@ export default {
 	 * says what is due when. Test locally with
 	 * `curl "http://localhost:3001/cdn-cgi/local/scheduled?cron=0+*+*+*+*"`.
 	 */
-	async scheduled(
-		controller: { scheduledTime: number; cron: string },
-		_env: unknown,
-		ctx: { waitUntil(promise: Promise<unknown>): void },
-	) {
+	async scheduled(controller, _env, ctx) {
 		const now = new Date(controller.scheduledTime);
 		const db = createDb();
 		ctx.waitUntil(
@@ -106,4 +102,4 @@ export default {
 			),
 		);
 	},
-};
+} satisfies ExportedHandler<Cloudflare.Env>;

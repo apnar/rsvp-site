@@ -1,4 +1,4 @@
-import { env } from "@rsvp-site/env/server";
+import { allowDryRun, env } from "@rsvp-site/env/server";
 
 import { createMailer, type Mailer } from "./mailer";
 import { SENDER } from "./sender";
@@ -13,20 +13,6 @@ export function getMailer(): Mailer {
 	return createMailer({
 		apiKey: env.BREVO_API_KEY,
 		sender: SENDER,
-		allowDryRun: isLocal(env.BETTER_AUTH_URL),
+		allowDryRun: allowDryRun(),
 	});
-}
-
-function isLocal(origin: string): boolean {
-	try {
-		const { hostname } = new URL(origin);
-		return hostname === "localhost" || hostname === "127.0.0.1";
-	} catch {
-		return false;
-	}
-}
-
-/** Public origin used for links inside emails. */
-export function siteUrl(): string {
-	return env.BETTER_AUTH_URL.replace(/\/$/, "");
 }

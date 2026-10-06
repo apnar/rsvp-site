@@ -137,3 +137,8 @@ export function replyText(): string {
 export function testText(): string {
 	return finish("this is a test text. Texting is working.");
 }
+
+/** Where a texted sign-in code lands; the code is a bearer credential. */
+export function textLinkUrl(origin: string, code: string): string {
+	return `${origin}/t/${code}`;
+}

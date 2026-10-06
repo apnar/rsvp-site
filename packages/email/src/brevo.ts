@@ -145,7 +145,11 @@ export async function unblockContact(
 	try {
 		const response = await fetchImpl(
 			`${BREVO_BLOCKED_CONTACTS}/${encodeURIComponent(email)}`,
-			{ method: "DELETE", headers: { "api-key": opts.apiKey } },
+			{
+				method: "DELETE",
+				headers: { "api-key": opts.apiKey },
+				signal: AbortSignal.timeout(10_000),
+			},
 		);
 		return {
 			ok: response.status === 204 || response.status === 404,

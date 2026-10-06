@@ -20,7 +20,12 @@ describe("subjects", () => {
 			async (_url: string | URL | Request, _init?: RequestInit) =>
 				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
 		);
-		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		const mailer = createMailer({
+			apiKey: "k",
+			sender,
+			fetch: fetchImpl,
+			allowDryRun: false,
+		});
 		await mailer.sendOne(
 			{ email: "a@example.com" },
 			{ ...rendered, subject: "Hi\r\nBcc: x@example.com\u0000\u2028 there" },
@@ -39,6 +44,7 @@ describe("createMailer", () => {
 			sender,
 			fetch: fetchImpl,
 			log,
+			allowDryRun: true,
 		});
 		expect(mailer.dryRun).toBe(true);
 		const one = await mailer.sendOne({ email: "a@example.com" }, rendered);
@@ -75,7 +81,12 @@ describe("createMailer", () => {
 			async (_url: string | URL | Request, _init?: RequestInit) =>
 				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
 		);
-		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		const mailer = createMailer({
+			apiKey: "k",
+			sender,
+			fetch: fetchImpl,
+			allowDryRun: false,
+		});
 		await mailer.sendList(recipients(1), {
 			subject: "Party {{ dance }} {{{ x }}",
 			html: '<p>{% if x %}{{% y %}</p><a href="/?k={{ params.key }}">go</a>',
@@ -98,7 +109,12 @@ describe("createMailer", () => {
 
 	it("fills the placeholders in a dry-run log so the link is clickable", async () => {
 		const log = vi.fn();
-		const mailer = createMailer({ apiKey: undefined, sender, log });
+		const mailer = createMailer({
+			apiKey: undefined,
+			sender,
+			log,
+			allowDryRun: true,
+		});
 		const withLink = {
 			subject: "S",
 			html: "<p>x</p>",
@@ -120,7 +136,12 @@ describe("createMailer", () => {
 			async (_url: string | URL | Request, _init?: RequestInit) =>
 				new Response(JSON.stringify({ messageId: "m" }), { status: 201 }),
 		);
-		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		const mailer = createMailer({
+			apiKey: "k",
+			sender,
+			fetch: fetchImpl,
+			allowDryRun: false,
+		});
 		const result = await mailer.sendList(recipients(100), rendered, {
 			tags: ["announcement"],
 		});
@@ -154,7 +175,12 @@ describe("createMailer", () => {
 				new Response(JSON.stringify({ messageId: "ok" }), { status: 201 }),
 			)
 			.mockResolvedValueOnce(new Response("nope", { status: 400 }));
-		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		const mailer = createMailer({
+			apiKey: "k",
+			sender,
+			fetch: fetchImpl,
+			allowDryRun: false,
+		});
 		const result = await mailer.sendList(recipients(100), rendered);
 		expect(result.sent).toBe(99);
 		expect(result.failed).toEqual([
@@ -173,6 +199,7 @@ describe("createMailer", () => {
 			sender,
 			fetch: fetchImpl,
 			log: vi.fn(),
+			allowDryRun: false,
 		});
 		expect(await mailer.unblock("a+b@example.com")).toBe(true);
 		expect(await mailer.unblock("a+b@example.com")).toBe(true);
@@ -189,7 +216,12 @@ describe("createMailer", () => {
 
 	it("sends nothing for an empty list", async () => {
 		const fetchImpl = vi.fn();
-		const mailer = createMailer({ apiKey: "k", sender, fetch: fetchImpl });
+		const mailer = createMailer({
+			apiKey: "k",
+			sender,
+			fetch: fetchImpl,
+			allowDryRun: false,
+		});
 		const result = await mailer.sendList([], rendered);
 		expect(result.attempted).toBe(0);
 		expect(fetchImpl).not.toHaveBeenCalled();

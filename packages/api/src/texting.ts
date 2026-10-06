@@ -9,8 +9,7 @@ import { type SmsKind, smsSend, telnyxEvent } from "@rsvp-site/db/schema/sms";
 import { blockNumber, blockOf } from "@rsvp-site/db/sms-status";
 import { textLinksFor } from "@rsvp-site/db/text-links";
 import { mediaUrl } from "@rsvp-site/email";
-import { siteUrl } from "@rsvp-site/email/worker";
-import { env } from "@rsvp-site/env/server";
+import { env, siteUrl } from "@rsvp-site/env/server";
 import {
 	blockFor,
 	replyText,
@@ -19,6 +18,7 @@ import {
 	type TextFacts,
 	type TextOutcome,
 	testText,
+	textLinkUrl,
 } from "@rsvp-site/sms";
 import { getTexter } from "@rsvp-site/sms/worker";
 import { and, asc, eq, gt, lt } from "drizzle-orm";
@@ -29,10 +29,6 @@ const DAY_MS = 24 * 60 * 60_000;
 
 /** Over this a carrier may refuse a picture text; 600 KB is the safe line. */
 const MMS_MAX_BYTES = 600 * 1024;
-
-function textLinkUrl(code: string): string {
-	return `${siteUrl()}/t/${code}`;
-}
 
 /**
  * Who a text says invited them: the event's host line if the host wrote
@@ -122,7 +118,7 @@ export async function prepareTexts(
 	return {
 		ready: people.flatMap((p) => {
 			const code = codes.get(p.id);
-			return code ? [{ person: p, link: textLinkUrl(code) }] : [];
+			return code ? [{ person: p, link: textLinkUrl(siteUrl(), code) }] : [];
 		}),
 		unlinked: people.filter((p) => !codes.has(p.id)).map((p) => p.id),
 	};
@@ -241,7 +237,7 @@ export async function textSignIn(db: Db, phone: string): Promise<void> {
 	const codes = await textLinksFor(db, people, "/events");
 	const links = people.flatMap((p) => {
 		const code = codes.get(p.id);
-		return code ? [{ name: p.name, link: textLinkUrl(code) }] : [];
+		return code ? [{ name: p.name, link: textLinkUrl(siteUrl(), code) }] : [];
 	});
 	if (links.length === 0) return;
 	const outcome = await getTexter().send({

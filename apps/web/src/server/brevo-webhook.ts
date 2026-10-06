@@ -1,9 +1,10 @@
 import { createDb } from "@rsvp-site/db";
-import type { UnsubscribeReason } from "@rsvp-site/db/schema/auth";
 import { unsubscribe } from "@rsvp-site/db/status";
-import { redactEmail } from "@rsvp-site/email";
+import { dropsFrom, redactEmail } from "@rsvp-site/email";
 import { env } from "@rsvp-site/env/server";
 import { Hono } from "hono";
+
+import { readCapped } from "./body";
 
 /**
  * Brevo transactional webhook. Brevo adds its own List-Unsubscribe header to
@@ -21,16 +22,6 @@ import { Hono } from "hono";
  * the webhook was created with `batched: true`.
  */
 export const brevoWebhook = new Hono();
-
-/** Payload `event` values that mean "stop emailing this address", and why. */
-const DROP_EVENTS = new Map<string, UnsubscribeReason>([
-	["unsubscribed", "self"],
-	["hard_bounce", "bounce"],
-	["spam", "spam"],
-	["invalid_email", "invalid"],
-]);
-
-type BrevoEvent = { event?: string; email?: string; reason?: string };
 
 /** Workers' addition to Web Crypto, missing from the DOM's types. */
 const subtle = crypto.subtle as SubtleCrypto & {
@@ -50,29 +41,27 @@ brevoWebhook.post("/", async (c) => {
 	const auth = c.req.header("authorization") ?? "";
 	if (!sameSecret(auth, `Bearer ${secret}`)) return c.text("Forbidden.", 403);
 
+	const raw = await readCapped(c.req.raw);
+	if (raw === null) return c.text("Too large.", 413);
 	let payload: unknown;
 	try {
-		payload = await c.req.json();
+		payload = JSON.parse(raw);
 	} catch {
 		return c.text("Bad JSON.", 400);
 	}
-	const events = (Array.isArray(payload) ? payload : [payload]).filter(
-		(e): e is BrevoEvent => typeof e === "object" && e !== null,
-	);
+	const { received, drops } = dropsFrom(payload);
 
 	const db = createDb();
 	let dropped = 0;
-	for (const e of events) {
-		const reason = e.event ? DROP_EVENTS.get(e.event) : undefined;
-		if (!e.email || !reason) continue;
+	for (const e of drops) {
 		// Only somebody still subscribed, so a repeat event keeps the first
 		// reason rather than overwriting it.
-		if (await unsubscribe(db, { email: e.email }, reason)) {
+		if (await unsubscribe(db, { email: e.email }, e.reason)) {
 			dropped++;
 			console.log(
 				`brevo webhook: ${e.event} -> unsubscribed ${redactEmail(e.email)}`,
 			);
 		}
 	}
-	return c.json({ received: events.length, dropped });
+	return c.json({ received, dropped });
 });

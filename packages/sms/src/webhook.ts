@@ -167,3 +167,18 @@ export function keywordOf(text: string): "stop" | "start" | "help" | null {
 	if (HELPS.has(word)) return "help";
 	return null;
 }
+
+/**
+ * What the site does with a text somebody sent us. Telnyx sends the
+ * profile's own HELP answer, so that one is nothing for us to do; anything
+ * that isn't a carrier keyword is a person writing, to forward.
+ */
+export function inboundAction(
+	text: string,
+): "block" | "unblock" | "ignore" | "forward" {
+	const keyword = keywordOf(text);
+	if (keyword === "stop") return "block";
+	if (keyword === "start") return "unblock";
+	if (keyword === "help") return "ignore";
+	return "forward";
+}

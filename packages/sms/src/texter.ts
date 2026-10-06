@@ -25,13 +25,14 @@ export type Texter = {
 };
 
 export function createTexter(opts: {
-	apiKey?: string;
+	apiKey?: string | undefined;
 	from: string;
 	allowDryRun: boolean;
 	fetch?: typeof fetch;
 	log?: (line: string) => void;
 }): Texter {
-	const dryRun = !opts.apiKey && opts.allowDryRun;
+	const apiKey = opts.apiKey?.trim();
+	const dryRun = !apiKey && opts.allowDryRun;
 	const log = opts.log ?? ((line: string) => console.log(line));
 
 	async function send(m: OutgoingText): Promise<TextOutcome> {
@@ -47,7 +48,7 @@ export function createTexter(opts: {
 				parts: segments(m.text).parts,
 			};
 		}
-		if (!opts.apiKey) {
+		if (!apiKey) {
 			return {
 				ok: false,
 				status: 0,
@@ -56,7 +57,7 @@ export function createTexter(opts: {
 			};
 		}
 		return postMessage(textRequest({ from: opts.from, ...m }), {
-			apiKey: opts.apiKey,
+			apiKey,
 			fetch: opts.fetch,
 		});
 	}

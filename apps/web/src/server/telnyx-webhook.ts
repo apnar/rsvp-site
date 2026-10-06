@@ -12,12 +12,15 @@ import { blockNumber, unblockNumber } from "@rsvp-site/db/sms-status";
 import { escapeHtml, SENDER } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import {
-	keywordOf,
+	inboundAction,
 	parseTelnyxEvent,
+	redactPhone,
 	verifyTelnyxSignature,
 } from "@rsvp-site/sms";
 import { telnyxPublicKey } from "@rsvp-site/sms/worker";
 import { Hono } from "hono";
+
+import { readCapped } from "./body";
 
 /**
  * Telnyx's messaging webhook: what happened to each text we sent, and the
@@ -35,16 +38,12 @@ import { Hono } from "hono";
  */
 export const telnyxWebhook = new Hono();
 
-/** Enough of a number to tell lines apart in the logs, not to dial it. */
-function redactPhone(phone: string): string {
-	return `...${phone.slice(-4)}`;
-}
-
 telnyxWebhook.post("/", async (c) => {
 	const publicKey = telnyxPublicKey();
 	if (!publicKey) return c.text("Not found.", 404);
 	// The signature covers the bytes as sent, so read them before parsing.
-	const rawBody = await c.req.text();
+	const rawBody = await readCapped(c.req.raw);
+	if (rawBody === null) return c.text("Too large.", 413);
 	const verified = await verifyTelnyxSignature({
 		publicKey,
 		signature: c.req.header("telnyx-signature-ed25519"),
@@ -90,21 +89,21 @@ telnyxWebhook.post("/", async (c) => {
 });
 
 async function received(db: Db, from: string, text: string) {
-	const keyword = keywordOf(text);
-	if (keyword === "stop") {
+	const action = inboundAction(text);
+	if (action === "block") {
 		if (await blockNumber(db, from, "stop")) {
 			console.log(`telnyx webhook: STOP from ${redactPhone(from)}`);
 		}
 		return;
 	}
-	if (keyword === "start") {
+	if (action === "unblock") {
 		if (await unblockNumber(db, from)) {
 			console.log(`telnyx webhook: START from ${redactPhone(from)}`);
 		}
 		return;
 	}
 	// Telnyx sends the profile's HELP answer itself.
-	if (keyword === "help") return;
+	if (action === "ignore") return;
 
 	const people = await peopleByPhone(db, from);
 	await forward(from, text, people);

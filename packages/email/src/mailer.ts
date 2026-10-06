@@ -56,7 +56,7 @@ type MailerOptions = {
 	 * developer's machine. In production a missing key is a mistake, and
 	 * the log it would write holds working sign-in links.
 	 */
-	allowDryRun?: boolean;
+	allowDryRun: boolean;
 	sender: Address;
 	replyTo?: Address;
 	fetch?: typeof fetch;
@@ -76,7 +76,7 @@ function versionsFor(recipients: ListRecipient[]): MessageVersion[] {
 export function createMailer(options: MailerOptions): Mailer {
 	const log = options.log ?? ((line: string) => console.log(line));
 	const apiKey = options.apiKey?.trim();
-	const dryRun = !apiKey && (options.allowDryRun ?? true);
+	const dryRun = !apiKey && options.allowDryRun;
 
 	function base(rendered: Rendered, tags?: string[]): BrevoRequest {
 		return {

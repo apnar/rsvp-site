@@ -13,6 +13,7 @@ import {
 	signInText,
 	type TextFacts,
 	testText,
+	textLinkUrl,
 	updateText,
 } from "./templates";
 
@@ -111,5 +112,13 @@ describe("templates", () => {
 		expect(texts[4]).toContain("(+7 more)");
 		expect(texts[7]).toContain("+27 more");
 		expect(texts[0]).toContain("...");
+	});
+});
+
+describe("textLinkUrl", () => {
+	it("puts the code under /t on the origin", () => {
+		expect(textLinkUrl("https://rsvp.botch.com", "abc123")).toBe(
+			"https://rsvp.botch.com/t/abc123",
+		);
 	});
 });

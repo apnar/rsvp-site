@@ -1,4 +1,4 @@
-import { env } from "@rsvp-site/env/server";
+import { allowDryRun, env } from "@rsvp-site/env/server";
 
 import { createTexter, type Texter } from "./texter";
 
@@ -12,17 +12,8 @@ export function getTexter(): Texter {
 	return createTexter({
 		apiKey: env.TELNYX_API_KEY,
 		from: env.TELNYX_FROM,
-		allowDryRun: isLocal(env.BETTER_AUTH_URL),
+		allowDryRun: allowDryRun(),
 	});
-}
-
-function isLocal(origin: string): boolean {
-	try {
-		const { hostname } = new URL(origin);
-		return hostname === "localhost" || hostname === "127.0.0.1";
-	} catch {
-		return false;
-	}
 }
 
 /** Base64 Ed25519 key Telnyx signs webhooks with; undefined means no webhook. */

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { keywordOf, parseTelnyxEvent, verifyTelnyxSignature } from "./webhook";
+import {
+	inboundAction,
+	keywordOf,
+	parseTelnyxEvent,
+	verifyTelnyxSignature,
+} from "./webhook";
 
 const b64 = (b: ArrayBuffer | Uint8Array) =>
 	btoa(String.fromCharCode(...new Uint8Array(b)));
@@ -191,5 +196,19 @@ describe("keywordOf", () => {
 		for (const w of ["yes", "stop by later", "", "can't stop", "no"]) {
 			expect(keywordOf(w)).toBeNull();
 		}
+	});
+});
+
+describe("inboundAction", () => {
+	it("routes the carrier keywords", () => {
+		expect(inboundAction("STOP")).toBe("block");
+		expect(inboundAction(" stop. ")).toBe("block");
+		expect(inboundAction("Start")).toBe("unblock");
+		expect(inboundAction("help")).toBe("ignore");
+	});
+	it("forwards everything else, including a sentence that starts with one", () => {
+		expect(inboundAction("running late!")).toBe("forward");
+		expect(inboundAction("stop by later")).toBe("forward");
+		expect(inboundAction("")).toBe("forward");
 	});
 });

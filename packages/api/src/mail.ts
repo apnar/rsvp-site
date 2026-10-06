@@ -35,8 +35,9 @@ import {
 	messageEmail,
 	welcomeEmail,
 } from "@rsvp-site/email";
-import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import { partyLabel } from "@rsvp-site/email/party";
+import { getMailer } from "@rsvp-site/email/worker";
+import { siteUrl } from "@rsvp-site/env/server";
 import { hostAlertText, inviteText } from "@rsvp-site/sms";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
