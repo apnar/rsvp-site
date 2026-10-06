@@ -2,10 +2,17 @@ import type { DietId } from "@rsvp-site/db/diets";
 import { formatPhone, normalizePhone } from "@rsvp-site/db/phone";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
-import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
+import {
+	type ComponentProps,
+	type RefObject,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { Field } from "@/components/controls";
 import { DietFields, type DietValue, sameDiet } from "@/components/diet";
+import { Modal } from "@/components/modal";
 
 /** The detail fields a person carries; blank is stored as an empty string. */
 export const DETAIL_KEYS = [
@@ -70,41 +77,53 @@ export function draftOf(p: Record<DetailKey, string | null>) {
  * just keep the form from promising what it would refuse.
  */
 export function PersonDetailsDialog({
-	person,
-	editable,
-	lockedReason,
-	pending,
-	onSave,
-	onSaveEmail,
 	onClose,
-	picture,
-}: {
+	...props
+}: DetailsFormProps & { onClose: () => void }) {
+	const firstRef = useRef<HTMLInputElement>(null);
+	return (
+		<Modal
+			title={`${props.editable ? "Edit" : "Details for"} ${props.person.name}`}
+			onClose={onClose}
+			initialFocus={firstRef}
+			className="w-[min(560px,calc(100%-32px))]"
+		>
+			{(close) => <DetailsForm {...props} firstRef={firstRef} close={close} />}
+		</Modal>
+	);
+}
+
+type DetailsFormProps = {
 	person: DetailsPerson;
 	editable: boolean;
 	lockedReason?: string;
 	pending: boolean;
 	onSave: (patch: DetailsPatch) => Promise<unknown>;
 	onSaveEmail: (email: string) => Promise<unknown>;
-	onClose: () => void;
 	/** Their picture's controls, for the callers allowed them (admins). */
 	picture?: Omit<ComponentProps<typeof AvatarField>, "name" | "mine">;
+};
+
+function DetailsForm({
+	person,
+	editable,
+	lockedReason,
+	pending,
+	onSave,
+	onSaveEmail,
+	picture,
+	firstRef,
+	close,
+}: DetailsFormProps & {
+	firstRef: RefObject<HTMLInputElement | null>;
+	close: () => void;
 }) {
-	const ref = useRef<HTMLDialogElement>(null);
-	const firstRef = useRef<HTMLInputElement>(null);
 	const id = useId();
 	const [draft, setDraft] = useState(() => draftOf(person));
 	const savedDiet: DietValue = { diets: person.diets, note: person.dietNote };
 	const [diet, setDiet] = useState(savedDiet);
 	const [email, setEmail] = useState(person.email);
 	const [busy, setBusy] = useState(false);
-
-	// A native dialog gives the focus trap, Esc and inert background; it only
-	// has to be opened once mounted.
-	useEffect(() => {
-		const dialog = ref.current;
-		if (dialog && !dialog.open) dialog.showModal();
-		firstRef.current?.focus();
-	}, []);
 
 	// Diet fields go in the patch only when changed: saving either one stamps
 	// the person's diet as confirmed, which an untouched form must not do.
@@ -131,7 +150,7 @@ export function PersonDetailsDialog({
 			if (emailChanged && email.trim()) await onSaveEmail(email.trim());
 			// Closing the dialog (not unmounting it) hands focus back to
 			// whatever opened it; its close handler tells the parent.
-			ref.current?.close();
+			close();
 		} catch {
 			// The query client has already toasted why; stay open to fix it.
 		} finally {
@@ -140,108 +159,94 @@ export function PersonDetailsDialog({
 	}
 
 	return (
-		<dialog
-			ref={ref}
-			aria-labelledby={`${id}-title`}
-			onClose={onClose}
-			className="m-auto max-h-[calc(100dvh-32px)] w-[min(560px,calc(100%-32px))] overflow-hidden rounded-[26px] border border-line bg-panel p-0 text-ink backdrop:bg-night/80"
+		<form
+			className="flex flex-col gap-4"
+			onSubmit={(e) => {
+				e.preventDefault();
+				if (editable && dirty) void submit();
+			}}
 		>
-			<form
-				className="flex max-h-[calc(100dvh-32px)] flex-col gap-4 overflow-y-auto p-6"
-				onSubmit={(e) => {
-					e.preventDefault();
-					if (editable && dirty) void submit();
-				}}
-			>
-				<h2 id={`${id}-title`} className="m-0 text-[20px]">
-					{editable ? "Edit" : "Details for"} {person.name}
-				</h2>
-				{editable ? null : (
-					<p className="m-0 text-[14px] text-haze">
-						{lockedReason ?? "These aren't yours to change."}
-					</p>
-				)}
-				{picture ? (
-					<AvatarField {...picture} name={person.name} mine={false} />
-				) : null}
-				<div className="grid grid-cols-2 gap-3">
-					<Field label="First name" htmlFor={`${id}-firstName`}>
-						<Input
-							{...set("firstName")}
-							ref={firstRef}
-							maxLength={60}
-							autoComplete="off"
-						/>
-					</Field>
-					<Field label="Last name" htmlFor={`${id}-lastName`}>
-						<Input {...set("lastName")} maxLength={60} autoComplete="off" />
-					</Field>
-				</div>
-				<Field label="Email" htmlFor={`${id}-email`}>
+			{editable ? null : (
+				<p className="m-0 text-[14px] text-haze">
+					{lockedReason ?? "These aren't yours to change."}
+				</p>
+			)}
+			{picture ? (
+				<AvatarField {...picture} name={person.name} mine={false} />
+			) : null}
+			<div className="grid grid-cols-2 gap-3">
+				<Field label="First name" htmlFor={`${id}-firstName`}>
 					<Input
-						id={`${id}-email`}
-						type="email"
-						value={email}
-						readOnly={!editable}
-						placeholder={person.noEmail ? "No email yet" : undefined}
-						onChange={(e) => setEmail(e.target.value)}
+						{...set("firstName")}
+						ref={firstRef}
+						maxLength={60}
 						autoComplete="off"
 					/>
 				</Field>
-				<Field label="Mobile phone" htmlFor={`${id}-phone`}>
-					<Input {...set("phone")} type="tel" autoComplete="off" />
+				<Field label="Last name" htmlFor={`${id}-lastName`}>
+					<Input {...set("lastName")} maxLength={60} autoComplete="off" />
 				</Field>
-				<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-					<legend className="mb-2 p-0 font-bold text-[14px]">
-						Mailing address
-					</legend>
-					<Field label="Street address" htmlFor={`${id}-addressLine1`}>
-						<Input {...set("addressLine1")} autoComplete="off" />
+			</div>
+			<Field label="Email" htmlFor={`${id}-email`}>
+				<Input
+					id={`${id}-email`}
+					type="email"
+					value={email}
+					readOnly={!editable}
+					placeholder={person.noEmail ? "No email yet" : undefined}
+					onChange={(e) => setEmail(e.target.value)}
+					autoComplete="off"
+				/>
+			</Field>
+			<Field label="Mobile phone" htmlFor={`${id}-phone`}>
+				<Input {...set("phone")} type="tel" autoComplete="off" />
+			</Field>
+			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+				<legend className="mb-2 p-0 font-bold text-[14px]">
+					Mailing address
+				</legend>
+				<Field label="Street address" htmlFor={`${id}-addressLine1`}>
+					<Input {...set("addressLine1")} autoComplete="off" />
+				</Field>
+				<Field label="Apt / suite" htmlFor={`${id}-addressLine2`}>
+					<Input {...set("addressLine2")} autoComplete="off" />
+				</Field>
+				<div className="grid grid-cols-2 gap-3">
+					<Field label="City" htmlFor={`${id}-city`}>
+						<Input {...set("city")} autoComplete="off" />
 					</Field>
-					<Field label="Apt / suite" htmlFor={`${id}-addressLine2`}>
-						<Input {...set("addressLine2")} autoComplete="off" />
+					<Field label="State / region" htmlFor={`${id}-region`}>
+						<Input {...set("region")} autoComplete="off" />
 					</Field>
-					<div className="grid grid-cols-2 gap-3">
-						<Field label="City" htmlFor={`${id}-city`}>
-							<Input {...set("city")} autoComplete="off" />
-						</Field>
-						<Field label="State / region" htmlFor={`${id}-region`}>
-							<Input {...set("region")} autoComplete="off" />
-						</Field>
-						<Field label="ZIP / postal code" htmlFor={`${id}-postalCode`}>
-							<Input {...set("postalCode")} autoComplete="off" />
-						</Field>
-						<Field label="Country" htmlFor={`${id}-country`}>
-							<Input {...set("country")} autoComplete="off" />
-						</Field>
-					</div>
-				</fieldset>
-				<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-					<legend className="mb-2 p-0 font-bold text-[14px]">
-						Dietary needs
-					</legend>
-					<DietFields
-						value={diet}
-						onChange={setDiet}
-						idPrefix={id}
-						disabled={!editable}
-					/>
-				</fieldset>
-				<div className="flex flex-wrap justify-end gap-2">
-					<Button
-						type="button"
-						variant="ghost"
-						onClick={() => ref.current?.close()}
-					>
-						{editable ? "Cancel" : "Close"}
-					</Button>
-					{editable ? (
-						<Button type="submit" disabled={!dirty || busy || pending}>
-							Save
-						</Button>
-					) : null}
+					<Field label="ZIP / postal code" htmlFor={`${id}-postalCode`}>
+						<Input {...set("postalCode")} autoComplete="off" />
+					</Field>
+					<Field label="Country" htmlFor={`${id}-country`}>
+						<Input {...set("country")} autoComplete="off" />
+					</Field>
 				</div>
-			</form>
-		</dialog>
+			</fieldset>
+			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+				<legend className="mb-2 p-0 font-bold text-[14px]">
+					Dietary needs
+				</legend>
+				<DietFields
+					value={diet}
+					onChange={setDiet}
+					idPrefix={id}
+					disabled={!editable}
+				/>
+			</fieldset>
+			<div className="flex flex-wrap justify-end gap-2">
+				<Button type="button" variant="ghost" onClick={close}>
+					{editable ? "Cancel" : "Close"}
+				</Button>
+				{editable ? (
+					<Button type="submit" disabled={!dirty || busy || pending}>
+						Save
+					</Button>
+				) : null}
+			</div>
+		</form>
 	);
 }

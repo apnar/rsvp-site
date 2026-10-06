@@ -392,17 +392,19 @@ function DeletePerson({ person }: { person: Person }) {
 			onSuccess: () => toast.success(`${person.name} is deleted.`),
 		}),
 	);
-	if (!open) {
-		return (
-			<Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
-				Delete
-			</Button>
-		);
-	}
 	const p = plan.data;
 	return (
-		<div className="flex basis-full flex-col gap-2.5 rounded-[20px] border border-destructive/50 p-4 text-[14px]">
-			<b>Delete {person.name} for good?</b>
+		<ConfirmAction
+			trigger={{ variant: "ghost", size: "sm", children: "Delete" }}
+			title={`Delete ${person.name} for good?`}
+			confirm="Delete them"
+			cancel="Keep"
+			boxClassName="flex basis-full flex-col gap-2.5 rounded-[20px] border border-destructive/50 p-4 text-[14px]"
+			confirmDisabled={!p || p.blocking.length > 0}
+			pending={remove.isPending}
+			onOpenChange={setOpen}
+			onConfirm={() => remove.mutate({ userId: person.id })}
+		>
 			<span className="text-soft">
 				Their invitations, answers, family and address-book entries go too.
 				Deactivating keeps all that and only shuts them out.
@@ -435,19 +437,6 @@ function DeletePerson({ person }: { person: Person }) {
 			) : (
 				<span className="text-haze">Checking their events…</span>
 			)}
-			<span className="flex gap-1.5">
-				<Button
-					variant="destructive"
-					size="sm"
-					disabled={!p || p.blocking.length > 0 || remove.isPending}
-					onClick={() => remove.mutate({ userId: person.id })}
-				>
-					Delete them
-				</Button>
-				<Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-					Keep
-				</Button>
-			</span>
-		</div>
+		</ConfirmAction>
 	);
 }

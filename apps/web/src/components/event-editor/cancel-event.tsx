@@ -1,10 +1,10 @@
-import { Button } from "@rsvp-site/ui/components/button";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { ConfirmAction } from "@/components/confirm-action";
 import { Field, Switch } from "@/components/controls";
 import { plural } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
@@ -29,35 +29,26 @@ export function CallOff({
 	pending: boolean;
 	onConfirm: (input: { note: string; notify: boolean }) => void;
 }) {
-	const [open, setOpen] = useState(false);
 	const [note, setNote] = useState("");
 	const [notify, setNotify] = useState(true);
-	const triggerRef = useRef<HTMLButtonElement>(null);
 	const noteRef = useRef<HTMLTextAreaElement>(null);
-	const wasOpen = useRef(false);
-	// Focus follows the swap, as in ConfirmAction: a keyboard user is never
-	// left on a button that has just vanished.
-	useEffect(() => {
-		if (open) noteRef.current?.focus();
-		else if (wasOpen.current) triggerRef.current?.focus();
-		wasOpen.current = open;
-	}, [open]);
-	if (!open) {
-		return (
-			<Button
-				ref={triggerRef}
-				variant="destructive"
-				className="mr-auto"
-				onClick={() => setOpen(true)}
-			>
-				{label}
-			</Button>
-		);
-	}
 	const noteId = `${label.replaceAll(" ", "-").toLowerCase()}-note`;
 	return (
-		<div className="flex basis-full flex-col gap-3 rounded-[20px] border border-destructive/50 p-4">
-			<b>{question}</b>
+		<ConfirmAction
+			trigger={{
+				variant: "destructive",
+				className: "mr-auto",
+				children: label,
+			}}
+			title={question}
+			confirm={confirm}
+			cancel="Never mind"
+			size="default"
+			pending={pending}
+			focusRef={noteRef}
+			className="flex gap-2"
+			onConfirm={() => onConfirm({ note, notify })}
+		>
 			<Field label="A note for your guests (optional)" htmlFor={noteId}>
 				<Textarea
 					ref={noteRef}
@@ -75,19 +66,7 @@ export function CallOff({
 				/>
 				Email the {plural(stillComing, "guest")} who haven't said no
 			</div>
-			<div className="flex gap-2">
-				<Button
-					variant="destructive"
-					disabled={pending}
-					onClick={() => onConfirm({ note, notify })}
-				>
-					{confirm}
-				</Button>
-				<Button variant="ghost" onClick={() => setOpen(false)}>
-					Never mind
-				</Button>
-			</div>
-		</div>
+		</ConfirmAction>
 	);
 }
 
