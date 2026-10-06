@@ -19,7 +19,7 @@ export const PLACEHOLDERS = [
 	"last name",
 ] as const;
 
-export type Placeholder = (typeof PLACEHOLDERS)[number];
+type Placeholder = (typeof PLACEHOLDERS)[number];
 
 export type Values = {
 	title: string;

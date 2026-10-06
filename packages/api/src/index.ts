@@ -19,12 +19,12 @@ const requireAuth = o.middleware(async ({ context, next }) => {
 	});
 });
 
-export const protectedProcedure = publicProcedure.use(requireAuth);
+const protectedProcedure = publicProcedure.use(requireAuth);
 
 /**
- * The caller as D1 has them now. The session cookie caches the user for
- * five minutes, so a demoted host would otherwise keep hosting that long;
- * anything that grants power reads the row instead.
+ * The caller as D1 has them now. The session carries the user as of
+ * sign-in, so a demoted host would otherwise keep hosting until they
+ * signed in again; anything that grants power reads the row instead.
  */
 const withPerson = protectedProcedure.use(async ({ context, next }) => {
 	const me = await findPerson(context.db, context.session.user.id);

@@ -22,7 +22,7 @@ import { withHostEvent } from "../../host-event";
 import { hostProcedure } from "../../index";
 import { idInput, idSchema } from "../../inputs";
 
-export const paperRouter = {
+export const hostPaperRouter = {
 	/**
 	 * Everything the host's browser needs to print paper invitations: the
 	 * event, and a QR key per guest, issued on first print and kept after, so

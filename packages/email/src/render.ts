@@ -42,7 +42,7 @@ export const PARAM = {
  * there. email() applies this to everything except the links the
  * templates build, which are the only place a placeholder belongs.
  */
-export function defuse(value: string): string {
+function defuse(value: string): string {
 	return value.replaceAll("{", "{\u200b");
 }
 
@@ -86,7 +86,7 @@ export const SITE_LABEL = "Botch RSVP";
  * and replace styles in finished HTML (which would also hit a colour a
  * guest typed into a note).
  */
-export type Palette = {
+type Palette = {
 	ground: string;
 	text: string;
 	/** The header band when there is no card picture. */
@@ -216,7 +216,7 @@ function factsTable(facts: Fact[], pal: Palette = AFTER_DARK): string {
 	return `<table role="presentation" style="${styles.facts}">${rows}</table>`;
 }
 
-export type ButtonTone = "lime" | "pink" | "outline";
+type ButtonTone = "lime" | "pink" | "outline";
 
 function buttonLink(
 	label: string,

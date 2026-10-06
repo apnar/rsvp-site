@@ -5,8 +5,7 @@
  */
 
 export const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
-export const BREVO_BLOCKED_CONTACTS =
-	"https://api.brevo.com/v3/smtp/blockedContacts";
+const BREVO_BLOCKED_CONTACTS = "https://api.brevo.com/v3/smtp/blockedContacts";
 
 /** Brevo caps `messageVersions` at 99 per call (2000 recipients overall). */
 export const MAX_VERSIONS_PER_CALL = 99;

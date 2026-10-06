@@ -24,7 +24,7 @@ export function invitesLeft(limit: number, used: number): number {
 	return Math.max(0, Math.trunc(limit) - used);
 }
 
-export type InviteRefusal = {
+type InviteRefusal = {
 	code: "FORBIDDEN" | "BAD_REQUEST";
 	message: string;
 };

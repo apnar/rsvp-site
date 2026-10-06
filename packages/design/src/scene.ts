@@ -40,7 +40,7 @@ type Common = {
 	dynamic: boolean;
 };
 
-export type ImagePlacement = {
+type ImagePlacement = {
 	ref: string;
 	/** The whole image, in the box's own coordinates (it overhangs). */
 	img: { x: number; y: number; w: number; h: number };
@@ -121,7 +121,7 @@ export type Scene = {
 	nodes: SceneNode[];
 };
 
-export type SceneOptions = {
+type SceneOptions = {
 	values: Values;
 	mode: Mode;
 	faces: Faces;

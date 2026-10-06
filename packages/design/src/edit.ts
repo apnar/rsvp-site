@@ -37,7 +37,7 @@ export function turnAbout(p: Point, about: Point, deg: number): Point {
 	return { x: about.x + t.x, y: about.y + t.y };
 }
 
-export function centerOf(b: Box): Point {
+function centerOf(b: Box): Point {
 	return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
 }
 
@@ -72,7 +72,7 @@ export function bounds(b: Box): { x: number; y: number; w: number; h: number } {
 	return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
-export const MIN_SIZE = 8;
+const MIN_SIZE = 8;
 
 /**
  * Drag a handle to `p`. The opposite edge or corner stays where it is on

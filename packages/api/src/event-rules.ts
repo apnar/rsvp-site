@@ -28,12 +28,7 @@ export function openRefusal(
 }
 
 /** Fields a guest would want to hear changed. Details and notes are not. */
-export const NOTIFY_FIELDS = [
-	"date",
-	"startTime",
-	"endTime",
-	"location",
-] as const;
+const NOTIFY_FIELDS = ["date", "startTime", "endTime", "location"] as const;
 
 type Notify = Pick<EventRow, (typeof NOTIFY_FIELDS)[number]>;
 

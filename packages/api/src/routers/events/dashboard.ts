@@ -19,8 +19,8 @@ import { accessTo, byDate, cardsFor, cleanTheme } from "../../events";
 import { deciding, openSlots } from "../../headcount";
 import { hostProcedure, personProcedure } from "../../index";
 import { idInput } from "../../inputs";
+import { invitePayload } from "../../invite-payload";
 import { todayOnSite } from "../../time";
-import { invitePayload } from "./invite-payload";
 
 /**
  * Every event column by name, so a join can select them flat. Read off the

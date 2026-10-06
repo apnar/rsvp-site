@@ -1,7 +1,7 @@
 import type { Rendered } from "../brevo";
 import { email, SITE_LABEL } from "../render";
 
-export type ConfirmEmailInput = { url: string };
+type ConfirmEmailInput = { url: string };
 
 /**
  * Somebody answering an invitation gave this address. It would become

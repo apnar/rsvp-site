@@ -5,7 +5,7 @@
  * ours ("rsvpd-..."), never a string a host typed, so it can go into CSS.
  */
 
-export type FontCategory = "sans" | "serif" | "display" | "script" | "hand";
+type FontCategory = "sans" | "serif" | "display" | "script" | "hand";
 
 export type FontInfo = {
 	label: string;

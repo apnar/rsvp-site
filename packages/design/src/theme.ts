@@ -12,7 +12,7 @@ const DARK = "#14101f";
 const WHITE = "#ffffff";
 
 /** WCAG relative luminance. */
-export function luminance(hex: string): number {
+function luminance(hex: string): number {
 	const [r, g, b] = rgb(hex).map((v) => {
 		const c = v / 255;
 		return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -100,7 +100,7 @@ export const AFTER_DARK_THEME: DesignTheme = {
 };
 
 /** What packages/email's EmailLook needs (that package stays independent). */
-export type DesignEmailLook = {
+type DesignEmailLook = {
 	cardUrl: string | null;
 	cardAlt: string;
 	band: string;

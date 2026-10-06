@@ -2,13 +2,13 @@ import type { Db } from "@rsvp-site/db";
 import { inChunks, mapChunks } from "@rsvp-site/db/batch";
 import { logError } from "@rsvp-site/db/errors";
 import {
-	countRecipients,
 	listRecipients,
 	listTextable,
 	markLinkSent,
 	type Recipient,
 	type TextRecipient,
 } from "@rsvp-site/db/people";
+import { isMailable, isTextable } from "@rsvp-site/db/reach";
 import { NO_EMAIL_DOMAIN, user } from "@rsvp-site/db/schema/auth";
 import {
 	type EmailAudience,
@@ -16,7 +16,7 @@ import {
 	emailSend,
 } from "@rsvp-site/db/schema/email";
 import { eventGuest } from "@rsvp-site/db/schema/event";
-import type { SmsKind } from "@rsvp-site/db/schema/sms";
+import { type SmsKind, smsBlock } from "@rsvp-site/db/schema/sms";
 import { ensureLinkToken, ensureUnsubscribeToken } from "@rsvp-site/db/tokens";
 import { emailLook } from "@rsvp-site/design/theme";
 import type {
@@ -37,17 +37,11 @@ import {
 } from "@rsvp-site/email";
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
 import { hostAlertText, inviteText } from "@rsvp-site/sms";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { answersOf } from "./answer-words";
 import { channelsFor, type Purpose, type Via, viaOf } from "./channels";
-import {
-	type EventRow,
-	guestCountsOf,
-	guestsOf,
-	hostIdsOf,
-	labelsOf,
-} from "./events";
+import { type EventRow, guestCountsOf, hostIdsOf, labelsOf } from "./events";
 import { type GuestCounts, headcount, tally } from "./headcount";
 import {
 	hostNameOf,
@@ -68,7 +62,7 @@ export function hostTotals(guests: readonly GuestCounts[]) {
 /** Sends that go to an event's hosts rather than its guests. */
 const HOST_KINDS = new Set<EmailKind>(["host_alert", "host_digest"]);
 
-export type ListSendResult = ListResult & { sendId: string };
+type ListSendResult = ListResult & { sendId: string };
 
 export function unsubscribeUrl(token: string): string {
 	return `${siteUrl()}/api/unsubscribe/${token}`;
@@ -120,37 +114,23 @@ export function renderMessage(input: {
 	return messageEmail({ ...input, siteUrl: siteUrl() });
 }
 
-/** How many people a message to everyone would reach right now. */
-export async function countEveryone(db: Db): Promise<number> {
-	return countRecipients(db);
-}
-
 /**
- * Send one rendered email to everybody, or to a subset by id, and record the
- * outcome in `email_send`. Returns null when nobody would receive it.
- * Nobody deactivated or unsubscribed is ever in the list, whatever ids are
- * asked for -- `listRecipients` will not return them.
+ * The admin's broadcast: one rendered email to everybody, recorded in
+ * `email_send`. Returns null when nobody would receive it. Nobody
+ * deactivated or unsubscribed is ever in the list --
+ * `listRecipients` will not return them.
  */
 export async function sendToList(
 	db: Db,
 	opts: {
 		kind: EmailKind;
-		eventId?: string | null;
 		rendered: Rendered;
 		sentBy?: string | null;
-		onlyPersonIds?: readonly string[];
 	},
 ): Promise<ListSendResult | null> {
-	const people = await listRecipients(db, opts.onlyPersonIds);
+	const people = await listRecipients(db);
 	if (people.length === 0) return null;
-	return sendEmails(db, people, {
-		...opts,
-		audience: HOST_KINDS.has(opts.kind)
-			? "hosts"
-			: opts.onlyPersonIds
-				? "guests"
-				: "everyone",
-	});
+	return sendEmails(db, people, { ...opts, audience: "everyone" });
 }
 
 /** One list send to people `listRecipients` returned, logged in `email_send`. */
@@ -198,7 +178,7 @@ async function sendEmails(
 }
 
 /** What an event send did, person by person rather than address by address. */
-export type Delivery = {
+type Delivery = {
 	/** People it went to by at least one channel. */
 	attempted: number;
 	/** Of those, the people at least one channel reached. */
@@ -346,7 +326,7 @@ export async function notice(
 	}
 }
 
-export type InviteOutcome = { sent: number; failed: number; skipped: number };
+type InviteOutcome = { sent: number; failed: number; skipped: number };
 
 /**
  * Send the invitation to everybody on the list who has not had it yet.
@@ -373,14 +353,36 @@ export async function sendInvites(
 	} = {},
 ): Promise<InviteOutcome> {
 	const only = opts.onlyGuestIds ? new Set(opts.onlyGuestIds) : null;
-	const guests = (await guestsOf(db, row.id)).filter(
+	// Only the unstamped rows and what decides whether anything can reach
+	// them: the whole guest list, with its joins, is not needed to find ids.
+	const unstamped = (
+		await db
+			.select({
+				id: eventGuest.id,
+				response: eventGuest.response,
+				status: user.status,
+				banned: user.banned,
+				unsubscribedAt: user.unsubscribedAt,
+				noEmail: user.noEmail,
+				phone: user.phone,
+				textsOkAt: user.textsOkAt,
+				textsOffAt: user.textsOffAt,
+				textBlock: smsBlock.reason,
+			})
+			.from(eventGuest)
+			.innerJoin(user, eq(user.id, eventGuest.userId))
+			.leftJoin(smsBlock, eq(smsBlock.phone, user.phone))
+			.where(and(eq(eventGuest.eventId, row.id), isNull(eventGuest.invitedAt)))
+			.orderBy(asc(eventGuest.createdAt))
+			.all()
+	).filter(
 		(g) =>
 			(!only || only.has(g.id)) && !(opts.skipAnswered && g.response !== null),
 	);
-	const pending = guests.filter((g) => g.invitedAt === null && !g.unreachable);
-	const skipped = guests.filter(
-		(g) => g.invitedAt === null && g.unreachable,
-	).length;
+	const reachable = (g: (typeof unstamped)[number]) =>
+		isMailable(g) || isTextable(g);
+	const pending = unstamped.filter(reachable);
+	const skipped = unstamped.length - pending.length;
 	if (pending.length === 0) return { sent: 0, failed: 0, skipped };
 
 	const now = new Date();
@@ -509,11 +511,13 @@ export async function alertHosts(
 ): Promise<void> {
 	if (row.hostAlerts !== "each") return;
 	try {
-		const hostIds = (await hostIdsOf(db, row.id)).filter(
-			(id) => id !== replierId,
-		);
+		const [allHostIds, counts] = await Promise.all([
+			hostIdsOf(db, row.id),
+			guestCountsOf(db, row.id),
+		]);
+		const hostIds = allHostIds.filter((id) => id !== replierId);
 		if (hostIds.length === 0) return;
-		const totals = hostTotals(await guestCountsOf(db, row.id));
+		const totals = hostTotals(counts);
 		const words = answersOf(row).words;
 		const lines = [
 			...(reply.self === false ? [] : [reply]),

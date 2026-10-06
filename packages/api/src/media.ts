@@ -12,7 +12,7 @@ import { type ImageType, sniffImage } from "./image-type";
 /** The Worker's bindings, as a procedure's context carries them. */
 export type Env = Context["env"];
 
-export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 const IMAGE_EXT: Record<ImageType, string> = {
 	"image/jpeg": "jpg",
 	"image/png": "png",

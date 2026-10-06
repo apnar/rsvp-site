@@ -30,7 +30,7 @@ const DAY_MS = 24 * 60 * 60_000;
 /** Over this a carrier may refuse a picture text; 600 KB is the safe line. */
 const MMS_MAX_BYTES = 600 * 1024;
 
-export function textLinkUrl(code: string): string {
+function textLinkUrl(code: string): string {
 	return `${siteUrl()}/t/${code}`;
 }
 
@@ -87,14 +87,14 @@ export async function mmsUrlOf(
 	return head && head.size <= MMS_MAX_BYTES ? mediaUrl(siteUrl(), full) : null;
 }
 
-export type TextJob = {
+type TextJob = {
 	kind: SmsKind;
 	eventId: string | null;
 	mediaUrl?: string | null;
 	body: (link: string, person: TextRecipient) => string;
 };
 
-export type TextResult = {
+type TextResult = {
 	attempted: number;
 	sent: number;
 	/** People whose text Telnyx refused (or that failed to leave). */
@@ -102,7 +102,7 @@ export type TextResult = {
 };
 
 /** People with their own `/t/` link, ready to text; `unlinked` got none. */
-export type PreparedTexts = {
+type PreparedTexts = {
 	ready: { person: TextRecipient; link: string }[];
 	unlinked: string[];
 };
@@ -174,7 +174,7 @@ export async function sendPrepared(
  * have left, and the callers would give their claims back and text
  * everybody again.
  */
-export async function recordTexts(
+async function recordTexts(
 	db: Db,
 	sent: { userId: string | null; phone: string; outcome?: TextOutcome }[],
 	job: Pick<TextJob, "kind" | "eventId" | "mediaUrl">,

@@ -29,7 +29,7 @@ export const contactInput = z.object({
 	email: emailSchema.optional(),
 });
 
-export type ContactInput = z.infer<typeof contactInput>;
+type ContactInput = z.infer<typeof contactInput>;
 
 /**
  * Fill the blanks a guest was asked about. A number is written at once.
@@ -115,7 +115,7 @@ export async function fillContact(
 }
 
 /** Where a confirmation link stands, for the page it opens. */
-export type ClaimState = "ready" | "done" | "expired" | "invalid";
+type ClaimState = "ready" | "done" | "expired" | "invalid";
 
 /**
  * What the link's page shows. A read: mail scanners open links, so the

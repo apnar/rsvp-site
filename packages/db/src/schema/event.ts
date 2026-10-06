@@ -224,7 +224,6 @@ export type GuestSource = (typeof GUEST_SOURCES)[number];
 
 /** The channels an invitation went by; the same words as CONTACT_CHANNELS. */
 export const INVITE_CHANNELS = ["email", "text", "both"] as const;
-export type InviteChannel = (typeof INVITE_CHANNELS)[number];
 
 /**
  * How a guest came to their invitation when they first opened it and when

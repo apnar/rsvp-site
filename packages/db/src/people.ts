@@ -258,7 +258,7 @@ export async function markLinkSent(db: Db, id: string): Promise<void> {
 	await db.update(user).set({ linkSentAt: new Date() }).where(eq(user.id, id));
 }
 
-export type FoundPerson = Awaited<ReturnType<typeof selectByEmail>>[number] & {
+type FoundPerson = Awaited<ReturnType<typeof selectByEmail>>[number] & {
 	created: boolean;
 };
 

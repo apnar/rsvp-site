@@ -14,7 +14,7 @@ import { z } from "zod";
  * in!" can't follow a number, so neither form is derived from the other.
  * `none` is a guest who hasn't answered: "No reply", "14 waiting".
  */
-export type Word = { pick: string; count: string };
+type Word = { pick: string; count: string };
 
 export type AnswerWords = {
 	yes: Word;
@@ -35,8 +35,6 @@ export const DEFAULT_WORDS: AnswerWords = {
 	none: { pick: "No reply", count: "waiting" },
 	submit: "Lock it in",
 };
-
-export const DEFAULT_ANSWERS: AnswerSet = { words: DEFAULT_WORDS, maybe: true };
 
 /**
  * The ready-made sets the editor offers, for the three answers. Picking one
@@ -162,7 +160,7 @@ export function toStored(words: AnswerWords): AnswerWords | null {
 	return sameWords(words, DEFAULT_WORDS) ? null : words;
 }
 
-export function sameWords(a: AnswerWords, b: AnswerWords): boolean {
+function sameWords(a: AnswerWords, b: AnswerWords): boolean {
 	return (
 		a.submit === b.submit &&
 		KEYS.every((k) => a[k].pick === b[k].pick && a[k].count === b[k].count)

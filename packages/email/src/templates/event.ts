@@ -53,7 +53,7 @@ export type EventFacts = {
  * after a number. `none` is no reply.
  */
 type Words = Record<RsvpAnswer | "none", { pick: string; count: string }>;
-export type EmailAnswers = { words: Words; maybe: boolean };
+type EmailAnswers = { words: Words; maybe: boolean };
 
 /** The one-tap button wording: the word, with a cheer on the plain yes. */
 const answerLabel = (w: Words, a: RsvpAnswer) =>
@@ -73,7 +73,7 @@ function answerButtons(facts: EventFacts): Block {
 }
 
 /** "Sat, Oct 24, 5:00 PM - 10:00 PM", or whichever part exists. */
-export function whenLine(facts: EventFacts): string | null {
+function whenLine(facts: EventFacts): string | null {
 	const parts = [facts.dateLabel, facts.timeLabel].filter(Boolean);
 	return parts.length > 0 ? parts.join(", ") : null;
 }
@@ -246,7 +246,7 @@ export function cancelEmail(facts: EventFacts, note: string): Rendered {
 	});
 }
 
-export type ReplyLine = {
+type ReplyLine = {
 	name: string;
 	response: RsvpAnswer;
 	adults: number;
@@ -257,10 +257,7 @@ export type ReplyLine = {
 };
 
 /** A relative somebody answered for, in the same go as their own answer. */
-export type RelativeLine = Pick<
-	ReplyLine,
-	"name" | "response" | "adults" | "kids"
->;
+type RelativeLine = Pick<ReplyLine, "name" | "response" | "adults" | "kids">;
 
 /**
  * One submit's worth of answers: the guest's own (`self` false when only

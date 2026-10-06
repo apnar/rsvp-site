@@ -17,9 +17,9 @@ import type { EventStatus, HostAlerts } from "@rsvp-site/db/schema/event";
 import { addDays, siteInstant, todayOnSite } from "./time";
 
 /** Reminders go out mid-morning, when people read mail and can still plan. */
-export const REMINDER_TIME = "10:00";
+const REMINDER_TIME = "10:00";
 /** The host digest covers the day before and lands with the coffee. */
-export const DIGEST_TIME = "08:00";
+const DIGEST_TIME = "08:00";
 
 export type ScheduleEvent = {
 	status: EventStatus;
@@ -39,7 +39,7 @@ export type ScheduleEvent = {
 	digestAt: Date | null;
 };
 
-export type DueKind = "deadline_reminder" | "day_before" | "host_digest";
+type DueKind = "deadline_reminder" | "day_before" | "host_digest";
 
 export type Due =
 	| {

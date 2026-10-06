@@ -1,9 +1,9 @@
-export const TELNYX_MESSAGES = "https://api.telnyx.com/v2/messages";
+const TELNYX_MESSAGES = "https://api.telnyx.com/v2/messages";
 
 const TIMEOUT_MS = 15_000;
 const RETRY_DELAY_MS = 500;
 
-export type TextRequest = {
+type TextRequest = {
 	from: string;
 	to: string;
 	text: string;

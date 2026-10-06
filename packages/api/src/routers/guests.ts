@@ -49,7 +49,10 @@ export const guestsRouter = {
 		.handler(async ({ context }) => {
 			const row = context.event;
 			const [guests, potluck, designFormat] = await Promise.all([
-				guestsOf(context.db, row.id, { diets: row.askDietary }),
+				guestsOf(context.db, row.id, {
+					diets: row.askDietary,
+					texts: true,
+				}),
 				potluckOf(context.db, row.id),
 				designFormatOf(context.db, row),
 			]);
@@ -422,7 +425,7 @@ export const guestsRouter = {
 				});
 			}
 			const id = crypto.randomUUID();
-			// Plain names, not drizzle columns: see the potluck claim above. The
+			// Plain names, not drizzle columns: see the potluck claim in `answers.ts`. The
 			// counter moves only if the friend's row went in, and D1 runs a
 			// batch as one transaction, so the two cannot come apart.
 			const [inserted] = await rawBatch(context.db.$client, [

@@ -38,7 +38,7 @@ async function textingOf(db: Db, me: Person) {
  * the way most people get in, and they keep working either way.
  */
 export const accountRouter = {
-	/** Who the caller is, from D1 rather than the five-minute session cache. */
+	/** Who the caller is, from D1 rather than the session, which has them as of sign-in. */
 	me: personProcedure.handler(async ({ context }) => {
 		const me = context.me;
 		return {

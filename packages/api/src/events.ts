@@ -58,7 +58,7 @@ import { type GuestCounts, potluckLines, tally } from "./headcount";
 import { formatDate, formatTimeRange } from "./time";
 
 /** A row as D1 hands it over: the theme is unchecked JSON. */
-export type RawEventRow = typeof event.$inferSelect;
+type RawEventRow = typeof event.$inferSelect;
 /**
  * An event as the rest of the API sees it. The theme reaches a raw <style>
  * and email HTML, so it only exists here once `cleanTheme` has parsed it:
@@ -250,13 +250,19 @@ const answerer = alias(user, "answerer");
  * Diets (the person's own, and `partyDiet` for the rest of their party)
  * come blank unless `opts.diets`: callers pass the event's `askDietary`,
  * so a host who didn't ask isn't handed their guests' allergies.
+ * `lastText` is null unless `opts.texts`.
  */
 export async function guestsOf(
 	db: Db,
 	eventId: string,
-	opts: { diets: boolean } = { diets: false },
+	opts: { diets?: boolean; texts?: boolean } = {},
 ) {
-	const rows = await db
+	// Beside the main read, and only when asked: it scans every text sent
+	// about the event, which only the host's guest list shows.
+	const textsRead = opts.texts
+		? lastTexts(db, eventId)
+		: Promise.resolve(NO_TEXTS);
+	const rowsRead = db
 		.select({
 			id: eventGuest.id,
 			userId: eventGuest.userId,
@@ -305,7 +311,7 @@ export async function guestsOf(
 		.where(eq(eventGuest.eventId, eventId))
 		.orderBy(asc(eventGuest.createdAt))
 		.all();
-	const texts = await lastTexts(db, eventId);
+	const [rows, texts] = await Promise.all([rowsRead, textsRead]);
 	return rows.map(
 		({
 			unsubscribedAt,
@@ -340,7 +346,7 @@ export async function guestsOf(
 				email: shownEmail(row),
 				diets: opts.diets ? dietsOf(diets) : [],
 				dietNote: opts.diets ? dietNote : "",
-				dietConfirmed: opts.diets && dietAt !== null,
+				dietConfirmed: Boolean(opts.diets) && dietAt !== null,
 				partyDiet: opts.diets ? partyDiet : "",
 				hasPaper: paperToken !== null,
 				emailOff: unsubscribedAt !== null,
@@ -357,6 +363,9 @@ export async function guestsOf(
 	);
 }
 
+type LastText = { status: SmsStatus; reason: string | null; at: Date };
+const NO_TEXTS = new Map<string, LastText>();
+
 /** The latest text to each person about one event, newest wins. */
 async function lastTexts(db: Db, eventId: string) {
 	const rows = await db
@@ -370,10 +379,7 @@ async function lastTexts(db: Db, eventId: string) {
 		.where(eq(smsSend.eventId, eventId))
 		.orderBy(desc(smsSend.createdAt))
 		.all();
-	const out = new Map<
-		string,
-		{ status: SmsStatus; reason: string | null; at: Date }
-	>();
+	const out = new Map<string, LastText>();
 	for (const r of rows) {
 		if (!r.userId || out.has(r.userId)) continue;
 		out.set(r.userId, {

@@ -105,7 +105,7 @@ export function run(
 	return { chars, xs, width: x };
 }
 
-export type TextBox = {
+type TextBox = {
 	text: string;
 	face: Face;
 	size: number;
@@ -176,7 +176,7 @@ function round(n: number): number {
 }
 
 /** The smallest a "shrink" box goes, as a share of its set size. */
-export const SHRINK_FLOOR = 0.4;
+const SHRINK_FLOOR = 0.4;
 
 export function layoutText(box: TextBox): TextLayout {
 	let size = box.size;

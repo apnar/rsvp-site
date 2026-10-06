@@ -1,7 +1,7 @@
 import type { Rendered } from "../brevo";
 import { email } from "../render";
 
-export type ResetPasswordInput = { name: string; url: string };
+type ResetPasswordInput = { name: string; url: string };
 
 /** Better Auth password reset. No list footer: this is not a list email. */
 export function resetPasswordEmail(input: ResetPasswordInput): Rendered {

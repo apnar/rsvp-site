@@ -49,7 +49,7 @@ export type Mailer = {
 	unblock(email: string): Promise<boolean>;
 };
 
-export type MailerOptions = {
+type MailerOptions = {
 	apiKey?: string | undefined;
 	/**
 	 * Whether a missing key may mean "log instead of send". True on a

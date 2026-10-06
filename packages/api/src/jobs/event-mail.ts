@@ -44,7 +44,7 @@ import { type Due, digestSince, dueEmails } from "../schedule";
 import { textFactsFor } from "../texting";
 import { addDays, todayOnSite } from "../time";
 
-export type MailOutcome = {
+type MailOutcome = {
 	eventId: string;
 	kind: Due["kind"];
 	sent: number;
@@ -162,16 +162,6 @@ async function runDue(
 		row.id,
 		due.kind === "deadline_reminder" ? "none" : "coming",
 	);
-	const facts = eventFacts(row);
-	const rendered =
-		due.kind === "deadline_reminder"
-			? deadlineReminderEmail(facts)
-			: dayBeforeEmail(facts);
-	const said = await textFactsFor(db, row);
-	const text =
-		due.kind === "deadline_reminder"
-			? (link: string) => deadlineReminderText(said, link)
-			: (link: string) => dayBeforeText(said, link);
 	if (to.length === 0) {
 		await claim(db, row.id, column, now);
 		return {
@@ -182,6 +172,16 @@ async function runDue(
 			quiet: "Nobody.",
 		};
 	}
+	const facts = eventFacts(row);
+	const rendered =
+		due.kind === "deadline_reminder"
+			? deadlineReminderEmail(facts)
+			: dayBeforeEmail(facts);
+	const said = await textFactsFor(db, row);
+	const text =
+		due.kind === "deadline_reminder"
+			? (link: string) => deadlineReminderText(said, link)
+			: (link: string) => dayBeforeText(said, link);
 	return sendStamped(db, row, due.kind, rendered, text, to, now);
 }
 

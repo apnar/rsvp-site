@@ -44,7 +44,7 @@ export function unitsPerInch(format: Format): number {
 	return CARD_W / FORMATS[format].w;
 }
 
-export const LIMITS = {
+const LIMITS = {
 	elements: 80,
 	images: 12,
 	/** JSON.stringify of the whole document. */
@@ -130,7 +130,7 @@ const crop = {
 	zoom: num(BOUNDS.zoom).default(1),
 };
 
-export const textElement = z.object({
+const textElement = z.object({
 	...base,
 	type: z.literal("text"),
 	text: z.string().max(BOUNDS.text.max),
@@ -160,7 +160,7 @@ export const textElement = z.object({
 	fit: z.enum(["shrink", "none"]).default("none"),
 });
 
-export const imageElement = z.object({
+const imageElement = z.object({
 	...base,
 	type: z.literal("image"),
 	...crop,
@@ -179,21 +179,21 @@ const shapeFields = {
 	dash: z.boolean().default(false),
 };
 
-export const rectElement = z.object({
+const rectElement = z.object({
 	...base,
 	type: z.literal("rect"),
 	...shapeFields,
 	radius: num(BOUNDS.rectRadius).default(0),
 });
 
-export const ellipseElement = z.object({
+const ellipseElement = z.object({
 	...base,
 	type: z.literal("ellipse"),
 	...shapeFields,
 });
 
 /** A line runs along the middle of its box, from left to right. */
-export const lineElement = z.object({
+const lineElement = z.object({
 	...base,
 	type: z.literal("line"),
 	stroke: hex,
@@ -201,7 +201,7 @@ export const lineElement = z.object({
 	dash: z.boolean().default(false),
 });
 
-export const stickerElement = z.object({
+const stickerElement = z.object({
 	...base,
 	type: z.literal("sticker"),
 	sticker: z.enum(STICKER_IDS),
@@ -209,7 +209,7 @@ export const stickerElement = z.object({
 });
 
 /** The guest's own sign-in code. It only means anything on paper. */
-export const qrElement = z.object({
+const qrElement = z.object({
 	...base,
 	type: z.literal("qr"),
 	fg: hex.default("#14101f"),
@@ -371,7 +371,7 @@ export function refsBelongTo(d: Design, eventId: string): boolean {
 	);
 }
 
-export type ParseResult =
+type ParseResult =
 	| { ok: true; design: Design }
 	| { ok: false; message: string };
 

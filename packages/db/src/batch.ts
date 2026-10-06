@@ -13,7 +13,7 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
 }
 
 /** Ids per `IN (...)` slice: D1 caps a statement at 100 bound parameters. */
-export const IN_LIST = 90;
+const IN_LIST = 90;
 
 /**
  * Split rows for a multi-row INSERT. D1 caps a statement at 100 bound
@@ -56,7 +56,7 @@ export async function batchAll<Q extends BatchItem<"sqlite">>(
 }
 
 /** A statement as D1 takes it. */
-export type Built = { sql: string; params: unknown[] };
+type Built = { sql: string; params: unknown[] };
 
 const dialect = new SQLiteAsyncDialect();
 

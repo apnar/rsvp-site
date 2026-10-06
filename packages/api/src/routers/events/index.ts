@@ -1,7 +1,7 @@
 import { coverRouter } from "./cover";
 import { dashboardRouter } from "./dashboard";
 import { editorRouter } from "./editor";
-import { paperRouter } from "./paper";
+import { hostPaperRouter } from "./paper";
 import { sendingRouter } from "./sending";
 import { shareRouter } from "./share";
 
@@ -11,6 +11,6 @@ export const eventsRouter = {
 	...editorRouter,
 	...coverRouter,
 	...sendingRouter,
-	...paperRouter,
+	...hostPaperRouter,
 	...shareRouter,
 };

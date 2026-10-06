@@ -105,7 +105,7 @@ export function seenNoReplyCount(
 	return guests.filter(seenNoReply).length;
 }
 
-export type PotluckLine = {
+type PotluckLine = {
 	id: string;
 	label: string;
 	quantity: number;

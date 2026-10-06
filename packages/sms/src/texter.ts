@@ -1,7 +1,7 @@
 import { segments } from "./segments";
 import { postMessage, type TextOutcome, textRequest } from "./telnyx";
 
-export type OutgoingText = {
+type OutgoingText = {
 	to: string;
 	text: string;
 	mediaUrl?: string | null;

@@ -18,7 +18,7 @@ import {
 import { unsupportedChars } from "./text";
 import { contrast } from "./theme";
 
-export type Warning = {
+type Warning = {
 	/** The element it is about, if any, so the designer can select it. */
 	id?: string;
 	/** "block" stops a save. */

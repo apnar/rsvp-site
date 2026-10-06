@@ -13,7 +13,7 @@ export type Reach = {
 /** Guest mail (invitations, reminders, changes) or a host's reply alerts. */
 export type Purpose = "guest" | "alerts";
 
-export type Channels = { email: boolean; text: boolean };
+type Channels = { email: boolean; text: boolean };
 
 /**
  * Which channels one message goes by. The person's choice first, then the

@@ -7,7 +7,7 @@ import { z } from "zod";
  * nothing is stored until the address's owner presses the button: a typo
  * leaves no trace, and a stranger's inbox gets one email and no way in.
  */
-export type EmailClaim = {
+type EmailClaim = {
 	userId: string;
 	email: string;
 	by: FilledBy;

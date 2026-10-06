@@ -3,7 +3,7 @@ import { contactGaps, type FilledBy, NO_GAPS } from "@rsvp-site/db/details";
 import type { DietId } from "@rsvp-site/db/diets";
 import { relativesOnEvent } from "@rsvp-site/db/families";
 import { firstNameOf } from "@rsvp-site/db/names";
-import { answersOf } from "../../answer-words";
+import { answersOf } from "./answer-words";
 import {
 	type Access,
 	type Addressee,
@@ -14,10 +14,10 @@ import {
 	NO_POTLUCK,
 	potluckOf,
 	YOUR_GUEST,
-} from "../../events";
-import { inviteRefusal, invitesLeft } from "../../guest-invites";
-import { headcount, tally } from "../../headcount";
-import { startsAt } from "../../schedule";
+} from "./events";
+import { inviteRefusal, invitesLeft } from "./guest-invites";
+import { headcount, tally } from "./headcount";
+import { startsAt } from "./schedule";
 
 /**
  * The page a guest sees. Hosts see the same page, as a guest would, and

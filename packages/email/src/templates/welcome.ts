@@ -4,7 +4,7 @@ import { email, SITE_LABEL } from "../render";
 const INTRO =
 	"When a host invites you, the invitation lands here with one-tap answers, and every invite you have is on the site.";
 
-export type WelcomeInput = { name: string | null; url: string };
+type WelcomeInput = { name: string | null; url: string };
 
 /**
  * Someone has an account now, or asked for their link again. Their link is their key to the site, so

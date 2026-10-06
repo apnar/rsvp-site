@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { countRecipients } from "@rsvp-site/db/people";
 import { formatPhone } from "@rsvp-site/db/phone";
 import { user } from "@rsvp-site/db/schema/auth";
 import { emailSend } from "@rsvp-site/db/schema/email";
@@ -11,7 +12,7 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { adminProcedure } from "../index";
-import { countEveryone, renderMessage, sendToList, tokensFor } from "../mail";
+import { renderMessage, sendToList, tokensFor } from "../mail";
 import { sendTestText } from "../texting";
 
 const messageSchema = z.object({
@@ -37,7 +38,7 @@ export const mailRouter = {
 	/** Whether emails actually leave the building (BREVO_API_KEY is set). */
 	status: adminProcedure.handler(async ({ context }) => ({
 		dryRun: getMailer().dryRun,
-		everyone: await countEveryone(context.db),
+		everyone: await countRecipients(context.db),
 		/** Texts are logged, not sent (no TELNYX_API_KEY, on localhost). */
 		textDryRun: getTexter().dryRun,
 		textingFrom: formatPhone(textingFrom()),
@@ -92,7 +93,7 @@ export const mailRouter = {
 		.input(messageSchema)
 		.handler(async ({ context, input }) => ({
 			...renderMessage(input),
-			recipientCount: await countEveryone(context.db),
+			recipientCount: await countRecipients(context.db),
 		})),
 
 	/**

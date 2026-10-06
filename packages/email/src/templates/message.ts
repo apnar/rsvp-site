@@ -2,7 +2,7 @@ import type { Rendered } from "../brevo";
 import { emailLink } from "../links";
 import { email, SITE_LABEL } from "../render";
 
-export type MessageInput = {
+type MessageInput = {
 	subject: string;
 	body: string;
 	siteUrl: string;

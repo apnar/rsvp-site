@@ -336,7 +336,7 @@ export function switchBackground(
 }
 
 /** Whether new things on the card should be dark or light to show up. */
-export function cardIsLight(doc: Design): boolean {
+function cardIsLight(doc: Design): boolean {
 	const bg = doc.background;
 	switch (bg.kind) {
 		case "solid":

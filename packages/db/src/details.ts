@@ -390,7 +390,7 @@ export async function markClaimed(db: Db, id: string): Promise<void> {
 }
 
 /** What somebody answering could still give us: an address, a number. */
-export type ContactGaps = { email: boolean; phone: boolean };
+type ContactGaps = { email: boolean; phone: boolean };
 
 export const NO_GAPS: ContactGaps = { email: false, phone: false };
 

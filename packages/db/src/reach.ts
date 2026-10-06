@@ -52,7 +52,7 @@ export function textableWhere() {
 }
 
 /** The columns the JS twins below read, as a joined query selects them. */
-export type ReachRow = {
+type ReachRow = {
 	status: string;
 	banned?: boolean | null;
 	unsubscribedAt: Date | null;

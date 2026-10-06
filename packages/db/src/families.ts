@@ -171,7 +171,7 @@ export async function pickable(
 	return new Set(active.map((r) => r.id).filter((id) => reachable.has(id)));
 }
 
-export type FamilyMemberRow = {
+type FamilyMemberRow = {
 	id: string;
 	name: string;
 	email: string;

@@ -7,9 +7,9 @@ import { dietsInput, saveDiets } from "../diet";
 import { type Access, type Addressee, findEvent, notFound } from "../events";
 import { publicProcedure } from "../index";
 import { tokenInput } from "../inputs";
+import { invitePayload } from "../invite-payload";
 import { callerIp, requireUnderLimit } from "../limits";
 import { recordView } from "../views";
-import { invitePayload } from "./events/invite-payload";
 
 /**
  * A printed card's QR code opens its one invitation, and nothing else.

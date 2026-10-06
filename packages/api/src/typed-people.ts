@@ -9,7 +9,7 @@ import {
 import type { PersonSource } from "@rsvp-site/db/schema/auth";
 import { vouchForTexts } from "@rsvp-site/db/sms-status";
 
-export type TypedOptions = {
+type TypedOptions = {
 	source: PersonSource;
 	/** Who is typing: as `findOrCreatePeople`'s `by`, so a host fills blanks only where a host may. */
 	by: { id: string; host: boolean };

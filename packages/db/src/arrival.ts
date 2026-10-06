@@ -18,7 +18,6 @@ export const ARRIVAL_MAX_AGE = 2 * 60 * 60;
 
 /** The links that set the cookie. */
 export const LINK_ARRIVALS = ["email", "text"] as const satisfies Arrival[];
-export type LinkArrival = (typeof LINK_ARRIVALS)[number];
 
 /** How the request's sender came, from its Cookie header: a link, or directly. */
 export function arrivalOf(headers: Headers): Arrival {
