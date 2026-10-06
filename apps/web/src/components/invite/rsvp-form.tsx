@@ -1,5 +1,5 @@
 import { type AnswerSet, offered } from "@rsvp-site/api/answer-words";
-import { type Answer, extraPeople } from "@rsvp-site/api/headcount";
+import { type Answer, extraPeople, isComing } from "@rsvp-site/api/headcount";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
@@ -95,7 +95,7 @@ export function RsvpForm({
 		shown: touched[r.guestId] ?? r.response ?? answer,
 	}));
 	const pending = answer !== null && answer !== saved;
-	const coming = answer === "yes" || answer === "maybe";
+	const coming = isComing(answer);
 
 	return (
 		<form

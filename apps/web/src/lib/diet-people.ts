@@ -1,4 +1,4 @@
-import type { Answer } from "@rsvp-site/api/headcount";
+import { isComing } from "@rsvp-site/api/headcount";
 import type { DietId } from "@rsvp-site/db/diets";
 
 import type { RsvpValues } from "@/components/invite/rsvp-form";
@@ -15,8 +15,6 @@ export type DietPerson = {
 
 export type DietSave = { userId: string; diets: DietId[]; note: string }[];
 
-const coming = (a: Answer | null | undefined) => a === "yes" || a === "maybe";
-
 /**
  * Whose diets to check after an answer: the guest if they're coming, and
  * each relative who now is. Decided from what was just sent, since the
@@ -30,7 +28,7 @@ export function dietPeople(
 	if (!askDietary) return [];
 	const sentFor = new Map(sent.family.map((f) => [f.guestId, f.response]));
 	return [
-		...(coming(sent.response)
+		...(isComing(sent.response)
 			? [
 					{
 						userId: me.userId,
@@ -42,7 +40,7 @@ export function dietPeople(
 				]
 			: []),
 		...me.family
-			.filter((r) => coming(sentFor.get(r.guestId) ?? r.response))
+			.filter((r) => isComing(sentFor.get(r.guestId) ?? r.response))
 			.map((r) => ({
 				userId: r.userId,
 				name: r.name,

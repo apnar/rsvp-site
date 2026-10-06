@@ -39,7 +39,8 @@ import {
 import { alias } from "drizzle-orm/sqlite-core";
 import { answersOf } from "../answer-words";
 import { cleanTheme, type EventRow, guestCountsOf, hostIdsOf } from "../events";
-import { deliver, eventFacts, hostTotals } from "../mail";
+import { hostTotals } from "../headcount";
+import { deliver, eventFacts } from "../mail";
 import { type Due, digestSince, dueEmails } from "../schedule";
 import { textFactsFor } from "../texting";
 import { addDays, todayOnSite } from "../time";

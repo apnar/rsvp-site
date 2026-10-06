@@ -44,7 +44,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { answersOf } from "./answer-words";
 import { channelsFor, type Purpose, type Via, viaOf } from "./channels";
 import { type EventRow, guestCountsOf, hostIdsOf, labelsOf } from "./events";
-import { type GuestCounts, headcount, tally } from "./headcount";
+import { hostTotals } from "./headcount";
 import {
 	hostNameOf,
 	mmsUrlOf,
@@ -54,12 +54,6 @@ import {
 } from "./texting";
 
 export type { EmailKind };
-
-/** The reply tallies a host email shows, with "expecting" counted by headcount.ts. */
-export function hostTotals(guests: readonly GuestCounts[]) {
-	const t = tally(guests);
-	return { ...t, expecting: headcount(t) };
-}
 
 /** Sends that go to an event's hosts rather than its guests. */
 const HOST_KINDS = new Set<EmailKind>(["host_alert", "host_digest"]);

@@ -6,6 +6,8 @@ import {
 	dietCounts,
 	extraPeople,
 	headcount,
+	hostTotals,
+	isComing,
 	notInvitedCount,
 	openSlots,
 	potluckLines,
@@ -202,5 +204,28 @@ describe("dietCounts", () => {
 		expect(
 			dietCounts([{ response: "yes", diets: ["vegan", "vegan"] }]).vegan,
 		).toBe(1);
+	});
+});
+
+describe("isComing", () => {
+	it("counts a yes and a maybe as bringing somebody", () => {
+		expect(isComing("yes")).toBe(true);
+		expect(isComing("maybe")).toBe(true);
+		expect(isComing("no")).toBe(false);
+		expect(isComing(null)).toBe(false);
+		expect(isComing(undefined)).toBe(false);
+	});
+});
+
+describe("hostTotals", () => {
+	it("is the tally with headcount's expecting beside it", () => {
+		const t = hostTotals([
+			{ response: "yes", adults: 2, kids: 1 },
+			{ response: "maybe", adults: 1, kids: 0 },
+			{ response: null, adults: 1, kids: 0 },
+		]);
+		expect(t.expecting).toBe(3);
+		expect(t.yes).toBe(1);
+		expect(t.waiting).toBe(1);
 	});
 });

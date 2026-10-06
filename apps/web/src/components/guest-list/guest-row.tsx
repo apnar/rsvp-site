@@ -1,4 +1,5 @@
 import type { AnswerSet } from "@rsvp-site/api/answer-words";
+import { isComing } from "@rsvp-site/api/headcount";
 import { partyLabel } from "@rsvp-site/email/party";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
@@ -109,7 +110,7 @@ export function GuestRow({
 	const pills = rowPills(g);
 	const hasNotes =
 		g.diets.length > 0 || !!g.dietNote || !!g.partyDiet || !!g.note;
-	const coming = g.response === "yes" || g.response === "maybe";
+	const coming = isComing(g.response);
 
 	return (
 		<div

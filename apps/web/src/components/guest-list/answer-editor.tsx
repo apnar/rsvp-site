@@ -1,4 +1,5 @@
 import { type AnswerSet, offered, pickWord } from "@rsvp-site/api/answer-words";
+import { isComing } from "@rsvp-site/api/headcount";
 import { Button } from "@rsvp-site/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
@@ -46,7 +47,7 @@ export function AnswerEditor({
 			},
 		}),
 	);
-	const coming = answer === "yes" || answer === "maybe";
+	const coming = isComing(answer);
 	return (
 		<form
 			className="col-span-full flex basis-full flex-wrap items-end gap-3 border-line border-t pt-3"

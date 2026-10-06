@@ -64,6 +64,21 @@ export function headcount(t: Totals): number {
 	return t.adults + t.kids;
 }
 
+/** The reply tallies a host email shows, with "expecting" counted here. */
+export function hostTotals(guests: readonly GuestCounts[]) {
+	const t = tally(guests);
+	return { ...t, expecting: headcount(t) };
+}
+
+/**
+ * An answer that brings somebody, for the questions that follow one (who,
+ * how many, what they eat). A maybe asks them too; only the totals leave
+ * maybes out.
+ */
+export function isComing(answer: string | null | undefined): boolean {
+	return answer === "yes" || answer === "maybe";
+}
+
 /** Invitations still to be heard from for certain: no reply, or a maybe. */
 export function deciding(t: Totals): number {
 	return t.waiting + t.maybe;
