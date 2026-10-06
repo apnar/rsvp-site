@@ -102,6 +102,7 @@ export async function findPersonByLinkToken(db: Db, token: string) {
 			email: user.email,
 			name: user.name,
 			emailVerified: user.emailVerified,
+			noEmail: user.noEmail,
 			status: user.status,
 		})
 		.from(user)

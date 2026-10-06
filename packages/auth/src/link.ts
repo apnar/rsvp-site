@@ -62,10 +62,12 @@ export function emailLink({ db }: { db: Db }) {
 						// happen -- unless somebody deleted the row by hand.
 						throw ctx.redirect(`${site}/login?error=link`);
 					}
-					if (!user.emailVerified) {
-						// Clicking a link we mailed to that address proves it. Better
-						// Auth's own magic-link would wipe their password here; we
-						// keep it, because these are real guests.
+					// Clicking a link we mailed to that address proves it; a link
+					// from a text proves the phone, and a placeholder is no address.
+					const mailed = ctx.query.via !== "text" && !person.noEmail;
+					if (mailed && !user.emailVerified) {
+						// Better Auth's own magic-link would wipe their password
+						// here; we keep it, because these are real guests.
 						user =
 							(await ctx.context.internalAdapter.updateUser(user.id, {
 								emailVerified: true,
