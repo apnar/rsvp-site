@@ -2,6 +2,7 @@ import { showsMaybe } from "@rsvp-site/api/answer-words";
 import { seenNoReply } from "@rsvp-site/api/headcount";
 import { formatDate } from "@rsvp-site/api/time";
 import { DIETS } from "@rsvp-site/db/diets";
+import { totalsLabel } from "@rsvp-site/email/party";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
@@ -245,9 +246,7 @@ function GuestListPage() {
 					<span className="numeral font-black text-[clamp(56px,8vw,88px)] leading-[0.95]">
 						{data.headcount}
 					</span>
-					<span className="font-medium text-[15px]">
-						{plural(t.adults, "adult")} · {plural(t.kids, "kid")}
-					</span>
+					<span className="font-medium text-[15px]">{totalsLabel(t)}</span>
 					{dietCounts.length > 0 ? (
 						<span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-normal text-[13px] opacity-80">
 							{dietCounts.map((d, i) => (

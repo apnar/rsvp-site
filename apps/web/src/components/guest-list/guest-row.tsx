@@ -1,4 +1,5 @@
 import type { AnswerSet } from "@rsvp-site/api/answer-words";
+import { partyLabel } from "@rsvp-site/email/party";
 import { Button } from "@rsvp-site/ui/components/button";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
@@ -11,7 +12,7 @@ import { DietIcons } from "@/components/diet";
 import { PaperActions } from "@/components/paper/paper-actions";
 import { AnswerTag } from "@/components/response-bar";
 import type { Print } from "@/lib/cards-pdf";
-import { initials, plural } from "@/lib/format";
+import { initials } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 import { AddEmail } from "./add-email";
 import { AnswerEditor } from "./answer-editor";
@@ -20,14 +21,6 @@ import type { Guest } from "./types";
 
 /** The " · " between two notes, only when something follows. */
 const sep = (next: string) => (next ? " · " : null);
-
-function party(g: Guest) {
-	// A child a relative answered for is stored as 0 adults and 1 kid.
-	return [
-		...(g.adults > 0 || g.kids === 0 ? [plural(g.adults, "adult")] : []),
-		...(g.kids > 0 ? [plural(g.kids, "kid")] : []),
-	].join(" · ");
-}
 
 /** What every row shares about the event, so a row takes one object. */
 export type RowEvent = {
@@ -173,7 +166,7 @@ export function GuestRow({
 					!coming && "max-md:hidden",
 				)}
 			>
-				{coming ? party(g) : null}
+				{coming ? partyLabel(g, " · ") : null}
 			</span>
 			{/* With potluck off the column stays, empty, so the notes line up
 			    with every other event's list. */}

@@ -36,6 +36,7 @@ import {
 	welcomeEmail,
 } from "@rsvp-site/email";
 import { getMailer, siteUrl } from "@rsvp-site/email/worker";
+import { partyLabel } from "@rsvp-site/email/party";
 import { hostAlertText, inviteText } from "@rsvp-site/sms";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
@@ -548,14 +549,6 @@ export async function alertHosts(
 	} catch (error) {
 		logError("host alert failed", error);
 	}
-}
-
-/** "2 adults, 1 kid" -- and never "0 adults" for a child answered for. */
-export function partyLabel(p: { adults: number; kids: number }): string | null {
-	const part = (n: number, one: string) =>
-		n > 0 ? [`${n} ${one}${n === 1 ? "" : "s"}`] : [];
-	const words = [...part(p.adults, "adult"), ...part(p.kids, "kid")];
-	return words.length > 0 ? words.join(", ") : null;
 }
 
 /**

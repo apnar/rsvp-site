@@ -16,6 +16,7 @@ import {
 	type RsvpAnswer,
 	rsvpLink,
 } from "../links";
+import { partyLabel } from "../party";
 import {
 	type Block,
 	COLORS,
@@ -278,14 +279,7 @@ export type HostTotals = {
 function partyWords(w: Words, r: ReplyLine): string {
 	const by = r.answeredBy ? ` (answered by ${r.answeredBy})` : "";
 	if (r.response === "no") return `${w.no.pick}${by}`;
-	// A child a relative answered for is 0 adults and 1 kid: never "0 adults".
-	const people = [
-		...(r.adults > 0 || r.kids < 1
-			? [`${r.adults} ${r.adults === 1 ? "adult" : "adults"}`]
-			: []),
-		...(r.kids > 0 ? [`${r.kids} ${r.kids === 1 ? "kid" : "kids"}`] : []),
-	];
-	return `${w[r.response].pick} · ${people.join(", ")}${by}`;
+	return `${w[r.response].pick} · ${partyLabel(r)}${by}`;
 }
 
 /** "Sam", "Sam and Ada", "Sam, Ada and Lou". */
