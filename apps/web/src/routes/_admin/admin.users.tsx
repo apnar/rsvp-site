@@ -196,7 +196,7 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 		orpc.people.setRole.mutationOptions({
 			onSuccess: () => {
 				toast.success(
-					"Role changed. It can take a few minutes to show for them.",
+					"Role changed. It takes effect the next time they load a page.",
 				);
 			},
 		}),
@@ -425,6 +425,13 @@ function DeletePerson({ person }: { person: Person }) {
 						</span>
 					) : null}
 				</>
+			) : plan.isError ? (
+				<span className="flex items-center gap-2 text-destructive">
+					Couldn't check their events.
+					<Button variant="outline" size="sm" onClick={() => plan.refetch()}>
+						Retry
+					</Button>
+				</span>
 			) : (
 				<span className="text-haze">Checking their events…</span>
 			)}

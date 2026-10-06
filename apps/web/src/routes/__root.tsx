@@ -33,8 +33,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 	/**
 	 * Every page needs to know whether it is talking to a guest or a
 	 * stranger, so the session is read once here and flows down as context.
-	 * Runs on each client navigation: one server-function round trip, and no
-	 * D1 read while the five-minute cookie cache holds.
+	 * Runs on each client navigation: one server-function round trip, which
+	 * reads the session from D1 every time (the cookie cache is off so a
+	 * revoked session fails at once).
 	 */
 	beforeLoad: async () => ({ session: await getUser() }),
 

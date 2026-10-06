@@ -1,5 +1,5 @@
 import type { DietId } from "@rsvp-site/db/diets";
-import { formatPhone } from "@rsvp-site/db/phone";
+import { formatPhone, normalizePhone } from "@rsvp-site/db/phone";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
@@ -33,15 +33,24 @@ export type DetailsPerson = {
 	dietNote: string;
 } & Record<DetailKey, string | null>;
 
-/** Only what differs from the saved value; null and "" are the same blank. */
+/**
+ * Only what differs from the saved value; null and "" are the same blank.
+ * The phone is compared as stored: the draft shows "(301) 555-1234" but
+ * people type "301-555-1234", and comparing text would leave Save lit
+ * after every save.
+ */
 export function changedDetails(
 	saved: Record<DetailKey, string | null>,
 	draft: Record<DetailKey, string>,
 ): DetailsPatch {
 	const patch: DetailsPatch = {};
 	for (const k of DETAIL_KEYS) {
-		const was = k === "phone" ? formatPhone(saved[k]) : (saved[k] ?? "");
-		if (draft[k].trim() !== was.trim()) patch[k] = draft[k];
+		const typed = draft[k].trim();
+		const same =
+			k === "phone"
+				? (normalizePhone(typed) ?? typed) === (saved[k] ?? "")
+				: typed === (saved[k] ?? "").trim();
+		if (!same) patch[k] = draft[k];
 	}
 	return patch;
 }
@@ -120,7 +129,9 @@ export function PersonDetailsDialog({
 		try {
 			if (Object.keys(patch).length > 0) await onSave(patch);
 			if (emailChanged && email.trim()) await onSaveEmail(email.trim());
-			onClose();
+			// Closing the dialog (not unmounting it) hands focus back to
+			// whatever opened it; its close handler tells the parent.
+			ref.current?.close();
 		} catch {
 			// The query client has already toasted why; stay open to fix it.
 		} finally {
