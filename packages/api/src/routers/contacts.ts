@@ -5,6 +5,7 @@ import { parseGuests } from "@rsvp-site/db/addresses";
 import { batchAll, insertChunks } from "@rsvp-site/db/batch";
 import {
 	canEditDetails,
+	canEditReach,
 	detailColumns,
 	dietColumns,
 } from "@rsvp-site/db/details";
@@ -34,7 +35,14 @@ import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 
-import { CLAIMED, detailsPatch, saveDetails, saveEmail } from "../details";
+import {
+	CLAIMED,
+	detailsPatch,
+	hostOf,
+	NOT_YOURS,
+	saveDetails,
+	saveEmail,
+} from "../details";
 import { adminProcedure, hostProcedure } from "../index";
 import { emailSchema, idSchema } from "../inputs";
 
@@ -70,7 +78,7 @@ async function ownGroup(
  * a paper event: an address book is for everybody a host invites.
  */
 async function addToBook(
-	context: { db: Db },
+	context: { db: Db; me: Pick<Person, "id" | "role"> },
 	ownerId: string,
 	raw: string,
 	textsOk = false,
@@ -82,9 +90,12 @@ async function addToBook(
 	const emailed = typed.flatMap((t) =>
 		t.email ? [{ ...t, email: t.email }] : [],
 	);
-	const people = (await findOrCreatePeople(context.db, emailed, "host")).filter(
-		(p) => p.status !== "deactivated",
-	);
+	const people = (
+		await findOrCreatePeople(context.db, emailed, "host", {
+			id: context.me.id,
+			host: !isAdmin(context.me),
+		})
+	).filter((p) => p.status !== "deactivated");
 	const named = await nameOnlyFromBook(
 		context.db,
 		ownerId,
@@ -109,11 +120,13 @@ async function addToBook(
 
 /**
  * Somebody in the caller's book, with what decides whether the caller may
- * change their details. Anybody else is "nobody", as with groups.
+ * change their details -- and, for `reach`, their address or number
+ * (`canEditReach`). Anybody else is "nobody", as with groups.
  */
 async function bookEntry(
 	context: { db: Db; me: Pick<Person, "id" | "role"> },
 	userId: string,
+	reach = false,
 ) {
 	const [known, inFamily, person] = await Promise.all([
 		inBook(context.db, context.me.id, [userId]),
@@ -124,6 +137,7 @@ async function bookEntry(
 				role: user.role,
 				status: user.status,
 				claimedAt: user.claimedAt,
+				createdBy: user.createdBy,
 			})
 			.from(user)
 			.where(eq(user.id, userId))
@@ -136,6 +150,9 @@ async function bookEntry(
 		throw new ORPCError("BAD_REQUEST", {
 			message: inFamily && person.claimedAt === null ? IN_FAMILY : CLAIMED,
 		});
+	}
+	if (reach && !canEditReach(context.me, { ...person, inFamily }, true)) {
+		throw new ORPCError("BAD_REQUEST", { message: NOT_YOURS });
 	}
 	return person;
 }
@@ -187,6 +204,7 @@ export const contactsRouter = {
 					role: user.role,
 					status: user.status,
 					claimedAt: user.claimedAt,
+					createdBy: user.createdBy,
 					familyMember: familyMember.userId,
 				})
 				.from(contact)
@@ -230,32 +248,34 @@ export const contactsRouter = {
 					role,
 					status,
 					claimedAt,
+					createdBy,
 					familyMember,
 					dietAt: _,
 					...p
-				}) => ({
-					...p,
-					diets: dietsOf(p.diets),
-					// Who could be a co-host: hosts and admins who are still in.
-					canHost: canHost({ role }) && status !== "deactivated",
-					claimed: claimedAt !== null,
-					inFamily: familyMember !== null,
-					editable: canEditDetails(
-						context.me,
-						{
-							id: p.userId,
-							role,
-							status,
-							claimedAt,
-							inFamily: familyMember !== null,
-						},
-						true,
-					),
-					// A placeholder address is never shown, not even to its host.
-					email: p.noEmail ? "" : p.email,
-					unsubscribed: unsubscribedAt !== null,
-					groupIds: groupsOf.get(p.userId) ?? [],
-				}),
+				}) => {
+					const target = {
+						id: p.userId,
+						role,
+						status,
+						claimedAt,
+						createdBy,
+						inFamily: familyMember !== null,
+					};
+					return {
+						...p,
+						diets: dietsOf(p.diets),
+						// Who could be a co-host: hosts and admins who are still in.
+						canHost: canHost({ role }) && status !== "deactivated",
+						claimed: claimedAt !== null,
+						inFamily: familyMember !== null,
+						editable: canEditDetails(context.me, target, true),
+						reachEditable: canEditReach(context.me, target, true),
+						// A placeholder address is never shown, not even to its host.
+						email: p.noEmail ? "" : p.email,
+						unsubscribed: unsubscribedAt !== null,
+						groupIds: groupsOf.get(p.userId) ?? [],
+					};
+				},
 			),
 			groups: groups.map((g) => ({
 				...g,
@@ -291,8 +311,8 @@ export const contactsRouter = {
 		.input(detailsPatch.extend({ userId: idSchema }))
 		.handler(async ({ context, input }) => {
 			const { userId, ...patch } = input;
-			await bookEntry(context, userId);
-			await saveDetails(context.db, userId, patch, !isAdmin(context.me));
+			await bookEntry(context, userId, patch.phone !== undefined);
+			await saveDetails(context.db, userId, patch, hostOf(context.me));
 			return { ok: true };
 		}),
 
@@ -305,18 +325,19 @@ export const contactsRouter = {
 	setEmail: hostProcedure
 		.input(z.object({ userId: idSchema, email: emailSchema }))
 		.handler(async ({ context, input }) => {
-			await bookEntry(context, input.userId);
+			await bookEntry(context, input.userId, true);
 			const outcome = await saveEmail(
 				context.db,
 				input.userId,
 				input.email,
-				!isAdmin(context.me),
+				hostOf(context.me),
 			);
 			if (outcome !== "taken") return { moved: false, name: "" };
 			const [other] = await findOrCreatePeople(
 				context.db,
 				[input.email],
 				"host",
+				{ id: context.me.id, host: !isAdmin(context.me) },
 			);
 			if (!other || other.status === "deactivated") {
 				throw new ORPCError("BAD_REQUEST", {

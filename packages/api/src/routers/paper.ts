@@ -43,13 +43,28 @@ async function paperAccess(
 	};
 }
 
+/**
+ * Whose word a card carries: the host who put its guest on the list (a
+ * friend a guest invited carries the event's creator, since the guest's
+ * word is not a host's). The card fills only what that host could, and
+ * its yes to texts is recorded as theirs.
+ */
+function cardHost(access: Access): string | null {
+	const guest = access.guest;
+	return guest && (guest.source === "host" || guest.source === "group")
+		? (guest.addedBy ?? access.event.createdBy)
+		: access.event.createdBy;
+}
+
 export const paperRouter = {
 	/** The invitation behind a QR code, as its guest sees it. */
 	invite: publicProcedure
 		.input(tokenInput)
 		.handler(async ({ context, input }) => {
 			const { access, who } = await paperAccess(context.db, input.token);
-			const page = await invitePayload(context.db, who, access, "card");
+			const page = await invitePayload(context.db, who, access, {
+				card: cardHost(access),
+			});
 			// Inviting a friend sends email in the guest's name and needs
 			// them signed in; the card only answers.
 			return {
@@ -101,20 +116,14 @@ export const paperRouter = {
 			const { access, who } = await paperAccess(context.db, input.token);
 			if (access.event.status === "canceled") throw notFound();
 			const { token: _, ...details } = input;
-			// A host's own adds carry their id; a friend a guest invited
-			// carries the guest's, whose word is not a host's.
-			const guest = access.guest;
-			const voucher =
-				guest && (guest.source === "host" || guest.source === "group")
-					? (guest.addedBy ?? access.event.createdBy)
-					: access.event.createdBy;
+			const host = cardHost(access);
 			return fillContact(
 				context.db,
 				context.env.BETTER_AUTH_SECRET,
 				who.id,
 				details,
-				"card",
-				voucher,
+				{ card: host },
+				host,
 			);
 		}),
 

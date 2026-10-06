@@ -4,12 +4,9 @@ import { parseGuests } from "@rsvp-site/db/addresses";
 import { arrivalOf } from "@rsvp-site/db/arrival";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
 import { pickable } from "@rsvp-site/db/families";
-import {
-	findOrCreatePeople,
-	nameOnlyFromBook,
-	setRealEmail,
-} from "@rsvp-site/db/people";
+import { findOrCreatePeople, nameOnlyFromBook } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
+import { user } from "@rsvp-site/db/schema/auth";
 import { contactGroup, contactGroupMember } from "@rsvp-site/db/schema/contact";
 import {
 	eventGuest,
@@ -21,6 +18,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { answersOf } from "../answer-words";
 import { answer, answerInput } from "../answers";
+import { hostOf, saveEmail } from "../details";
 import {
 	type Access,
 	accessTo,
@@ -161,7 +159,10 @@ export const guestsRouter = {
 					message: `That's ${total} people, counting groups and picks. Add them 500 at a time.`,
 				});
 			}
-			const people = await findOrCreatePeople(context.db, typed, "host");
+			const people = await findOrCreatePeople(context.db, typed, "host", {
+				id: context.me.id,
+				host: !isAdmin(context.me),
+			});
 			const named = await nameOnlyFromBook(
 				context.db,
 				context.me.id,
@@ -348,6 +349,8 @@ export const guestsRouter = {
 	 * Give a name-only guest an email address, so they can get email once
 	 * it starts. An address somebody already has is refused rather than
 	 * merged: the host removes this guest and invites that person instead.
+	 * Written by `saveEmail` under the same guard as every host's change to
+	 * an address: only the host who typed them in, before they sign in.
 	 */
 	setEmail: hostProcedure
 		.input(
@@ -358,26 +361,34 @@ export const guestsRouter = {
 		)
 		.use(withHostEvent)
 		.handler(async ({ context, input }) => {
-			const row = context.event;
 			const guest = await context.db
-				.select({ userId: eventGuest.userId })
+				.select({ userId: eventGuest.userId, noEmail: user.noEmail })
 				.from(eventGuest)
+				.innerJoin(user, eq(user.id, eventGuest.userId))
 				.where(
-					and(eq(eventGuest.id, input.guestId), eq(eventGuest.eventId, row.id)),
+					and(
+						eq(eventGuest.id, input.guestId),
+						eq(eventGuest.eventId, context.event.id),
+					),
 				)
 				.get();
 			if (!guest)
 				throw new ORPCError("NOT_FOUND", { message: "No such guest." });
-			const outcome = await setRealEmail(context.db, guest.userId, input.email);
+			if (!guest.noEmail) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "They already have an email address.",
+				});
+			}
+			const outcome = await saveEmail(
+				context.db,
+				guest.userId,
+				input.email,
+				hostOf(context.me),
+			);
 			if (outcome === "taken") {
 				throw new ORPCError("BAD_REQUEST", {
 					message:
 						"Somebody already has that address. Remove this guest and invite them by email instead.",
-				});
-			}
-			if (outcome === "not-placeholder") {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "They already have an email address.",
 				});
 			}
 			return { ok: true };
@@ -464,6 +475,7 @@ export const guestsRouter = {
 				context.db,
 				[input.email],
 				"guest",
+				{ id: context.me.id, host: true },
 			);
 			if (!friend || friend.status === "deactivated") {
 				throw new ORPCError("BAD_REQUEST", {

@@ -69,123 +69,148 @@ export const NO_EMAIL_DOMAIN = "no-email.invalid";
  * Everybody, whatever their role: this one table is the people, the mailing
  * list and the accounts.
  */
-export const user = sqliteTable("user", {
-	id: text("id").primaryKey(),
-	/**
-	 * What everybody reads: always written alongside the name pair, as
-	 * `displayName(first, last)` or, with neither, the address's local part.
-	 * Better Auth needs it, and every email greets by it.
-	 */
-	name: text("name").notNull(),
-	firstName: text("first_name").notNull().default(""),
-	lastName: text("last_name").notNull().default(""),
-	email: text("email").notNull().unique(),
-	/** Normalized by `normalizePhone`: `+13015551212`. */
-	phone: text("phone"),
-	addressLine1: text("address_line1").notNull().default(""),
-	addressLine2: text("address_line2").notNull().default(""),
-	city: text("city").notNull().default(""),
-	region: text("region").notNull().default(""),
-	postalCode: text("postal_code").notNull().default(""),
-	country: text("country").notNull().default(""),
-	/**
-	 * What they eat, about themselves only (a party's uninvited others are
-	 * `event_guest.party_diet`): ids from `DIETS`, read through `dietsOf`,
-	 * and a free note. Written only by `setDiet` and `updateDetails`, which
-	 * stamp `diet_at`; null there means nobody has ever said, so the next
-	 * answer asks in full rather than "still right?".
-	 */
-	diets: text("diets", { mode: "json" }).notNull().default([]).$type<unknown>(),
-	dietNote: text("diet_note").notNull().default(""),
-	dietAt: integer("diet_at", { mode: "timestamp_ms" }),
-	/**
-	 * When they first signed in. Until then a host who has them in their
-	 * address book may correct their details; from then on the record is
-	 * theirs, and only they and an admin change it. Stamped by the session
-	 * hook in packages/auth, so every way in counts and a paper card's QR
-	 * code (which opens no session) does not.
-	 */
-	claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
-	emailVerified: integer("email_verified", { mode: "boolean" })
-		.default(false)
-		.notNull(),
-	/**
-	 * The profile picture's R2 key (`avatars/<uuid>.jpg`), not a URL; null
-	 * shows initials. Better Auth's own column, written only through
-	 * packages/api/src/avatar.ts, by the person or an admin.
-	 */
-	image: text("image"),
-	/** One of ROLES, or null for `user`. Read it through `roleOf`. */
-	role: text("role"),
-	/**
-	 * Better Auth's own gate, which it checks on its sign-in routes. We do
-	 * not set it by hand: it is a mirror of `status = 'deactivated'`, written
-	 * in the same statement, so the framework blocks the password door while
-	 * `status` stays the one thing the app reads. Nullable, because 0000
-	 * created it without NOT NULL -- never compare it with `= 0`.
-	 */
-	banned: integer("banned", { mode: "boolean" }).default(false),
-	banReason: text("ban_reason"),
-	banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
+export const user = sqliteTable(
+	"user",
+	{
+		id: text("id").primaryKey(),
+		/**
+		 * What everybody reads: always written alongside the name pair, as
+		 * `displayName(first, last)` or, with neither, the address's local part.
+		 * Better Auth needs it, and every email greets by it.
+		 */
+		name: text("name").notNull(),
+		firstName: text("first_name").notNull().default(""),
+		lastName: text("last_name").notNull().default(""),
+		email: text("email").notNull().unique(),
+		/** Normalized by `normalizePhone`: `+13015551212`. */
+		phone: text("phone"),
+		addressLine1: text("address_line1").notNull().default(""),
+		addressLine2: text("address_line2").notNull().default(""),
+		city: text("city").notNull().default(""),
+		region: text("region").notNull().default(""),
+		postalCode: text("postal_code").notNull().default(""),
+		country: text("country").notNull().default(""),
+		/**
+		 * What they eat, about themselves only (a party's uninvited others are
+		 * `event_guest.party_diet`): ids from `DIETS`, read through `dietsOf`,
+		 * and a free note. Written only by `setDiet` and `updateDetails`, which
+		 * stamp `diet_at`; null there means nobody has ever said, so the next
+		 * answer asks in full rather than "still right?".
+		 */
+		diets: text("diets", { mode: "json" })
+			.notNull()
+			.default([])
+			.$type<unknown>(),
+		dietNote: text("diet_note").notNull().default(""),
+		dietAt: integer("diet_at", { mode: "timestamp_ms" }),
+		/**
+		 * When they first signed in. Until then a host who has them in their
+		 * address book may correct their details; from then on the record is
+		 * theirs, and only they and an admin change it. Stamped by the session
+		 * hook in packages/auth, so every way in counts and a paper card's QR
+		 * code (which opens no session) does not.
+		 */
+		claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
+		emailVerified: integer("email_verified", { mode: "boolean" })
+			.default(false)
+			.notNull(),
+		/**
+		 * The profile picture's R2 key (`avatars/<uuid>.jpg`), not a URL; null
+		 * shows initials. Better Auth's own column, written only through
+		 * packages/api/src/avatar.ts, by the person or an admin.
+		 */
+		image: text("image"),
+		/** One of ROLES, or null for `user`. Read it through `roleOf`. */
+		role: text("role"),
+		/**
+		 * Better Auth's own gate, which it checks on its sign-in routes. We do
+		 * not set it by hand: it is a mirror of `status = 'deactivated'`, written
+		 * in the same statement, so the framework blocks the password door while
+		 * `status` stays the one thing the app reads. Nullable, because 0000
+		 * created it without NOT NULL -- never compare it with `= 0`.
+		 */
+		banned: integer("banned", { mode: "boolean" }).default(false),
+		banReason: text("ban_reason"),
+		banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
 
-	/**
-	 * Random token in every link we email this person. Clicking one signs
-	 * them in, so it is a bearer credential: never put it on a cover-photo
-	 * URL, and never hand it to Better Auth as an additional field -- those
-	 * get base64'd into a cookie the browser can read.
-	 * Nullable only because SQLite cannot add a NOT NULL unique column.
-	 */
-	linkToken: text("link_token").unique(),
-	/** When the last sign-in link was emailed, for the request cooldown. */
-	linkSentAt: integer("link_sent_at", { mode: "timestamp_ms" }),
-	/** Random token in the footer link of every list email. Same warning. */
-	unsubscribeToken: text("unsubscribe_token").unique(),
-	source: text("source", { enum: PERSON_SOURCES }).notNull().default("admin"),
+		/**
+		 * Random token in every link we email this person. Clicking one signs
+		 * them in, so it is a bearer credential: never put it on a cover-photo
+		 * URL, and never hand it to Better Auth as an additional field -- those
+		 * get base64'd into a cookie the browser can read.
+		 * Nullable only because SQLite cannot add a NOT NULL unique column.
+		 */
+		linkToken: text("link_token").unique(),
+		/** When the last sign-in link was emailed, for the request cooldown. */
+		linkSentAt: integer("link_sent_at", { mode: "timestamp_ms" }),
+		/** Random token in the footer link of every list email. Same warning. */
+		unsubscribeToken: text("unsubscribe_token").unique(),
+		source: text("source", { enum: PERSON_SOURCES }).notNull().default("admin"),
+		/**
+		 * Whoever typed them in: the host or admin who added them, the guest
+		 * who invited them as a friend, or null for somebody who came in by
+		 * themselves. Until they sign in, only this host may change their
+		 * address or number (`canEditReach`), where their sign-in links go.
+		 */
+		createdBy: text("created_by").references((): AnySQLiteColumn => user.id, {
+			onDelete: "set null",
+		}),
 
-	status: text("status", { enum: PERSON_STATUSES }).notNull().default("active"),
-	statusChangedAt: integer("status_changed_at", { mode: "timestamp_ms" }),
-	statusChangedBy: text("status_changed_by", { enum: STATUS_ACTORS }),
+		status: text("status", { enum: PERSON_STATUSES })
+			.notNull()
+			.default("active"),
+		statusChangedAt: integer("status_changed_at", { mode: "timestamp_ms" }),
+		statusChangedBy: text("status_changed_by", { enum: STATUS_ACTORS }),
 
-	/**
-	 * A paper guest added by name alone. Their `email` is a unique
-	 * placeholder at NO_EMAIL_DOMAIN (`.invalid` never delivers) only because
-	 * the column is NOT NULL UNIQUE; nothing may mail it or show it.
-	 */
-	noEmail: integer("no_email", { mode: "boolean" }).notNull().default(false),
-	/** Set while they want no email. Invitations still list them. */
-	unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp_ms" }),
-	unsubscribeReason: text("unsubscribe_reason", {
-		enum: UNSUBSCRIBE_REASONS,
-	}),
+		/**
+		 * A paper guest added by name alone. Their `email` is a unique
+		 * placeholder at NO_EMAIL_DOMAIN (`.invalid` never delivers) only because
+		 * the column is NOT NULL UNIQUE; nothing may mail it or show it.
+		 */
+		noEmail: integer("no_email", { mode: "boolean" }).notNull().default(false),
+		/** Set while they want no email. Invitations still list them. */
+		unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp_ms" }),
+		unsubscribeReason: text("unsubscribe_reason", {
+			enum: UNSUBSCRIBE_REASONS,
+		}),
 
-	/** One of CONTACT_CHANNELS, or null for the site's default. */
-	contactBy: text("contact_by", { enum: CONTACT_CHANNELS }),
-	/** The same choice for a host's reply alerts; null follows `contact_by`. */
-	alertsBy: text("alerts_by", { enum: CONTACT_CHANNELS }),
-	/**
-	 * The consent behind texting this number: a host ticking "they expect a
-	 * text from me" when typing it (`texts_ok_by` is that host), or the
-	 * person switching texts on themselves (`texts_ok_by` is them). Carriers
-	 * ask how every recipient agreed; nobody without it is ever texted.
-	 */
-	textsOkAt: integer("texts_ok_at", { mode: "timestamp_ms" }),
-	textsOkBy: text("texts_ok_by").references((): AnySQLiteColumn => user.id, {
-		onDelete: "set null",
-	}),
-	/**
-	 * They switched texts off on the account page. A STOP from the phone is
-	 * not here but in `sms_block`, because it belongs to the number.
-	 */
-	textsOffAt: integer("texts_off_at", { mode: "timestamp_ms" }),
+		/** One of CONTACT_CHANNELS, or null for the site's default. */
+		contactBy: text("contact_by", { enum: CONTACT_CHANNELS }),
+		/** The same choice for a host's reply alerts; null follows `contact_by`. */
+		alertsBy: text("alerts_by", { enum: CONTACT_CHANNELS }),
+		/**
+		 * The consent behind texting this number: a host ticking "they expect a
+		 * text from me" when typing it (`texts_ok_by` is that host), or the
+		 * person switching texts on themselves (`texts_ok_by` is them). Carriers
+		 * ask how every recipient agreed; nobody without it is ever texted.
+		 */
+		textsOkAt: integer("texts_ok_at", { mode: "timestamp_ms" }),
+		textsOkBy: text("texts_ok_by").references((): AnySQLiteColumn => user.id, {
+			onDelete: "set null",
+		}),
+		/**
+		 * They switched texts off on the account page. A STOP from the phone is
+		 * not here but in `sms_block`, because it belongs to the number.
+		 */
+		textsOffAt: integer("texts_off_at", { mode: "timestamp_ms" }),
 
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-		.notNull(),
-	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-		.$onUpdate(() => /* @__PURE__ */ new Date())
-		.notNull(),
-});
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+		updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.$onUpdate(() => /* @__PURE__ */ new Date())
+			.notNull(),
+	},
+	(table) => [
+		// "Text me my link", the Telnyx webhook and a host's book look people
+		// up by number.
+		index("user_phone_idx").on(table.phone),
+		// A person's delete sets these to null wherever they appear.
+		index("user_created_by_idx").on(table.createdBy),
+		index("user_texts_ok_by_idx").on(table.textsOkBy),
+	],
+);
 
 export const session = sqliteTable(
 	"session",

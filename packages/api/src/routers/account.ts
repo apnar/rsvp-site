@@ -73,7 +73,7 @@ export const accountRouter = {
 	setDetails: personProcedure
 		.input(detailsPatch)
 		.handler(async ({ context, input }) => {
-			await saveDetails(context.db, context.me.id, input, false);
+			await saveDetails(context.db, context.me.id, input, null);
 			return { ok: true };
 		}),
 

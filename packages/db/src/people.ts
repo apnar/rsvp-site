@@ -17,7 +17,6 @@ import { normalizeEmail } from "./addresses";
 import { batchAll, insertChunks, mapChunks } from "./batch";
 import { detailColumns, dietColumns, fillBlanks } from "./details";
 import { dietsOf } from "./diets";
-import { isUniqueViolation } from "./errors";
 import type { Db } from "./index";
 import { displayName, nameFor } from "./names";
 import { textablePhone } from "./phone";
@@ -80,6 +79,7 @@ export async function createNameOnlyPeople(
 	db: Db,
 	people: readonly Typed[],
 	source: PersonSource,
+	createdBy: string,
 ): Promise<{ id: string; name: string }[]> {
 	const rows = people.map((p) => {
 		const firstName = p.firstName ?? "";
@@ -95,6 +95,7 @@ export async function createNameOnlyPeople(
 			noEmail: true,
 			role: "user",
 			source,
+			createdBy,
 			linkToken: newToken(),
 			unsubscribeToken: newToken(),
 		};
@@ -123,7 +124,7 @@ export async function nameOnlyFromBook(
 		people.flatMap((p) => (p.phone ? [p.phone] : [])),
 	);
 	const fresh = people.filter((p) => !(p.phone && known.has(p.phone)));
-	const made = await createNameOnlyPeople(db, fresh, source);
+	const made = await createNameOnlyPeople(db, fresh, source, ownerId);
 	const madeOut = made.map((m, i) => ({
 		...m,
 		phone: fresh[i]?.phone ?? null,
@@ -141,37 +142,6 @@ export async function nameOnlyFromBook(
 			: [];
 	});
 	return [...reused, ...madeOut];
-}
-
-/**
- * Give a name-only guest a real address. Refused when that address already
- * belongs to somebody: merging two people is a host's call to make by hand
- * (remove this one, invite that one), not something to guess at.
- */
-export async function setRealEmail(
-	db: Db,
-	userId: string,
-	raw: string,
-): Promise<"ok" | "taken" | "not-placeholder"> {
-	const email = normalizeEmail(raw);
-	const taken = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.email, email))
-		.get();
-	if (taken) return "taken";
-	try {
-		const result = await db
-			.update(user)
-			.set({ email, noEmail: false })
-			.where(and(eq(user.id, userId), eq(user.noEmail, true)))
-			.run();
-		return result.meta.changes === 1 ? "ok" : "not-placeholder";
-	} catch (error) {
-		// Somebody took the address between the check and the write.
-		if (isUniqueViolation(error)) return "taken";
-		throw error;
-	}
 }
 
 const personColumns = {
@@ -362,11 +332,16 @@ export type Typed = {
  * A name or phone typed for somebody who already exists only fills a blank
  * (`fillBlanks`). Deactivated people come back as found, never revived;
  * callers skip them.
+ *
+ * `by` is who is typing: their id goes on the new rows as `created_by`,
+ * and `host` says they fill blanks only where a host may edit (null for
+ * an admin). A stranger on a share link is nobody's: `by` is null.
  */
 export async function findOrCreatePeople(
 	db: Db,
 	entries: readonly (string | ({ email: string } & Typed))[],
 	source: PersonSource,
+	by: { id: string; host: boolean } | null,
 ): Promise<FoundPerson[]> {
 	const typed = new Map<string, Typed>();
 	for (const e of entries) {
@@ -396,6 +371,7 @@ export async function findOrCreatePeople(
 			emailVerified: false,
 			role: "user",
 			source,
+			createdBy: by?.id ?? null,
 			linkToken: newToken(),
 			unsubscribeToken: newToken(),
 		};
@@ -412,15 +388,18 @@ export async function findOrCreatePeople(
 				.onConflictDoNothing({ target: user.email }),
 		),
 	);
-	await fillBlanks(
-		db,
-		before.flatMap((p) => {
-			const t = typed.get(p.email);
-			return t && p.status !== "deactivated"
-				? [{ id: p.id, email: p.email, typed: t }]
-				: [];
-		}),
-	);
+	if (by) {
+		await fillBlanks(
+			db,
+			before.flatMap((p) => {
+				const t = typed.get(p.email);
+				return t && p.status !== "deactivated"
+					? [{ id: p.id, email: p.email, typed: t }]
+					: [];
+			}),
+			by.host ? by.id : null,
+		);
+	}
 	const after = missing.length ? await selectByEmail(db, wanted) : before;
 	const order = new Map(wanted.map((email, i) => [email, i]));
 	return after

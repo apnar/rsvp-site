@@ -82,6 +82,7 @@ export const peopleRouter = {
 				context.db,
 				[{ email: input.email, ...splitName(input.name ?? "") }],
 				"admin",
+				{ id: context.me.id, host: false },
 			);
 			if (!person) {
 				throw new ORPCError("BAD_REQUEST", { message: "No address given." });
@@ -113,7 +114,7 @@ export const peopleRouter = {
 		.handler(async ({ context, input }) => {
 			const { userId, ...patch } = input;
 			await requirePerson(context.db, userId);
-			await saveDetails(context.db, userId, patch, false);
+			await saveDetails(context.db, userId, patch, null);
 			return { ok: true };
 		}),
 
@@ -150,7 +151,7 @@ export const peopleRouter = {
 				context.db,
 				input.userId,
 				input.email,
-				false,
+				null,
 			);
 			if (outcome === "taken") {
 				throw new ORPCError("BAD_REQUEST", {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canEditDetails, gapsOf } from "./details";
+import { canEditDetails, canEditReach, gapsOf } from "./details";
 
 const host = { id: "h", role: "host" };
 const guest = {
@@ -44,6 +44,31 @@ describe("canEditDetails", () => {
 		expect(canEditDetails({ id: "a", role: "admin" }, claimed, false)).toBe(
 			true,
 		);
+	});
+});
+
+describe("canEditReach", () => {
+	const mine = { ...guest, createdBy: "h" };
+	it("lets only the host who typed somebody in change their address or number", () => {
+		expect(canEditReach(host, mine, true)).toBe(true);
+		expect(canEditReach(host, { ...mine, createdBy: "other" }, true)).toBe(
+			false,
+		);
+		expect(canEditReach(host, { ...mine, createdBy: null }, true)).toBe(false);
+	});
+
+	it("still needs everything canEditDetails does", () => {
+		expect(canEditReach(host, { ...mine, claimedAt: new Date() }, true)).toBe(
+			false,
+		);
+		expect(canEditReach(host, { ...mine, inFamily: true }, true)).toBe(false);
+		expect(canEditReach(host, { ...mine, role: "host" }, true)).toBe(false);
+	});
+
+	it("always lets the person themselves and an admin", () => {
+		const theirs = { ...mine, createdBy: "other", claimedAt: new Date() };
+		expect(canEditReach({ id: "g", role: "user" }, theirs, false)).toBe(true);
+		expect(canEditReach({ id: "a", role: "admin" }, theirs, false)).toBe(true);
 	});
 });
 

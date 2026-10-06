@@ -91,8 +91,23 @@ export const smsSend = sqliteTable(
 	(table) => [
 		index("sms_send_event_user_idx").on(table.eventId, table.userId),
 		index("sms_send_phone_idx").on(table.phone, table.createdAt),
+		// A person's delete sets it to null wherever it appears.
+		index("sms_send_user_idx").on(table.userId),
 	],
 );
+
+/**
+ * Telnyx webhook events already acted on, by Telnyx's event id. Telnyx
+ * redelivers anything it isn't sure we took, and acting on an inbound
+ * text twice would forward it twice; claiming the id first makes the
+ * second delivery a no-op. Pruned after a week by the cron.
+ */
+export const telnyxEvent = sqliteTable("telnyx_event", {
+	id: text("id").primaryKey(),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+});
 
 /**
  * The short `/t/<code>` links in texts, standing in for the long

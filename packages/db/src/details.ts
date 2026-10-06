@@ -25,15 +25,6 @@ export type Details = {
 	dietNote: string;
 };
 
-export const ADDRESS_FIELDS = [
-	"addressLine1",
-	"addressLine2",
-	"city",
-	"region",
-	"postalCode",
-	"country",
-] as const;
-
 /** The columns behind `Details`, for selects. */
 export const detailColumns = {
 	firstName: user.firstName,
@@ -89,12 +80,34 @@ export function canEditDetails(
 }
 
 /**
- * Where an edit may land. A host's write carries the same conditions as
- * `canEditDetails` into the UPDATE, so somebody signing in between the
- * check and the write keeps their record.
+ * Whether the caller may change somebody's address or number. Those are
+ * where sign-in links go ("email me my link", "text me my link"), so a
+ * host needs more than `canEditDetails`: being the one who typed the
+ * person in. Being in a host's book is not enough, since any host can put
+ * anybody in theirs by typing an address they know.
  */
-function editable(id: string, asHost: boolean): SQL | undefined {
-	return asHost
+export function canEditReach(
+	me: { id: string; role: string | null },
+	target: Parameters<typeof canEditDetails>[1] & { createdBy: string | null },
+	inMyBook: boolean,
+): boolean {
+	if (isAdmin(me) || me.id === target.id) return true;
+	return canEditDetails(me, target, inMyBook) && target.createdBy === me.id;
+}
+
+/**
+ * Where an edit may land. A host's write (`host` is their id; null is an
+ * admin or the person themselves) carries the conditions of
+ * `canEditDetails` into the UPDATE, and those of `canEditReach` when it
+ * touches an address or number, so somebody signing in between the check
+ * and the write keeps their record.
+ */
+function editable(
+	id: string,
+	host: string | null,
+	reach: boolean,
+): SQL | undefined {
+	return host !== null
 		? and(
 				eq(user.id, id),
 				isNull(user.claimedAt),
@@ -103,6 +116,7 @@ function editable(id: string, asHost: boolean): SQL | undefined {
 				or(isNull(user.role), eq(user.role, "user")),
 				// Plain names: a raw subquery on a single-table update (CLAUDE.md).
 				sql`not exists (select 1 from family_member where family_member.user_id = ${id})`,
+				reach ? eq(user.createdBy, host) : undefined,
 			)
 		: eq(user.id, id);
 }
@@ -116,7 +130,7 @@ export async function updateDetails(
 	db: Db,
 	id: string,
 	patch: Partial<Details>,
-	opts: { asHost: boolean },
+	opts: { host: string | null },
 ): Promise<boolean> {
 	const row = await db
 		.select({
@@ -157,7 +171,7 @@ export async function updateDetails(
 					}
 				: {}),
 		})
-		.where(editable(id, opts.asHost))
+		.where(editable(id, opts.host, patch.phone !== undefined))
 		.run();
 	return result.meta.changes === 1;
 }
@@ -220,7 +234,10 @@ export async function setDiets(
  * Fill in what a host typed for people who already exist, without
  * overwriting: a name only where nobody has given one, a phone only where
  * there is none. A pasted "Linh N" never replaces "Linh Nguyen"; changing
- * a name is an edit, made on purpose. Claimed records are never touched.
+ * a name is an edit, made on purpose. Claimed records are never touched,
+ * and a host fills only what they could edit (`editable`): typing a known
+ * address beside your own number must not put your number on somebody
+ * else's record, where "text me my link" would send their way in.
  */
 export async function fillBlanks(
 	db: Db,
@@ -229,6 +246,7 @@ export async function fillBlanks(
 		email: string;
 		typed: { firstName?: string; lastName?: string; phone?: string | null };
 	}[],
+	host: string | null,
 ): Promise<void> {
 	const statements = people.flatMap(({ id, email, typed }) => {
 		const out = [];
@@ -244,7 +262,7 @@ export async function fillBlanks(
 					})
 					.where(
 						and(
-							eq(user.id, id),
+							editable(id, host, false),
 							isNull(user.claimedAt),
 							eq(user.firstName, ""),
 						),
@@ -257,7 +275,11 @@ export async function fillBlanks(
 					.update(user)
 					.set({ phone: typed.phone })
 					.where(
-						and(eq(user.id, id), isNull(user.claimedAt), isNull(user.phone)),
+						and(
+							editable(id, host, true),
+							isNull(user.claimedAt),
+							isNull(user.phone),
+						),
 					),
 			);
 		}
@@ -267,17 +289,20 @@ export async function fillBlanks(
 }
 
 /**
- * Change somebody's address in place: a typo fixed, or a name-only guest
- * given one. Whatever was sent to the old address went to somebody else,
- * so both tokens are replaced (its links stop working) and an unsubscribe
- * from there no longer speaks for this person. "taken" when the address is
- * already somebody's: merging two people is never guessed at.
+ * The one way an address is written. Checks it is free (merging two people
+ * is never guessed at), writes it with the name that depends on it, and
+ * turns a write that lost the race for the address into "taken". A
+ * name-only record given its first address keeps getting texts beside the
+ * email, if it was, rather than finding its invitations moved.
  */
-export async function changeEmail(
+async function writeEmail(
 	db: Db,
 	id: string,
 	raw: string,
-	opts: { asHost: boolean },
+	write: {
+		where: SQL | undefined;
+		set: (row: { noEmail: boolean }) => Partial<typeof user.$inferInsert>;
+	},
 ): Promise<"ok" | "same" | "taken" | "refused"> {
 	const email = normalizeEmail(raw);
 	const owner = await db
@@ -290,25 +315,29 @@ export async function changeEmail(
 		.select({
 			firstName: user.firstName,
 			lastName: user.lastName,
+			noEmail: user.noEmail,
+			contactBy: user.contactBy,
+			textsOkAt: user.textsOkAt,
+			textsOffAt: user.textsOffAt,
 		})
 		.from(user)
 		.where(eq(user.id, id))
 		.get();
 	if (!row) return "refused";
+	const texted = row.textsOkAt !== null && row.textsOffAt === null;
 	try {
 		const result = await db
 			.update(user)
 			.set({
 				email,
 				noEmail: false,
-				emailVerified: false,
 				name: nameFor(row.firstName, row.lastName, email),
-				linkToken: newToken(),
-				unsubscribeToken: newToken(),
-				unsubscribedAt: null,
-				unsubscribeReason: null,
+				...(row.noEmail && texted && row.contactBy === null
+					? { contactBy: "both" as const }
+					: {}),
+				...write.set(row),
 			})
-			.where(editable(id, opts.asHost))
+			.where(write.where)
 			.run();
 		return result.meta.changes === 1 ? "ok" : "refused";
 	} catch (error) {
@@ -316,6 +345,36 @@ export async function changeEmail(
 		if (isUniqueViolation(error)) return "taken";
 		throw error;
 	}
+}
+
+/**
+ * Change somebody's address in place: a typo fixed, or a name-only guest
+ * given one. Whatever was sent to an old real address went to somebody
+ * else, so then both tokens are replaced (its links stop working) and an
+ * unsubscribe from there no longer speaks for this person. A placeholder
+ * was never sent anything, and the links texted to this person copy the
+ * current token, so a name-only record keeps its tokens.
+ */
+export async function changeEmail(
+	db: Db,
+	id: string,
+	raw: string,
+	opts: { host: string | null },
+): Promise<"ok" | "same" | "taken" | "refused"> {
+	return writeEmail(db, id, raw, {
+		where: editable(id, opts.host, true),
+		set: (row) => ({
+			emailVerified: false,
+			...(row.noEmail
+				? {}
+				: {
+						linkToken: newToken(),
+						unsubscribeToken: newToken(),
+						unsubscribedAt: null,
+						unsubscribeReason: null,
+					}),
+		}),
+	});
 }
 
 /**
@@ -338,9 +397,10 @@ export const NO_GAPS: ContactGaps = { email: false, phone: false };
  * Who is filling in the blanks. A signed-in guest fills their own record.
  * A printed card's holder is taken to be its guest, but the key is one the
  * host printed, so a card fills only what that host could: blanks on a
- * plain record nobody has signed in to.
+ * plain record nobody has signed in to, which that host typed in. `card`
+ * is that host's id; null (the host is gone) fills nothing.
  */
-export type FilledBy = "self" | "card";
+export type FilledBy = "self" | { card: string | null };
 
 export function gapsOf(row: {
 	noEmail: boolean;
@@ -351,7 +411,11 @@ export function gapsOf(row: {
 
 /** Where a blank may be filled. Never a deactivated row, like every self-service write. */
 function fillable(id: string, by: FilledBy): SQL | undefined {
-	return and(editable(id, by === "card"), ne(user.status, "deactivated"));
+	if (by !== "self" && by.card === null) return sql`0`;
+	return and(
+		editable(id, by === "self" ? null : by.card, true),
+		ne(user.status, "deactivated"),
+	);
 }
 
 /** The blanks this caller may fill on somebody's record; none if they may fill nothing. */
@@ -399,12 +463,9 @@ export async function fillPhone(
 
 /**
  * Give a name-only record the address its owner confirmed, by pressing
- * the button behind a link sent there. Unlike `changeEmail` the tokens
- * stay: nothing ever went to a placeholder, and the sign-in links already
- * texted to this person copy the current one. The address is verified,
- * having been clicked, and somebody who was getting texts keeps getting
- * them beside the email rather than finding their invitations moved.
- * "taken" when the address is somebody else's: merging is never guessed at.
+ * the button behind a link sent there. The tokens stay (`changeEmail`
+ * says why), and the address is verified, having been clicked. "taken"
+ * when the address is somebody else's: merging is never guessed at.
  */
 export async function claimEmail(
 	db: Db,
@@ -412,44 +473,10 @@ export async function claimEmail(
 	raw: string,
 	by: FilledBy,
 ): Promise<"ok" | "taken" | "refused"> {
-	const email = normalizeEmail(raw);
-	const owner = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.email, email))
-		.get();
+	const outcome = await writeEmail(db, id, raw, {
+		where: and(fillable(id, by), eq(user.noEmail, true)),
+		set: () => ({ emailVerified: true }),
+	});
 	// A second press of the same button.
-	if (owner) return owner.id === id ? "ok" : "taken";
-	const row = await db
-		.select({
-			firstName: user.firstName,
-			lastName: user.lastName,
-			contactBy: user.contactBy,
-			textsOkAt: user.textsOkAt,
-			textsOffAt: user.textsOffAt,
-		})
-		.from(user)
-		.where(eq(user.id, id))
-		.get();
-	if (!row) return "refused";
-	const texted = row.textsOkAt !== null && row.textsOffAt === null;
-	try {
-		const result = await db
-			.update(user)
-			.set({
-				email,
-				noEmail: false,
-				emailVerified: true,
-				name: nameFor(row.firstName, row.lastName, email),
-				...(texted && row.contactBy === null
-					? { contactBy: "both" as const }
-					: {}),
-			})
-			.where(and(fillable(id, by), eq(user.noEmail, true)))
-			.run();
-		return result.meta.changes === 1 ? "ok" : "refused";
-	} catch (error) {
-		if (isUniqueViolation(error)) return "taken";
-		throw error;
-	}
+	return outcome === "same" ? "ok" : outcome;
 }

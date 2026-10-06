@@ -24,12 +24,27 @@ const encoder = new TextEncoder();
 // other signature made with that secret can pass for one of these.
 const PURPOSE = "email-claim";
 
+// `by` travels as "self" or "card:<host id>": a card's claim is checked
+// against the host whose card it was, as the card's own fill is.
+const byShape = z.union([
+	z.literal("self"),
+	z
+		.string()
+		.regex(/^card:[^:]{1,64}$/)
+		.transform((s): FilledBy => ({ card: s.slice("card:".length) })),
+]);
+
 const claimShape = z.tuple([
 	z.string().min(1).max(64),
 	z.string().min(3).max(254),
-	z.enum(["self", "card"]),
+	byShape,
 	z.number().int(),
 ]);
+
+function byText(by: FilledBy): string {
+	// A card whose host is gone fills nothing, and no claim is made for it.
+	return by === "self" ? "self" : `card:${by.card ?? ""}`;
+}
 
 function toBase64Url(bytes: Uint8Array): string {
 	let binary = "";
@@ -68,7 +83,12 @@ export async function signEmailClaim(
 ): Promise<string> {
 	const body = toBase64Url(
 		encoder.encode(
-			JSON.stringify([claim.userId, claim.email, claim.by, claim.expires]),
+			JSON.stringify([
+				claim.userId,
+				claim.email,
+				byText(claim.by),
+				claim.expires,
+			]),
 		),
 	);
 	const mac = await crypto.subtle.sign(

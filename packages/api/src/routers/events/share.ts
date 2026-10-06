@@ -83,7 +83,12 @@ export const shareRouter = {
 			) {
 				return { ok: true };
 			}
-			const [person] = await findOrCreatePeople(context.db, [email], "link");
+			const [person] = await findOrCreatePeople(
+				context.db,
+				[email],
+				"link",
+				null,
+			);
 			if (!person || person.status === "deactivated") return { ok: true };
 			const token = await context.db
 				.select({ linkToken: user.linkToken })

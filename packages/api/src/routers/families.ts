@@ -102,11 +102,15 @@ export const familiesRouter = {
 				t.email ? [{ ...t, email: t.email }] : [],
 			);
 			const [people, named, picked] = await Promise.all([
-				findOrCreatePeople(context.db, emailed, "admin"),
+				findOrCreatePeople(context.db, emailed, "admin", {
+					id: context.me.id,
+					host: false,
+				}),
 				createNameOnlyPeople(
 					context.db,
 					typed.filter((t) => !t.email),
 					"admin",
+					context.me.id,
 				),
 				input.userIds.length
 					? context.db

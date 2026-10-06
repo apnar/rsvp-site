@@ -62,7 +62,7 @@ export async function fillContact(
 	const refusal = (what: string) =>
 		new ORPCError("BAD_REQUEST", {
 			message:
-				by === "card"
+				by !== "self"
 					? "Only they can change their details now."
 					: `There's ${what} on file already.`,
 		});

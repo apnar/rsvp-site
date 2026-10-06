@@ -317,6 +317,9 @@ export const eventGuest = sqliteTable(
 	(table) => [
 		uniqueIndex("event_guest_event_user_uidx").on(table.eventId, table.userId),
 		index("event_guest_user_idx").on(table.userId),
+		// A person's delete sets these to null wherever they appear.
+		index("event_guest_added_by_idx").on(table.addedBy),
+		index("event_guest_answered_by_idx").on(table.answeredBy),
 	],
 );
 

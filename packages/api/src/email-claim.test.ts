@@ -6,7 +6,7 @@ const secret = "a-test-secret-that-is-long-enough";
 const claim = {
 	userId: "0b0e3c9a-5d1f-4a57-9a0c-2f4f1d1b7c11",
 	email: "dana@example.com",
-	by: "card" as const,
+	by: { card: "7c2e9f40-1b8a-4d6e-9a53-0f1e2d3c4b5a" },
 	expires: 2_000_000,
 };
 
@@ -16,6 +16,12 @@ describe("email claims", () => {
 		expect(token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
 		expect(await readEmailClaim(secret, token, 1_000_000)).toEqual(claim);
 		expect(await readEmailClaim(secret, token, 2_000_001)).toBe("expired");
+	});
+
+	it("carries a guest's own claim as well as a card's", async () => {
+		const own = { ...claim, by: "self" as const };
+		const token = await signEmailClaim(secret, own);
+		expect(await readEmailClaim(secret, token, 0)).toEqual(own);
 	});
 
 	it("refuses another secret, a changed body and junk", async () => {
@@ -36,7 +42,7 @@ describe("email claims", () => {
 	it("refuses a well-signed body of the wrong shape", async () => {
 		const token = await signEmailClaim(secret, {
 			...claim,
-			by: "host" as never,
+			by: { card: "a:b" },
 		});
 		expect(await readEmailClaim(secret, token, 0)).toBeNull();
 	});
