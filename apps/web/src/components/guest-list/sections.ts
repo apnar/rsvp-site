@@ -2,8 +2,8 @@ import type { AnswerWords } from "@rsvp-site/api/answer-words";
 import { seenNoReply } from "@rsvp-site/api/headcount";
 import type { Guest } from "./types";
 
-export const SECTION_KEYS = ["yes", "maybe", "no", "viewed", "unseen"] as const;
-export type SectionKey = (typeof SECTION_KEYS)[number];
+const SECTION_KEYS = ["yes", "maybe", "no", "viewed", "unseen"] as const;
+type SectionKey = (typeof SECTION_KEYS)[number];
 
 /**
  * "No reply" inside a sentence: "Viewed, no reply". Only a word in
@@ -32,7 +32,7 @@ function labels(words: AnswerWords): Record<SectionKey, string> {
 
 type Sortable = Pick<Guest, "name" | "response" | "viewedAt">;
 
-export function sectionOf(g: Sortable): SectionKey {
+function sectionOf(g: Sortable): SectionKey {
 	if (g.response !== null) return g.response;
 	return seenNoReply(g) ? "viewed" : "unseen";
 }

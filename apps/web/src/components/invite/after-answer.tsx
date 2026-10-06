@@ -1,76 +1,19 @@
-import type { Answer } from "@rsvp-site/api/headcount";
-import type { DietId } from "@rsvp-site/db/diets";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Field, Switch } from "@/components/controls";
-import {
-	DietFields,
-	DietIcons,
-	type DietValue,
-	dietSummary,
-	sameDiet,
-} from "@/components/diet";
+import { DietFields, DietSummaryRow, PersonLabel } from "@/components/diet";
 import { TextsDisclosure } from "@/components/texts-copy";
 import type { Outputs } from "@/lib/api-types";
-import type { RsvpValues } from "./rsvp-form";
-import type { Invite } from "./types";
+import type { DietPerson, DietSave } from "@/lib/diet-people";
+import { type DietValue, NO_DIET, sameDiet } from "@/lib/diet-value";
 
 /** What the panel sends: whichever blanks the guest filled. */
 export type ContactValues = { phone?: string; texts: boolean; email?: string };
 
 type ContactResult = Outputs["contact"]["add"];
-
-/** Somebody whose diet the panel checks: the guest, or a relative they answered for. */
-export type DietPerson = {
-	userId: string;
-	name: string;
-	you: boolean;
-	child: boolean;
-	diet: { diets: DietId[]; note: string; confirmed: boolean };
-};
-
-export type DietSave = { userId: string; diets: DietId[]; note: string }[];
-
-const coming = (a: Answer | null | undefined) => a === "yes" || a === "maybe";
-
-/**
- * Whose diets to check after an answer: the guest if they're coming, and
- * each relative who now is. Decided from what was just sent, since the
- * page's copy of the answers refreshes only after the panel opens.
- */
-export function dietPeople(
-	me: NonNullable<Invite["me"]>,
-	askDietary: boolean,
-	sent: RsvpValues,
-): DietPerson[] {
-	if (!askDietary) return [];
-	const sentFor = new Map(sent.family.map((f) => [f.guestId, f.response]));
-	return [
-		...(coming(sent.response)
-			? [
-					{
-						userId: me.userId,
-						name: "You",
-						you: true,
-						child: false,
-						diet: me.diet,
-					},
-				]
-			: []),
-		...me.family
-			.filter((r) => coming(sentFor.get(r.guestId) ?? r.response))
-			.map((r) => ({
-				userId: r.userId,
-				name: r.name,
-				you: false,
-				child: r.child,
-				diet: r.diet,
-			})),
-	];
-}
 
 function askLine(missing: { email: boolean; phone: boolean }): string {
 	if (missing.email && missing.phone) {
@@ -189,7 +132,7 @@ export function AfterAnswer({
 				if (askDiets) {
 					saveDiets(
 						people.map((p) => {
-							const d = diets[p.userId] ?? { diets: [], note: "" };
+							const d = diets[p.userId] ?? NO_DIET;
 							return { userId: p.userId, diets: d.diets, note: d.note.trim() };
 						}),
 						{
@@ -221,20 +164,12 @@ export function AfterAnswer({
 							: "Tick anything the hosts should plan for. It's kept for next time, so you only say it once."}
 					</p>
 					{people.map((p) => {
-						const value = diets[p.userId] ?? { diets: [], note: "" };
-						const label = (
-							<span className="font-bold text-[15px]">
-								{p.name}
-								{p.child ? (
-									<span className="ml-2 rounded-full border border-line px-2 py-0.5 font-semibold text-[11px] text-haze">
-										kid
-									</span>
-								) : null}
-							</span>
-						);
+						const value = diets[p.userId] ?? NO_DIET;
 						return open[p.userId] ? (
 							<div key={p.userId} className="flex flex-col gap-2">
-								{people.length > 1 || !p.you ? label : null}
+								{people.length > 1 || !p.you ? (
+									<PersonLabel name={p.name} child={p.child} />
+								) : null}
 								<DietFields
 									idPrefix={`after-${p.userId}`}
 									value={value}
@@ -242,30 +177,13 @@ export function AfterAnswer({
 								/>
 							</div>
 						) : (
-							<div
+							<DietSummaryRow
 								key={p.userId}
-								className="flex items-center justify-between gap-2"
-							>
-								<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-									{label}
-									<span className="flex flex-wrap items-center gap-1.5 text-[14px] text-soft">
-										<DietIcons
-											diets={value.diets}
-											decorative
-											className="text-pink-ink"
-										/>
-										{dietSummary(value)}
-									</span>
-								</span>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									onClick={() => setOpen((o) => ({ ...o, [p.userId]: true }))}
-								>
-									Change
-								</Button>
-							</div>
+								name={p.name}
+								child={p.child}
+								value={value}
+								onChange={() => setOpen((o) => ({ ...o, [p.userId]: true }))}
+							/>
 						);
 					})}
 				</div>

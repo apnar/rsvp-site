@@ -3,14 +3,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 import { toast } from "sonner";
-
+import { textsUnconfirmed } from "@/components/guest-picker";
 import { DRY_RUN_SUFFIX } from "@/content/site";
 import { refreshCard } from "@/lib/design-card";
 import { messageOf } from "@/lib/errors";
 import { plural } from "@/lib/format";
 import { shrinkCoverForText } from "@/lib/shrink-image";
 import { client, orpc } from "@/utils/orpc";
-import { textsUnconfirmed } from "../guest-picker";
 
 import { fieldsOf, type Loaded } from "./form";
 import type { EventDraft } from "./use-event-draft";

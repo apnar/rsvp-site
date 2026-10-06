@@ -1,5 +1,6 @@
 import { cn } from "@rsvp-site/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 
 import { AddGuests } from "@/components/add-guests";
 import { StepHeading } from "@/components/controls";
@@ -29,6 +30,11 @@ export function GuestsSection({
 	const guestCount = loaded?.guests.length ?? 0;
 	const notInvited = loaded?.notInvited ?? 0;
 
+	// A fresh Set each render would look like a new list to AddGuests every time.
+	const onList = useMemo(
+		() => new Set(loaded?.guests.map((g) => g.userId)),
+		[loaded?.guests],
+	);
 	return (
 		<Panel className="gap-3.5">
 			<StepHeading
@@ -85,7 +91,7 @@ export function GuestsSection({
 						eventId={eventId}
 						published={published}
 						paper={form.paper}
-						onList={new Set(loaded?.guests.map((g) => g.userId))}
+						onList={onList}
 					/>
 				</>
 			) : (

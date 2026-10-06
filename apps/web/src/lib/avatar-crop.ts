@@ -20,7 +20,7 @@ function turned(img: Size, rotation: Rotation): Size {
 }
 
 /** Viewport units per image pixel. The short side covers the square at zoom 1. */
-export function scaleOf(crop: Crop, img: Size): number {
+function scaleOf(crop: Crop, img: Size): number {
 	return crop.zoom / Math.min(img.width, img.height);
 }
 

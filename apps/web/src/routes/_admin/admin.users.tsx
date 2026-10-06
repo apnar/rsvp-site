@@ -3,20 +3,19 @@ import type { Role } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
-import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DeletePerson } from "@/components/admin/delete-person";
+import { EditPerson } from "@/components/admin/edit-person";
+import { usePersonActions } from "@/components/admin/use-person-actions";
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
 import { NativeSelect } from "@/components/native-select";
 import { Panel } from "@/components/page";
-import {
-	type DetailsPatch,
-	PersonDetailsDialog,
-} from "@/components/person-details";
 import { PillTabs } from "@/components/pill-tabs";
 import { DRY_RUN_SUFFIX, pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
@@ -139,13 +138,13 @@ function AddPerson() {
 	);
 	return (
 		<Panel
+			title="Add somebody"
 			as="form"
 			onSubmit={(e) => {
 				e.preventDefault();
 				add.mutate({ email, name: name || undefined, role });
 			}}
 		>
-			<h2 className="m-0 text-[20px]">Add somebody</h2>
 			<p className="m-0 text-[14px] text-haze">
 				They get an email with their sign-in link. Hosts add guests themselves
 				by inviting them; this is for making hosts and admins, or sending
@@ -192,44 +191,9 @@ function AddPerson() {
 }
 
 function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
-	const setRole = useMutation(
-		orpc.people.setRole.mutationOptions({
-			onSuccess: () => {
-				toast.success(
-					"Role changed. It takes effect the next time they load a page.",
-				);
-			},
-		}),
-	);
-	const sendLink = useMutation(
-		orpc.people.sendLink.mutationOptions({
-			onSuccess: (r) => {
-				toast.success(`Link sent.${r.dryRun ? DRY_RUN_SUFFIX : ""}`);
-			},
-		}),
-	);
-	const newLink = useMutation(
-		orpc.people.newLink.mutationOptions({
-			onSuccess: () => {
-				toast.success(
-					"Their old link stopped working and they're signed out everywhere. Send them the new one.",
-				);
-			},
-		}),
-	);
-	const update = useMutation(orpc.people.update.mutationOptions());
-	const setEmail = useMutation(orpc.people.setEmail.mutationOptions());
-	const setPicture = useMutation(
-		orpc.people.setPicture.mutationOptions({
-			onSuccess: () => toast.success("Picture saved."),
-		}),
-	);
-	const removePicture = useMutation(
-		orpc.people.removePicture.mutationOptions(),
-	);
+	const { setRole, sendLink, newLink, deactivate, reactivate } =
+		usePersonActions();
 	const [editing, setEditing] = useState(false);
-	const deactivate = useMutation(orpc.people.deactivate.mutationOptions());
-	const reactivate = useMutation(orpc.people.reactivate.mutationOptions());
 	const off = p.status === "deactivated";
 
 	return (
@@ -355,88 +319,8 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 				)}
 			</span>
 			{editing ? (
-				<PersonDetailsDialog
-					person={p}
-					editable
-					pending={update.isPending || setEmail.isPending}
-					onSave={(patch: DetailsPatch) =>
-						update.mutateAsync({ userId: p.id, ...patch })
-					}
-					onSaveEmail={(email) => setEmail.mutateAsync({ userId: p.id, email })}
-					onClose={() => setEditing(false)}
-					picture={{
-						image: p.image,
-						pending: setPicture.isPending || removePicture.isPending,
-						onSave: (file) => setPicture.mutateAsync({ userId: p.id, file }),
-						onRemove: () => removePicture.mutateAsync({ userId: p.id }),
-					}}
-				/>
+				<EditPerson person={p} onClose={() => setEditing(false)} />
 			) : null}
 		</div>
-	);
-}
-
-/**
- * Delete somebody for good. Opening it asks the server what happens to the
- * events they own, so the admin sees which pass to a co-host and which go
- * with them before saying yes, and why it is refused when it would be.
- */
-function DeletePerson({ person }: { person: Person }) {
-	const [open, setOpen] = useState(false);
-	const plan = useQuery({
-		...orpc.people.removal.queryOptions({ input: { userId: person.id } }),
-		enabled: open,
-	});
-	const remove = useMutation(
-		orpc.people.remove.mutationOptions({
-			onSuccess: () => toast.success(`${person.name} is deleted.`),
-		}),
-	);
-	const p = plan.data;
-	return (
-		<ConfirmAction
-			trigger={{ variant: "ghost", size: "sm", children: "Delete" }}
-			title={`Delete ${person.name} for good?`}
-			confirm="Delete them"
-			cancel="Keep"
-			boxClassName="flex basis-full flex-col gap-2.5 rounded-[20px] border border-destructive/50 p-4 text-[14px]"
-			confirmDisabled={!p || p.blocking.length > 0}
-			pending={remove.isPending}
-			onOpenChange={setOpen}
-			onConfirm={() => remove.mutate({ userId: person.id })}
-		>
-			<span className="text-soft">
-				Their invitations, answers, family and address-book entries go too.
-				Deactivating keeps all that and only shuts them out.
-			</span>
-			{p ? (
-				<>
-					{p.handOff.length > 0 ? (
-						<span>
-							Passes to a co-host:{" "}
-							{p.handOff.map((h) => `${h.title} (${h.to})`).join(", ")}
-						</span>
-					) : null}
-					{p.erase.length > 0 ? (
-						<span>Deleted with them: {p.erase.join(", ")}</span>
-					) : null}
-					{p.blocking.length > 0 ? (
-						<span className="text-destructive">
-							Guests are still expecting {p.blocking.join(", ")}. Cancel it or
-							add a co-host first.
-						</span>
-					) : null}
-				</>
-			) : plan.isError ? (
-				<span className="flex items-center gap-2 text-destructive">
-					Couldn't check their events.
-					<Button variant="outline" size="sm" onClick={() => plan.refetch()}>
-						Retry
-					</Button>
-				</span>
-			) : (
-				<span className="text-haze">Checking their events…</span>
-			)}
-		</ConfirmAction>
 	);
 }

@@ -60,6 +60,7 @@ export function AddGuests({
 
 	return (
 		<Panel
+			title="Invite more"
 			as="form"
 			className="gap-3.5"
 			onSubmit={(ev) => {
@@ -72,7 +73,6 @@ export function AddGuests({
 				});
 			}}
 		>
-			<h2 className="m-0 text-[20px]">Invite more</h2>
 			<GuestPicker
 				value={pick}
 				onChange={setPick}

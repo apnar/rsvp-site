@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-
+import { type GuestPick, hasPick, NO_PICK } from "@/components/guest-picker";
 import { coverSrc } from "@/lib/format";
-
-import { type GuestPick, hasPick, NO_PICK } from "../guest-picker";
 import {
 	BLANK,
 	type EventForm,

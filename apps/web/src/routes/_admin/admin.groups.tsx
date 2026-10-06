@@ -35,8 +35,7 @@ function AdminGroupsPage() {
 	}, [data.groups, query]);
 	return (
 		<div className="flex flex-col gap-7">
-			<Panel>
-				<h2 className="m-0 text-[20px]">Groups</h2>
+			<Panel title="Groups">
 				<p className="m-0 text-[14px] text-haze">
 					Each host keeps their own groups. Share one with a host and they can
 					add its members to their events; only its owner (and you) can change

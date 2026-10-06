@@ -50,8 +50,7 @@ function AdminFamiliesPage() {
 	);
 	return (
 		<div className="flex flex-col gap-7">
-			<Panel>
-				<h2 className="m-0 text-[20px]">Families</h2>
+			<Panel title="Families">
 				<p className="m-0 text-[14px] text-haze">
 					A family is a household. Anybody in one may answer for the relatives
 					who are on the same invitation list, and a child they answer for
@@ -90,13 +89,13 @@ function CreateFamily({ onCreated }: { onCreated: (id: string) => void }) {
 	);
 	return (
 		<Panel
+			title="Make a family"
 			as="form"
 			onSubmit={(e) => {
 				e.preventDefault();
 				create.mutate({ name, shared });
 			}}
 		>
-			<h2 className="m-0 text-[20px]">Make a family</h2>
 			<div className="flex flex-wrap items-center gap-3">
 				<label htmlFor="family-name" className="sr-only">
 					New family name

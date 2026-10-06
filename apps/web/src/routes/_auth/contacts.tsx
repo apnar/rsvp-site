@@ -14,18 +14,16 @@ import { z } from "zod";
 import { Avatar } from "@/components/brand";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field } from "@/components/controls";
-import { phoneLines } from "@/components/guest-picker";
 import { NativeSelect } from "@/components/native-select";
 import { Page, PageHead, Panel } from "@/components/page";
-import {
-	type DetailsPatch,
-	PersonDetailsDialog,
-} from "@/components/person-details";
+import { PersonDetailsDialog } from "@/components/person-details";
 import { RenameInput } from "@/components/rename-input";
 import { TextsOkCheckbox } from "@/components/texts-copy";
 import { pageTitle } from "@/content/site";
 import type { Outputs } from "@/lib/api-types";
+import type { DetailsPatch } from "@/lib/details-draft";
 import { initials, matchesPerson, plural } from "@/lib/format";
+import { phoneLines } from "@/lib/phone-lines";
 import { orpc } from "@/utils/orpc";
 
 const bookQuery = () => orpc.contacts.book.queryOptions();
@@ -445,13 +443,13 @@ function AddPeople() {
 	);
 	return (
 		<Panel
+			title="Add people"
 			as="form"
 			onSubmit={(e) => {
 				e.preventDefault();
 				add.mutate({ emails, textsOk });
 			}}
 		>
-			<h2 className="m-0 text-[20px]">Add people</h2>
 			<Field label="People, one per line" htmlFor="book-add">
 				<Textarea
 					id="book-add"
@@ -495,8 +493,7 @@ function Groups({ groups }: { groups: Group[] }) {
 		}),
 	);
 	return (
-		<Panel className="gap-3">
-			<h2 className="m-0 text-[20px]">Groups</h2>
+		<Panel title="Groups" className="gap-3">
 			{groups.length === 0 ? (
 				<p className="m-0 text-[14px] text-soft">
 					No groups yet. Make one, then tick people into it in the address book.

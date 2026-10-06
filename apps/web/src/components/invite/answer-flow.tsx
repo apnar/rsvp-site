@@ -1,12 +1,8 @@
 import { type ReactNode, useState } from "react";
 import type { Outputs } from "@/lib/api-types";
 
-import {
-	AfterAnswer,
-	type ContactValues,
-	type DietSave,
-	dietPeople,
-} from "./after-answer";
+import { type DietSave, dietPeople } from "@/lib/diet-people";
+import { AfterAnswer, type ContactValues } from "./after-answer";
 import { initialRsvp, RsvpForm, type RsvpValues } from "./rsvp-form";
 import type { Invite } from "./types";
 

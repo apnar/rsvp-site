@@ -7,6 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AnswerPicker, Field, Stepper } from "@/components/controls";
+import { Tag } from "@/components/tag";
 import type { Outputs } from "@/lib/api-types";
 import { PotluckClaims } from "./potluck-claims";
 import type { Invite } from "./types";
@@ -23,7 +24,7 @@ export type RsvpValues = {
 };
 
 /** Where the form starts: what is saved, or what an email button carried. */
-export type RsvpInitial = {
+type RsvpInitial = {
 	answer: Answer | null;
 	adults: number;
 	kids: number;
@@ -190,11 +191,7 @@ export function RsvpForm({
 						<div key={r.guestId} className="flex flex-col gap-1.5">
 							<span className="font-bold text-[15px]">
 								{r.name}
-								{r.child ? (
-									<span className="ml-2 rounded-full border border-line px-2 py-0.5 font-semibold text-[11px] text-haze">
-										kid
-									</span>
-								) : null}
+								{r.child ? <Tag>kid</Tag> : null}
 								{r.answeredByName ? (
 									<span className="ml-2 font-normal text-[13px] text-haze">
 										answered by {r.answeredByName}

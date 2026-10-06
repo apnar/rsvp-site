@@ -5,8 +5,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId, useMemo, useState } from "react";
 
+import { Tag } from "@/components/tag";
 import { TextsOkCheckbox } from "@/components/texts-copy";
 import { matchesPerson } from "@/lib/format";
+import { phoneLines } from "@/lib/phone-lines";
 import { orpc } from "@/utils/orpc";
 
 type ChipMember = { id: string; name: string; tag?: string };
@@ -127,11 +129,7 @@ function OpenChip({
 					/>
 					<span className="min-w-0 flex-1 truncate">
 						<b className="text-[14px]">{m.name}</b>
-						{m.tag ? (
-							<span className="ml-2 rounded-full border border-line px-2 py-0.5 text-[11px] text-haze">
-								{m.tag}
-							</span>
-						) : null}
+						{m.tag ? <Tag>{m.tag}</Tag> : null}
 					</span>
 				</label>
 			))}
@@ -253,22 +251,6 @@ export const NO_PICK: GuestPick = {
 
 export const hasPick = (v: GuestPick) =>
 	v.emails.trim().length > 0 || v.userIds.length > 0;
-
-/**
- * Whether the text has a phone number on a line, and whether some line has
- * only one (no "@"). The server is the judge of what parses; this only
- * decides when to ask the host for their word about texts, so a loose
- * "ten or more digits" test is enough.
- */
-export function phoneLines(emails: string) {
-	const phones = emails
-		.split(/\r?\n|[;,]/)
-		.filter((l) => (l.match(/\d/g) ?? []).length >= 10);
-	return {
-		any: phones.length > 0,
-		phoneOnly: phones.some((l) => !l.includes("@")),
-	};
-}
 
 /**
  * A phone-only line on an emailed event becomes a guest only if the host

@@ -1,4 +1,5 @@
 import { DIETS, type DietId, dietLabel } from "@rsvp-site/db/diets";
+import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { cn } from "@rsvp-site/ui/lib/utils";
 import {
@@ -11,12 +12,10 @@ import {
 	WheatOff,
 } from "lucide-react";
 
-/** A person's diet as the forms hold it. */
-export type DietValue = { diets: DietId[]; note: string };
+import { Tag } from "@/components/tag";
+import { type DietValue, dietSummary } from "@/lib/diet-value";
 
-export const NO_DIET: DietValue = { diets: [], note: "" };
-
-export const DIET_ICONS: Record<DietId, LucideIcon> = {
+const DIET_ICONS: Record<DietId, LucideIcon> = {
 	vegetarian: Leaf,
 	vegan: Vegan,
 	gluten_free: WheatOff,
@@ -24,14 +23,6 @@ export const DIET_ICONS: Record<DietId, LucideIcon> = {
 	nuts: NutOff,
 	shellfish: ShrimpOff,
 };
-
-export function sameDiet(a: DietValue, b: DietValue): boolean {
-	return (
-		a.note.trim() === b.note.trim() &&
-		a.diets.length === b.diets.length &&
-		a.diets.every((id) => b.diets.includes(id))
-	);
-}
 
 /**
  * One preset's icon, named for screen readers and on hover. `decorative`
@@ -88,14 +79,6 @@ export function DietIcons({
 			))}
 		</span>
 	);
-}
-
-/** "Vegetarian · Nut allergy · no cilantro", or that there's nothing. */
-export function dietSummary(value: DietValue): string {
-	const parts = [...value.diets.map(dietLabel), value.note.trim()].filter(
-		Boolean,
-	);
-	return parts.length > 0 ? parts.join(" · ") : "No restrictions";
 }
 
 /**
@@ -167,6 +150,62 @@ export function DietFields({
 					onChange={(ev) => onChange({ ...value, note: ev.target.value })}
 				/>
 			</label>
+		</div>
+	);
+}
+
+/** A person's name, with a "kid" chip when they are a child. */
+export function PersonLabel({ name, child }: { name: string; child: boolean }) {
+	return (
+		<span className="font-bold text-[15px]">
+			{name}
+			{child ? <Tag>kid</Tag> : null}
+		</span>
+	);
+}
+
+/**
+ * One person's diet as a line: who, the icons and summary of what they
+ * eat, and a Change button (left out when `onChange` is, as while their
+ * boxes are open). `quiet` is the smaller, dimmer summary the account page
+ * uses; the default is the after-answer panel's.
+ */
+export function DietSummaryRow({
+	name,
+	child,
+	value,
+	onChange,
+	quiet = false,
+}: {
+	name: string;
+	child: boolean;
+	value: DietValue;
+	onChange?: () => void;
+	quiet?: boolean;
+}) {
+	return (
+		<div className="flex items-center justify-between gap-2">
+			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<PersonLabel name={name} child={child} />
+				<span
+					className={cn(
+						"flex flex-wrap items-center gap-1.5",
+						quiet ? "text-[13px] text-haze" : "text-[14px] text-soft",
+					)}
+				>
+					<DietIcons
+						diets={value.diets}
+						decorative
+						className={quiet ? undefined : "text-pink-ink"}
+					/>
+					{dietSummary(value)}
+				</span>
+			</span>
+			{onChange ? (
+				<Button type="button" variant="ghost" size="sm" onClick={onChange}>
+					Change
+				</Button>
+			) : null}
 		</div>
 	);
 }

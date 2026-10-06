@@ -18,22 +18,14 @@ import { toast } from "sonner";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { ConfirmAction } from "@/components/confirm-action";
 import { Field, Segmented, SettingRow, Switch } from "@/components/controls";
-import {
-	DietFields,
-	DietIcons,
-	type DietValue,
-	dietSummary,
-	sameDiet,
-} from "@/components/diet";
+import { DietFields, DietSummaryRow } from "@/components/diet";
 import { Page, PageHead, Panel } from "@/components/page";
-import {
-	changedDetails,
-	DetailFields,
-	draftOf,
-} from "@/components/person-details";
+import { DetailFields } from "@/components/person-details";
 import { TextsDisclosure } from "@/components/texts-copy";
 import { pageTitle } from "@/content/site";
 import { authClient } from "@/lib/auth-client";
+import { changedDetails, draftOf } from "@/lib/details-draft";
+import { type DietValue, sameDiet } from "@/lib/diet-value";
 import { orpc } from "@/utils/orpc";
 
 const meQuery = () => orpc.account.me.queryOptions();
@@ -113,13 +105,13 @@ function NameAndEmail() {
 	);
 	return (
 		<Panel
+			title="You"
 			as="form"
 			onSubmit={(e) => {
 				e.preventDefault();
 				save.mutate(patch);
 			}}
 		>
-			<h2 className="m-0 text-[20px]">You</h2>
 			<AvatarField
 				name={me.name}
 				image={me.image}
@@ -165,29 +157,25 @@ function NameAndEmail() {
  * once here; relatives answer for each other, so they can be set here too.
  */
 function DietPanel() {
-	const router = useRouter();
 	const { data: me } = useSuspenseQuery(meQuery());
 	const { data: family } = useSuspenseQuery(familyQuery());
 	const saved: DietValue = { diets: me.diets, note: me.dietNote };
 	const [draft, setDraft] = useState(saved);
 	const save = useMutation(
 		orpc.account.setDetails.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Saved.");
-				await router.invalidate();
-			},
+			onSuccess: () => toast.success("Saved."),
 		}),
 	);
 	return (
 		<>
 			<Panel
+				title="Dietary needs"
 				as="form"
 				onSubmit={(e) => {
 					e.preventDefault();
 					save.mutate({ diets: draft.diets, dietNote: draft.note });
 				}}
 			>
-				<h2 className="m-0 text-[20px]">Dietary needs</h2>
 				<p className="m-0 text-[14px] text-haze">
 					The hosts of events you're on see this when they ask about diets, so
 					you don't have to say it with every RSVP.
@@ -207,8 +195,7 @@ function DietPanel() {
 			{/* Its own panel, not inside the form above: Enter in a relative's
 			    note must not save yours. */}
 			{family.length > 0 ? (
-				<Panel>
-					<h2 className="m-0 text-[20px]">Your family's</h2>
+				<Panel title="Your family's">
 					<p className="m-0 text-[14px] text-haze">
 						You can set these for each other, since whoever answers for the
 						family is often the one who knows.
@@ -246,35 +233,20 @@ function RelativeDiet({
 	);
 	return (
 		<div className="flex flex-col gap-2">
-			<div className="flex items-center gap-2">
-				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="font-bold text-[15px]">
-						{r.name}
-						{r.child ? (
-							<span className="ml-2 rounded-full border border-line px-2 py-0.5 font-semibold text-[11px] text-haze">
-								kid
-							</span>
-						) : null}
-					</span>
-					<span className="flex items-center gap-2 text-[13px] text-haze">
-						<DietIcons diets={r.diets} decorative />
-						{dietSummary(saved)}
-					</span>
-				</div>
-				{open ? null : (
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						onClick={() => {
-							setDraft(saved);
-							setOpen(true);
-						}}
-					>
-						Change
-					</Button>
-				)}
-			</div>
+			<DietSummaryRow
+				name={r.name}
+				child={r.child}
+				value={saved}
+				quiet
+				onChange={
+					open
+						? undefined
+						: () => {
+								setDraft(saved);
+								setOpen(true);
+							}
+				}
+			/>
 			{open ? (
 				<div className="flex flex-col gap-3">
 					<DietFields
@@ -500,8 +472,7 @@ function PasswordPanel() {
 	};
 
 	return (
-		<Panel as="form" onSubmit={submit}>
-			<h2 className="m-0 text-[20px]">Password</h2>
+		<Panel title="Password" as="form" onSubmit={submit}>
 			<p className="m-0 text-[14px] text-haze">
 				{hasPassword
 					? "Set. The links in your email work either way."
@@ -568,8 +539,7 @@ function SignOutEverywhere() {
 		}),
 	);
 	return (
-		<Panel className="gap-3">
-			<h2 className="m-0 text-[20px]">Sign out everywhere</h2>
+		<Panel title="Sign out everywhere" className="gap-3">
 			<p className="m-0 text-[14px] text-haze">
 				Ends every session on every device and stops the links in emails you
 				already have from working. Ask for a new link from the sign-in page.

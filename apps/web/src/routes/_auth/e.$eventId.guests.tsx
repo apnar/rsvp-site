@@ -140,6 +140,23 @@ function GuestListPage() {
 		[shown, answers.words],
 	);
 
+	const onList = useMemo(
+		() => new Set(data.guests.map((g) => g.userId)),
+		[data.guests],
+	);
+	// Families with two or more people on this list, counted in one pass:
+	// asking "does anyone else share my family" per row is quadratic.
+	const sharedFamilies = useMemo(() => {
+		const seen = new Set<string>();
+		const shared = new Set<string>();
+		for (const g of data.guests) {
+			if (g.familyId === null) continue;
+			if (seen.has(g.familyId)) shared.add(g.familyId);
+			seen.add(g.familyId);
+		}
+		return shared;
+	}, [data.guests]);
+
 	// What every row shares about the event, so a row takes one object
 	// instead of repeating the event's facts as separate props.
 	const rowEvent: RowEvent = {
@@ -199,7 +216,7 @@ function GuestListPage() {
 					eventId={eventId}
 					published={published}
 					paper={e.paper}
-					onList={new Set(data.guests.map((g) => g.userId))}
+					onList={onList}
 				/>
 			) : null}
 
@@ -389,10 +406,7 @@ function GuestListPage() {
 							{section.guests.map((g) => (
 								<GuestRow
 									familyOnList={
-										g.familyId !== null &&
-										data.guests.some(
-											(o) => o.id !== g.id && o.familyId === g.familyId,
-										)
+										g.familyId !== null && sharedFamilies.has(g.familyId)
 									}
 									key={g.id}
 									guest={g}

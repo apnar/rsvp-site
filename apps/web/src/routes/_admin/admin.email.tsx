@@ -75,8 +75,11 @@ function AdminEmailPage() {
 				</Notice>
 			) : null}
 			<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-5">
-				<Panel as="form" onSubmit={(e) => e.preventDefault()}>
-					<h2 className="m-0 text-[20px]">Message everybody</h2>
+				<Panel
+					title="Message everybody"
+					as="form"
+					onSubmit={(e) => e.preventDefault()}
+				>
 					<p className="m-0 text-[14px] text-haze">
 						Goes to {status.everyone} people: everyone not unsubscribed or
 						deactivated.

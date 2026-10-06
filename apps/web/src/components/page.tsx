@@ -85,11 +85,14 @@ export function PageHead({
 
 /** A rounded panel, the design's basic container. */
 export function Panel({
+	title,
 	children,
 	className,
 	as: Tag = "section",
 	onSubmit,
 }: {
+	/** The heading a panel opens with. */
+	title?: ReactNode;
 	children: ReactNode;
 	className?: string;
 	as?: "section" | "div" | "article" | "form";
@@ -104,6 +107,7 @@ export function Panel({
 				className,
 			)}
 		>
+			{title ? <h2 className="m-0 text-[20px]">{title}</h2> : null}
 			{children}
 		</Tag>
 	);
