@@ -15,7 +15,6 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@rsvp-site/design": "workspace:*",
 		"@rsvp-site/env": "workspace:*",
 		"drizzle-orm": "catalog:"
 	},

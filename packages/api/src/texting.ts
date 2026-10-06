@@ -1,8 +1,9 @@
 import type { Db } from "@rsvp-site/db";
 import { insertChunks } from "@rsvp-site/db/batch";
 import { logError } from "@rsvp-site/db/errors";
-import { notDeactivated, type TextRecipient } from "@rsvp-site/db/people";
+import type { TextRecipient } from "@rsvp-site/db/people";
 import { textablePhone } from "@rsvp-site/db/phone";
+import { notDeactivated } from "@rsvp-site/db/reach";
 import { user } from "@rsvp-site/db/schema/auth";
 import { type SmsKind, smsSend, telnyxEvent } from "@rsvp-site/db/schema/sms";
 import { blockNumber, blockOf } from "@rsvp-site/db/sms-status";

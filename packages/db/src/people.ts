@@ -1,16 +1,4 @@
-import {
-	and,
-	asc,
-	count,
-	eq,
-	inArray,
-	isNotNull,
-	isNull,
-	ne,
-	or,
-	type SQL,
-	sql,
-} from "drizzle-orm";
+import { and, asc, count, eq, inArray, type SQL } from "drizzle-orm";
 
 import { bookByPhone } from "./address-book";
 import { normalizeEmail } from "./addresses";
@@ -20,54 +8,15 @@ import { dietsOf } from "./diets";
 import type { Db } from "./index";
 import { displayName, nameFor } from "./names";
 import { textablePhone } from "./phone";
+import {
+	mailableWhere,
+	notDeactivated,
+	shownEmail,
+	textableWhere,
+} from "./reach";
 import { roleOf } from "./roles";
 import { NO_EMAIL_DOMAIN, type PersonSource, user } from "./schema/auth";
 import { newToken } from "./tokens";
-
-// What callers have always imported from here: the pieces that moved out
-// are re-exported, so splitting the file broke nobody.
-export * from "./addresses";
-export * from "./status";
-export * from "./tokens";
-
-/** Not thrown out. `banned` is nullable, so never compare it with `= 0`. */
-export function notDeactivated() {
-	return and(
-		ne(user.status, "deactivated"),
-		or(isNull(user.banned), eq(user.banned, false)),
-	);
-}
-
-/**
- * Somebody email may go to: not deactivated, not unsubscribed, and with a
- * real address -- a name-only paper guest's placeholder is never mailed.
- */
-export function mailableWhere() {
-	return and(
-		notDeactivated(),
-		isNull(user.unsubscribedAt),
-		eq(user.noEmail, false),
-	);
-}
-
-/**
- * Somebody a text may go to: not deactivated, a US mobile-shaped number,
- * the consent on record, texts not switched off, and the number not
- * blocked. The block is matched by hand-qualified names on purpose: drizzle
- * leaves a single-table query's columns unqualified, and inside the
- * subquery `"phone"` would mean sms_block's own.
- */
-export function textableWhere() {
-	return and(
-		notDeactivated(),
-		// The shape, loosely: D1 refuses a GLOB spelling out every digit as
-		// "too complex", and `listTextable` checks the number exactly.
-		sql`"user"."phone" like '+1%' and length("user"."phone") = 12`,
-		isNotNull(user.textsOkAt),
-		isNull(user.textsOffAt),
-		sql`not exists (select 1 from "sms_block" "b" where "b"."phone" = "user"."phone")`,
-	);
-}
 
 /**
  * New people known only by name, for paper invitations. Each gets a unique
@@ -184,7 +133,7 @@ function present<
 	return {
 		...row,
 		role: roleOf(row.role),
-		email: row.noEmail ? "" : row.email,
+		email: shownEmail(row),
 		diets: dietsOf(row.diets),
 	};
 }
@@ -421,10 +370,3 @@ function selectByEmail(db: Db, emails: string[]) {
 			.all(),
 	);
 }
-
-export type {
-	PersonSource,
-	PersonStatus,
-	Role,
-	StatusActor,
-} from "./schema/auth";

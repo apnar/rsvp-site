@@ -1,7 +1,8 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { normalizeEmail } from "./addresses";
 import type { Db } from "./index";
+import { stillIn } from "./reach";
 import { type Role, type UnsubscribeReason, user } from "./schema/auth";
 
 /**
@@ -23,9 +24,7 @@ export async function unsubscribe(
 		.set({ unsubscribedAt: new Date(), unsubscribeReason: reason })
 		// Never a deactivated row, like resubscribe: a Brevo event or the footer
 		// form must not rewrite what an admin's decision left behind.
-		.where(
-			and(match, isNull(user.unsubscribedAt), ne(user.status, "deactivated")),
-		)
+		.where(and(match, isNull(user.unsubscribedAt), stillIn()))
 		.run();
 	return result.meta.changes === 1;
 }
@@ -39,7 +38,7 @@ export async function resubscribe(db: Db, userId: string): Promise<boolean> {
 	const result = await db
 		.update(user)
 		.set({ unsubscribedAt: null, unsubscribeReason: null })
-		.where(and(eq(user.id, userId), ne(user.status, "deactivated")))
+		.where(and(eq(user.id, userId), stillIn()))
 		.run();
 	return result.meta.changes === 1;
 }
@@ -47,8 +46,8 @@ export async function resubscribe(db: Db, userId: string): Promise<boolean> {
 /**
  * Change what somebody may do. Written here rather than through Better
  * Auth's admin plugin, which only knows `admin` and `user` and refuses
- * `host`. The session cookie caches the old role for up to five minutes;
- * anything that grants access re-reads D1.
+ * `host`. Better Auth's cookie cache is off, so a changed role applies on
+ * the person's next request; anything that grants access re-reads D1.
  */
 export async function setRole(db: Db, userId: string, role: Role) {
 	await db.update(user).set({ role }).where(eq(user.id, userId));

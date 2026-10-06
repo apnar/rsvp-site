@@ -337,9 +337,6 @@ importers:
 
   packages/db:
     dependencies:
-      '@rsvp-site/design':
-        specifier: workspace:*
-        version: link:../design
       '@rsvp-site/env':
         specifier: workspace:*
         version: link:../env

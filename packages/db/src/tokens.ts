@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import type { Db } from "./index";
 import { user } from "./schema/auth";
+import { textLink } from "./schema/sms";
 
 /** A fresh token: 32 hex characters, unguessable. */
 export function newToken(): string {
@@ -86,11 +87,13 @@ export async function rotateLinkToken(
 	db: Db,
 	userId: string,
 ): Promise<boolean> {
-	const result = await db
-		.update(user)
-		.set({ linkToken: newToken() })
-		.where(eq(user.id, userId))
-		.run();
+	// One batch, so a code never outlives the token it copies: `redeemTextLink`
+	// would refuse it anyway, but a dead bearer credential has no business
+	// sitting in the table.
+	const [result] = await db.batch([
+		db.update(user).set({ linkToken: newToken() }).where(eq(user.id, userId)),
+		db.delete(textLink).where(eq(textLink.userId, userId)),
+	]);
 	return result.meta.changes === 1;
 }
 

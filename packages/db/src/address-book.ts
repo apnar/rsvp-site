@@ -1,7 +1,8 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { batchAll, inChunks, insertChunks, mapChunks } from "./batch";
 import type { Db } from "./index";
+import { stillIn } from "./reach";
 import { user } from "./schema/auth";
 import { contact, contactGroup, contactGroupMember } from "./schema/contact";
 
@@ -61,7 +62,7 @@ export async function bookByPhone(
 				and(
 					eq(contact.ownerId, ownerId),
 					inArray(user.phone, slice),
-					ne(user.status, "deactivated"),
+					stillIn(),
 				),
 			)
 			.all(),

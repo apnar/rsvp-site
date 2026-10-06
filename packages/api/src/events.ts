@@ -9,7 +9,12 @@ import { mapChunks } from "@rsvp-site/db/batch";
 import { dietsOf } from "@rsvp-site/db/diets";
 import { firstNameOf } from "@rsvp-site/db/names";
 import type { Person } from "@rsvp-site/db/people";
-import { textablePhone } from "@rsvp-site/db/phone";
+import {
+	canVouchTexts,
+	isMailable,
+	isTextable,
+	shownEmail,
+} from "@rsvp-site/db/reach";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
@@ -279,6 +284,7 @@ export async function guestsOf(
 			createdAt: eventGuest.createdAt,
 			unsubscribedAt: user.unsubscribedAt,
 			status: user.status,
+			banned: user.banned,
 			addedBy: eventGuest.addedBy,
 			addedByName: adder.name,
 			answeredByName: answerer.name,
@@ -306,6 +312,7 @@ export async function guestsOf(
 		({
 			unsubscribedAt,
 			status,
+			banned,
 			paperToken,
 			textsOkAt,
 			textsOffAt,
@@ -316,19 +323,23 @@ export async function guestsOf(
 			partyDiet,
 			...row
 		}) => {
-			const active = status !== "deactivated";
-			const mailable = active && unsubscribedAt === null && !row.noEmail;
-			const phoneOk = textablePhone(row.phone) !== null;
-			const textable =
-				active &&
-				phoneOk &&
-				textsOkAt !== null &&
-				textsOffAt === null &&
-				row.textBlock === null;
+			const reach = {
+				status,
+				banned,
+				unsubscribedAt,
+				noEmail: row.noEmail,
+				phone: row.phone,
+				textsOkAt,
+				textsOffAt,
+				textBlock: row.textBlock,
+				claimedAt,
+			};
+			const mailable = isMailable(reach);
+			const textable = isTextable(reach);
 			return {
 				...row,
 				// A placeholder address is never shown, not even to the host.
-				email: row.noEmail ? "" : row.email,
+				email: shownEmail(row),
 				diets: opts.diets ? dietsOf(diets) : [],
 				dietNote: opts.diets ? dietNote : "",
 				dietConfirmed: opts.diets && dietAt !== null,
@@ -341,13 +352,7 @@ export async function guestsOf(
 				unreachable: !mailable && !textable,
 				// What a host's "they expect a text from me" would switch on:
 				// only a blank, on a record nobody has claimed.
-				canVouch:
-					active &&
-					phoneOk &&
-					textsOkAt === null &&
-					textsOffAt === null &&
-					claimedAt === null &&
-					row.textBlock === null,
+				canVouch: canVouchTexts(reach),
 				lastText: texts.get(row.userId) ?? null,
 			};
 		},

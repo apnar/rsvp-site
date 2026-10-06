@@ -5,7 +5,7 @@ import { inBook } from "./address-book";
 import { mapChunks } from "./batch";
 import { dietsOf } from "./diets";
 import type { Db } from "./index";
-import { notDeactivated } from "./people";
+import { notDeactivated, shownEmail } from "./reach";
 import { isAdmin } from "./roles";
 import { user } from "./schema/auth";
 import {
@@ -214,8 +214,7 @@ export async function listFamilies(db: Db, opts: { onlyShared: boolean }) {
 	]);
 	const byFamily = new Map<string, FamilyMemberRow[]>();
 	for (const { familyId, ...m } of members) {
-		// A placeholder address is never shown.
-		const row = { ...m, email: m.noEmail ? "" : m.email };
+		const row = { ...m, email: shownEmail(m) };
 		const list = byFamily.get(familyId);
 		if (list) list.push(row);
 		else byFamily.set(familyId, [row]);

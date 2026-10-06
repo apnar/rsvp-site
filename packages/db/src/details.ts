@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, eq, isNull, or, type SQL, sql } from "drizzle-orm";
 
 import { normalizeEmail } from "./addresses";
 import { batchAll } from "./batch";
@@ -6,6 +6,7 @@ import type { Diet, DietId } from "./diets";
 import { isUniqueViolation } from "./errors";
 import type { Db } from "./index";
 import { nameFor } from "./names";
+import { shownEmail, stillIn } from "./reach";
 import { isAdmin, roleOf } from "./roles";
 import { user } from "./schema/auth";
 import { newToken } from "./tokens";
@@ -167,7 +168,7 @@ export async function updateDetails(
 						firstName,
 						lastName,
 						// A name-only guest's placeholder address is never a name.
-						name: nameFor(firstName, lastName, row.noEmail ? "" : row.email),
+						name: nameFor(firstName, lastName, shownEmail(row)),
 					}
 				: {}),
 		})
@@ -189,11 +190,11 @@ export type DietBy = { admin: true } | { admin: false; userId: string };
 function dietWritable(id: string, by: DietBy): SQL | undefined {
 	if (by.admin) return eq(user.id, id);
 	if (by.userId === id) {
-		return and(eq(user.id, id), ne(user.status, "deactivated"));
+		return and(eq(user.id, id), stillIn());
 	}
 	return and(
 		eq(user.id, id),
-		ne(user.status, "deactivated"),
+		stillIn(),
 		// Plain names: a raw subquery on a single-table update (CLAUDE.md).
 		sql`exists (
 			select 1 from family_member mine
@@ -412,10 +413,7 @@ export function gapsOf(row: {
 /** Where a blank may be filled. Never a deactivated row, like every self-service write. */
 function fillable(id: string, by: FilledBy): SQL | undefined {
 	if (by !== "self" && by.card === null) return sql`0`;
-	return and(
-		editable(id, by === "self" ? null : by.card, true),
-		ne(user.status, "deactivated"),
-	);
+	return and(editable(id, by === "self" ? null : by.card, true), stillIn());
 }
 
 /** The blanks this caller may fill on somebody's record; none if they may fill nothing. */

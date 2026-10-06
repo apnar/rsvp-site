@@ -18,9 +18,9 @@ import {
 import {
 	findOrCreatePeople,
 	nameOnlyFromBook,
-	notDeactivated,
 	type Person,
 } from "@rsvp-site/db/people";
+import { notDeactivated, shownEmail } from "@rsvp-site/db/reach";
 import { canHost, isAdmin } from "@rsvp-site/db/roles";
 import { user } from "@rsvp-site/db/schema/auth";
 import {
@@ -271,7 +271,7 @@ export const contactsRouter = {
 						editable: canEditDetails(context.me, target, true),
 						reachEditable: canEditReach(context.me, target, true),
 						// A placeholder address is never shown, not even to its host.
-						email: p.noEmail ? "" : p.email,
+						email: shownEmail(p),
 						unsubscribed: unsubscribedAt !== null,
 						groupIds: groupsOf.get(p.userId) ?? [],
 					};

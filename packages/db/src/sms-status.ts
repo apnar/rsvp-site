@@ -1,7 +1,8 @@
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { mapChunks } from "./batch";
 import type { Db } from "./index";
+import { stillIn } from "./reach";
 import { type ContactChannel, user } from "./schema/auth";
 import { type SmsBlockReason, smsBlock } from "./schema/sms";
 
@@ -65,7 +66,7 @@ export async function setTexts(
 				? { textsOkAt: new Date(), textsOkBy: userId, textsOffAt: null }
 				: { textsOffAt: new Date() },
 		)
-		.where(and(eq(user.id, userId), ne(user.status, "deactivated")))
+		.where(and(eq(user.id, userId), stillIn()))
 		.run();
 	return result.meta.changes === 1;
 }
@@ -91,7 +92,7 @@ export async function vouchForTexts(
 					isNull(user.textsOkAt),
 					isNull(user.textsOffAt),
 					isNull(user.claimedAt),
-					ne(user.status, "deactivated"),
+					stillIn(),
 				),
 			)
 			.returning({ id: user.id }),
@@ -115,7 +116,7 @@ export async function setContactPrefs(
 	await db
 		.update(user)
 		.set(set)
-		.where(and(eq(user.id, userId), ne(user.status, "deactivated")));
+		.where(and(eq(user.id, userId), stillIn()));
 }
 
 /**
