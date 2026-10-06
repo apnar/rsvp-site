@@ -13,7 +13,7 @@ import {
 	useNavigate,
 	useRouter,
 } from "@tanstack/react-router";
-import { type ChangeEvent, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { ConfirmAction } from "@/components/confirm-action";
@@ -28,7 +28,7 @@ import {
 import { Page, PageHead, Panel } from "@/components/page";
 import {
 	changedDetails,
-	type DetailKey,
+	DetailFields,
 	draftOf,
 } from "@/components/person-details";
 import { pageTitle } from "@/content/site";
@@ -110,13 +110,6 @@ function NameAndEmail() {
 	const removePicture = useMutation(
 		orpc.account.removePicture.mutationOptions({ onSuccess: pictureSaved }),
 	);
-	const field = (k: DetailKey, max = 100) => ({
-		id: `me-${k}`,
-		value: draft[k],
-		maxLength: max,
-		onChange: (e: ChangeEvent<HTMLInputElement>) =>
-			setDraft((d) => ({ ...d, [k]: e.target.value })),
-	});
 	return (
 		<Panel
 			as="form"
@@ -134,50 +127,22 @@ function NameAndEmail() {
 				onSave={(file) => setPicture.mutateAsync({ file })}
 				onRemove={() => removePicture.mutateAsync({})}
 			/>
-			<div className="grid grid-cols-2 gap-3">
-				<Field label="First name" htmlFor="me-firstName">
-					<Input {...field("firstName", 60)} autoComplete="given-name" />
-				</Field>
-				<Field label="Last name" htmlFor="me-lastName">
-					<Input {...field("lastName", 60)} autoComplete="family-name" />
-				</Field>
-			</div>
-			<Field label="Email" htmlFor="email">
-				<Input
-					id="email"
-					value={me.email || "No email on file"}
-					readOnly
-					disabled
-				/>
-			</Field>
-			<Field label="Mobile phone" htmlFor="me-phone">
-				<Input {...field("phone", 40)} type="tel" autoComplete="tel" />
-			</Field>
-			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-				<legend className="mb-2 p-0 font-bold text-[14px]">
-					Mailing address
-				</legend>
-				<Field label="Street address" htmlFor="me-addressLine1">
-					<Input {...field("addressLine1")} autoComplete="address-line1" />
-				</Field>
-				<Field label="Apt / suite" htmlFor="me-addressLine2">
-					<Input {...field("addressLine2")} autoComplete="address-line2" />
-				</Field>
-				<div className="grid grid-cols-2 gap-3">
-					<Field label="City" htmlFor="me-city">
-						<Input {...field("city", 60)} autoComplete="address-level2" />
+			<DetailFields
+				idPrefix="me"
+				draft={draft}
+				onChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+				autoComplete="profile"
+				email={
+					<Field label="Email" htmlFor="email">
+						<Input
+							id="email"
+							value={me.email || "No email on file"}
+							readOnly
+							disabled
+						/>
 					</Field>
-					<Field label="State / region" htmlFor="me-region">
-						<Input {...field("region", 60)} autoComplete="address-level1" />
-					</Field>
-					<Field label="ZIP / postal code" htmlFor="me-postalCode">
-						<Input {...field("postalCode", 20)} autoComplete="postal-code" />
-					</Field>
-					<Field label="Country" htmlFor="me-country">
-						<Input {...field("country", 60)} autoComplete="country-name" />
-					</Field>
-				</div>
-			</fieldset>
+				}
+			/>
 			<p className="m-0 text-[14px] text-haze">{ROLE_LINE[me.role]}</p>
 			<Button
 				type="submit"

@@ -3,7 +3,9 @@ import { formatPhone, normalizePhone } from "@rsvp-site/db/phone";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import {
+	type ChangeEvent,
 	type ComponentProps,
+	type ReactNode,
 	type RefObject,
 	useId,
 	useRef,
@@ -39,6 +41,111 @@ export type DetailsPerson = {
 	diets: DietId[];
 	dietNote: string;
 } & Record<DetailKey, string | null>;
+
+const DETAIL_LABELS: Record<DetailKey, string> = {
+	firstName: "First name",
+	lastName: "Last name",
+	phone: "Mobile phone",
+	addressLine1: "Street address",
+	addressLine2: "Apt / suite",
+	city: "City",
+	region: "State / region",
+	postalCode: "ZIP / postal code",
+	country: "Country",
+};
+
+const DETAIL_LIMITS: Record<DetailKey, number> = {
+	firstName: 60,
+	lastName: 60,
+	phone: 40,
+	addressLine1: 100,
+	addressLine2: 100,
+	city: 60,
+	region: 60,
+	postalCode: 20,
+	country: 60,
+};
+
+const DETAIL_AUTOCOMPLETE: Record<DetailKey, string> = {
+	firstName: "given-name",
+	lastName: "family-name",
+	phone: "tel",
+	addressLine1: "address-line1",
+	addressLine2: "address-line2",
+	city: "address-level2",
+	region: "address-level1",
+	postalCode: "postal-code",
+	country: "country-name",
+};
+
+/**
+ * The name, phone and address fields, shared by the account page and the
+ * details dialog so their labels and limits cannot drift. `email` is a slot
+ * between the names and the phone because who may change it differs by
+ * caller. "profile" autocomplete is for people filling in their own
+ * details; "off" for somebody else's.
+ */
+export function DetailFields({
+	idPrefix,
+	draft,
+	onChange,
+	readOnly,
+	autoComplete,
+	firstRef,
+	email,
+}: {
+	idPrefix: string;
+	draft: Record<DetailKey, string>;
+	onChange: (key: DetailKey, value: string) => void;
+	readOnly?: boolean;
+	autoComplete: "profile" | "off";
+	firstRef?: RefObject<HTMLInputElement | null>;
+	email: ReactNode;
+}) {
+	const input = (k: DetailKey) => ({
+		id: `${idPrefix}-${k}`,
+		value: draft[k],
+		readOnly,
+		maxLength: DETAIL_LIMITS[k],
+		autoComplete: autoComplete === "off" ? "off" : DETAIL_AUTOCOMPLETE[k],
+		onChange: (e: ChangeEvent<HTMLInputElement>) => onChange(k, e.target.value),
+	});
+	const field = (k: DetailKey) => (
+		<Field label={DETAIL_LABELS[k]} htmlFor={`${idPrefix}-${k}`}>
+			<Input {...input(k)} />
+		</Field>
+	);
+	return (
+		<>
+			<div className="grid grid-cols-2 gap-3">
+				<Field
+					label={DETAIL_LABELS.firstName}
+					htmlFor={`${idPrefix}-firstName`}
+				>
+					<Input {...input("firstName")} ref={firstRef} />
+				</Field>
+				{field("lastName")}
+			</div>
+			{email}
+			<Field label={DETAIL_LABELS.phone} htmlFor={`${idPrefix}-phone`}>
+				<Input {...input("phone")} type="tel" />
+			</Field>
+			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+				<legend className="mb-2 p-0 font-bold text-[14px]">
+					Mailing address
+				</legend>
+				{field("addressLine1")}
+				{field("addressLine2")}
+				<div className="grid grid-cols-2 gap-3">
+					{field("city")}
+					{field("region")}
+					{field("postalCode")}
+					{field("country")}
+				</div>
+			</fieldset>
+		</>
+	);
+}
 
 /**
  * Only what differs from the saved value; null and "" are the same blank.
@@ -135,14 +242,6 @@ function DetailsForm({
 	const emailChanged = email.trim().toLowerCase() !== person.email;
 	const dirty = Object.keys(patch).length > 0 || emailChanged;
 
-	const set = (k: DetailKey) => ({
-		id: `${id}-${k}`,
-		value: draft[k],
-		readOnly: !editable,
-		onChange: (e: { target: { value: string } }) =>
-			setDraft((d) => ({ ...d, [k]: e.target.value })),
-	});
-
 	async function submit() {
 		setBusy(true);
 		try {
@@ -174,58 +273,27 @@ function DetailsForm({
 			{picture ? (
 				<AvatarField {...picture} name={person.name} mine={false} />
 			) : null}
-			<div className="grid grid-cols-2 gap-3">
-				<Field label="First name" htmlFor={`${id}-firstName`}>
-					<Input
-						{...set("firstName")}
-						ref={firstRef}
-						maxLength={60}
-						autoComplete="off"
-					/>
-				</Field>
-				<Field label="Last name" htmlFor={`${id}-lastName`}>
-					<Input {...set("lastName")} maxLength={60} autoComplete="off" />
-				</Field>
-			</div>
-			<Field label="Email" htmlFor={`${id}-email`}>
-				<Input
-					id={`${id}-email`}
-					type="email"
-					value={email}
-					readOnly={!editable}
-					placeholder={person.noEmail ? "No email yet" : undefined}
-					onChange={(e) => setEmail(e.target.value)}
-					autoComplete="off"
-				/>
-			</Field>
-			<Field label="Mobile phone" htmlFor={`${id}-phone`}>
-				<Input {...set("phone")} type="tel" autoComplete="off" />
-			</Field>
-			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-				<legend className="mb-2 p-0 font-bold text-[14px]">
-					Mailing address
-				</legend>
-				<Field label="Street address" htmlFor={`${id}-addressLine1`}>
-					<Input {...set("addressLine1")} autoComplete="off" />
-				</Field>
-				<Field label="Apt / suite" htmlFor={`${id}-addressLine2`}>
-					<Input {...set("addressLine2")} autoComplete="off" />
-				</Field>
-				<div className="grid grid-cols-2 gap-3">
-					<Field label="City" htmlFor={`${id}-city`}>
-						<Input {...set("city")} autoComplete="off" />
+			<DetailFields
+				idPrefix={id}
+				draft={draft}
+				onChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+				readOnly={!editable}
+				firstRef={firstRef}
+				autoComplete="off"
+				email={
+					<Field label="Email" htmlFor={`${id}-email`}>
+						<Input
+							id={`${id}-email`}
+							type="email"
+							value={email}
+							readOnly={!editable}
+							placeholder={person.noEmail ? "No email yet" : undefined}
+							onChange={(e) => setEmail(e.target.value)}
+							autoComplete="off"
+						/>
 					</Field>
-					<Field label="State / region" htmlFor={`${id}-region`}>
-						<Input {...set("region")} autoComplete="off" />
-					</Field>
-					<Field label="ZIP / postal code" htmlFor={`${id}-postalCode`}>
-						<Input {...set("postalCode")} autoComplete="off" />
-					</Field>
-					<Field label="Country" htmlFor={`${id}-country`}>
-						<Input {...set("country")} autoComplete="off" />
-					</Field>
-				</div>
-			</fieldset>
+				}
+			/>
 			<fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
 				<legend className="mb-2 p-0 font-bold text-[14px]">
 					Dietary needs

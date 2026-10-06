@@ -1,17 +1,11 @@
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { AfterAnswer, dietPeople } from "@/components/invite/after-answer";
+import { AnswerFlow } from "@/components/invite/answer-flow";
 import { BringSomeone } from "@/components/invite/bring-someone";
 import { HostBar } from "@/components/invite/host-bar";
 import { InviteView } from "@/components/invite/invite-view";
-import {
-	initialRsvp,
-	RsvpForm,
-	type RsvpValues,
-} from "@/components/invite/rsvp-form";
 import type { Invite } from "@/components/invite/types";
 import { useRecordView } from "@/components/invite/use-record-view";
 import { pageTitle } from "@/content/site";
@@ -81,8 +75,6 @@ function InvitePage() {
 	const respond = useMutation(orpc.guests.respond.mutationOptions());
 	const addContact = useMutation(orpc.contact.add.mutationOptions());
 	const saveDiets = useMutation(orpc.diet.save.mutationOptions());
-	// Opened by an answer: the answer it was, which decides whose diets to check.
-	const [asking, setAsking] = useState<RsvpValues | null>(null);
 	// The host sees their own page for their own reasons; the server
 	// decides who counts, this only saves it the call.
 	useRecordView(data.me && !data.isHost ? eventId : null, () =>
@@ -110,43 +102,25 @@ function InvitePage() {
 						</p>
 					</section>
 				) : (
-					<div className="flex flex-col gap-5">
-						<RsvpForm
-							data={shown}
-							initial={initialRsvp(me, shown.answers, a ?? null)}
-							submit={(values, options) =>
-								preview
-									? toast("This is a preview. Guests answer here.")
-									: respond.mutate(
-											{ eventId, ...values },
-											{
-												onSuccess: (result) => {
-													options.onSuccess(result);
-													setAsking(values);
-												},
-											},
-										)
-							}
-							pending={respond.isPending}
-						/>
-						{asking ? (
-							<AfterAnswer
-								// A fresh answer is a fresh check.
-								key={JSON.stringify(asking)}
-								missing={me.missing}
-								people={dietPeople(me, data.event.askDietary, asking)}
-								saveDiets={(people, options) =>
-									saveDiets.mutate({ people }, options)
-								}
-								submitContact={(values, options) =>
-									addContact.mutate(values, options)
-								}
-								pending={addContact.isPending || saveDiets.isPending}
-								onClose={() => setAsking(null)}
-							/>
-						) : null}
+					<AnswerFlow
+						data={shown}
+						preselect={a ?? null}
+						respond={(values, options) =>
+							preview
+								? toast("This is a preview. Guests answer here.")
+								: respond.mutate({ eventId, ...values }, options)
+						}
+						saveDiets={(people, options) =>
+							saveDiets.mutate({ people }, options)
+						}
+						addContact={(values, options) => addContact.mutate(values, options)}
+						pending={{
+							respond: respond.isPending,
+							after: addContact.isPending || saveDiets.isPending,
+						}}
+					>
 						<BringSomeone data={shown} preview={preview} />
-					</div>
+					</AnswerFlow>
 				)
 			}
 		/>
