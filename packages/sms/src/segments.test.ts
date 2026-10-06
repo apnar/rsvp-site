@@ -24,7 +24,7 @@ describe("segments", () => {
 		expect(segments("€").encoding).toBe("GSM-7");
 	});
 	it("switches to UCS-2 at 70 then 67", () => {
-		expect(segments("a".repeat(69) + "\u{1F389}")).toEqual({
+		expect(segments(`${"a".repeat(69)}\u{1F389}`)).toEqual({
 			encoding: "UCS-2",
 			parts: 2,
 		});

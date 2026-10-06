@@ -14,11 +14,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import fontkit from "@pdf-lib/fontkit";
-import {
-	FACES,
-	type FontId,
-	parseFace,
-} from "../../../packages/design/src/fonts";
+import { FACES, type FontId, parseFace } from "@rsvp-site/design/fonts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..");

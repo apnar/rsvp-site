@@ -10,15 +10,15 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { facesOf, loadFaces } from "../../../packages/design/src/faces";
-import { type FaceKey, parseFace } from "../../../packages/design/src/fonts";
-import { SAMPLE_VALUES } from "../../../packages/design/src/placeholders";
+import { facesOf, loadFaces } from "@rsvp-site/design/faces";
+import { type FaceKey, parseFace } from "@rsvp-site/design/fonts";
+import { SAMPLE_VALUES } from "@rsvp-site/design/placeholders";
 import {
 	fromTemplate,
 	previewAssets,
 	TEMPLATES,
-} from "../../../packages/design/src/templates/index";
-import { paperCardUrl } from "../../../packages/email/src/links";
+} from "@rsvp-site/design/templates/index";
+import { paperCardUrl } from "@rsvp-site/email/links";
 import { layoutDesignInvites } from "../src/lib/design-pdf-core";
 import { layoutPaperInvites } from "../src/lib/paper-pdf-core";
 import { layoutsFor } from "../src/lib/paper-sizes";
