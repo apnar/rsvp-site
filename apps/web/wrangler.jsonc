@@ -44,7 +44,8 @@
 	"r2_buckets": [
 		{
 			"binding": "MEDIA",
-			// Event cover photos. Create once per account:
+			// Cover photos, design images and cards (with their picture-text
+			// twins) and profile pictures. Create once per account:
 			// `pnpm exec wrangler r2 bucket create rsvp-site-media`
 			"bucket_name": "rsvp-site-media"
 		}
@@ -58,8 +59,9 @@
 			"namespace_id": "4207",
 			"simple": { "limit": 5, "period": 60 }
 		},
-		// Throttles password sign-in, password resets, "email me my link" and
-		// the sign-in links themselves, by IP and path. Better Auth's own
+		// Throttles password sign-in, password resets, "email me my link",
+		// "text me my link", the sign-in links and `/t/` codes themselves, by
+		// IP and path, and the forms that mail whatever address is typed. Better Auth's own
 		// limiter counts in memory, which on Workers is per isolate and so
 		// barely counts at all.
 		{

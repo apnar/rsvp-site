@@ -5,8 +5,10 @@ export interface CloudflareEnv {
 	/** D1 database binding. */
 	DB: D1Database;
 	/**
-	 * R2 bucket: cover photos under `covers/`, and design images and card
-	 * pictures under `designs/<event id>/`. Served at /api/<key>.
+	 * R2 bucket: cover photos under `covers/`, design images and card
+	 * pictures under `designs/<event id>/` (each cover and card with its
+	 * small `-mms.jpg` twin for picture texts), and profile pictures under
+	 * `avatars/`. Served at /api/<key>.
 	 */
 	MEDIA: R2Bucket;
 	/**
@@ -16,7 +18,9 @@ export interface CloudflareEnv {
 	JOIN_LIMITER: RateLimit;
 	/**
 	 * Workers rate limiter for the sign-in doors (password, reset, emailed
-	 * link), keyed by path and IP.
+	 * link, `/t/` codes, "email me my link" and "text me my link"), keyed
+	 * by path and IP, and for the forms that send email to whatever address
+	 * is typed (a guest inviting friends, giving us their address).
 	 */
 	AUTH_LIMITER: RateLimit;
 	/** Secret: `wrangler secret put BETTER_AUTH_SECRET` (or .dev.vars locally). */
