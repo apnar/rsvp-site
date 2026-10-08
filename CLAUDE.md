@@ -39,7 +39,7 @@ the setup runbooks; this file is the rules for changing the code.
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
 | Sender | `"Botch RSVP" <info@rsvp.botch.com>`, in this site's own Brevo account ("Botch Systems"), which is not pickup-bball's. The domain is authenticated (DKIM `brevo1`/`brevo2._domainkey.rsvp`, brevo-code TXT on `rsvp`), and DMARC passes under botch.com's own `p=none` |
 | Brevo webhook | id 2217340, posting to `https://rsvp.botch.com/api/brevo/webhook` |
-| Texts | Telnyx, number +1 301-279-8944 on messaging profile "RSVP" (`4001a103-...`), webhook `https://rsvp.botch.com/api/telnyx/webhook`, signed with the account's Ed25519 key (`TELNYX_PUBLIC_KEY`). Sole-proprietor 10DLC; until the campaign is approved every send fails with 40010 |
+| Texts | Telnyx, number +1 301-279-8944 on messaging profile "RSVP" (`4001a103-...`), webhook `https://rsvp.botch.com/api/telnyx/webhook`, signed with the account's Ed25519 key (`TELNYX_PUBLIC_KEY`). Sole-proprietor 10DLC, brand `BH1KGAH`, campaign `C9QATYC` approved 2026-10-08 with the number on it; daily spend limit $10 |
 | Replies | Cloudflare Email Routing on the `rsvp.botch.com` subdomain; `info@` forwards to `jlukens@fastmail.com`, the inbox `jlukens@botch.com` itself forwards to |
 
 The Cloudflare account (`b38725df...`) is shared with pickup-bball and other

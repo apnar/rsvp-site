@@ -708,20 +708,22 @@ as `TELNYX_PUBLIC_KEY` and sign `<timestamp>|<body>` with the private half.
 
 Costs, roughly: $0.004 per SMS segment and $0.015 per MMS, plus carrier fees
 (about $0.003-0.005 per SMS, $0.007-0.01 per MMS). The profile has a daily
-spend limit ($5 when set up); a full MMS invitation to 200 people is about
-that.
+spend limit of $10, enough for an MMS invitation to about 400 people; a send
+past it fails with 40333 until the next day. Its HELP, STOP and START replies
+are the campaign's, set on the profile's auto-response configs.
 
 ### 10DLC registration
 
 US carriers refuse texts from an unregistered local number (Telnyx error
-40010). Registered through the API on 2026-10-05; until the campaign is
-approved every send fails with that code.
+40010). Registered through the API on 2026-10-05; the campaign was approved
+and the number attached on 2026-10-08, and the first real text was delivered
+that day.
 
 | What | Value |
 |---|---|
 | Brand | sole proprietor "Botch RSVP", `4b2001a1-0cad-6873-929a-b9bfcaa9eead` (TCR `BH1KGAH`), identity verified by the PIN texted to the owner's mobile |
-| Campaign | `4b3001a1-0cb2-863b-6c18-b6c494eda28b`, use case `SOLE_PROPRIETOR` (the only one a sole-proprietor brand may use), sub-use case `ACCOUNT_NOTIFICATION`; $24 a year |
-| After approval | attach +1 301-279-8944 to the campaign (`POST /v2/10dlc/phone_number_campaigns`); a sole-proprietor campaign carries exactly one number. Carriers cap it at about 15 texts a minute on AT&T and 1,000 a day on T-Mobile |
+| Campaign | `4b3001a1-0cb2-863b-6c18-b6c494eda28b` (TCR `C9QATYC`), use case `SOLE_PROPRIETOR` (the only one a sole-proprietor brand may use), sub-use case `ACCOUNT_NOTIFICATION`; $24 a year |
+| Number | +1 301-279-8944 is the campaign's one number (a sole-proprietor campaign carries exactly one; see `GET /v2/10dlc/phone_number_campaigns/+13012798944`). Carriers cap it at about 15 texts a minute on AT&T and 1,000 a day on T-Mobile |
 
 Two things that bit: the portal saved the brand's mobile number without its
 `1` (`+30...`, read as Greece), which the registry refused as "not a mobile",
