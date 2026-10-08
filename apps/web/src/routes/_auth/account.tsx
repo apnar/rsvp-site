@@ -294,67 +294,81 @@ const CHANNEL_LABEL: Record<Channel, string> = {
 /**
  * Email and texts are separate permissions (a STOP reply must not touch
  * email, an unsubscribe must not touch texts), and the choice of which one
- * carries invitations is a third thing, so each gets its own row.
+ * carries invitations is a third thing, so each gets its own row. Like every
+ * other panel here, changes wait for Save.
  */
 function ReachPrefs() {
 	const { data: me } = useSuspenseQuery(meQuery());
-	const emailOn = Boolean(me.email) && me.unsubscribedAt === null;
-	const setEmail = useMutation(
-		orpc.account.setEmail.mutationOptions({
-			onSuccess: (r) => {
-				toast.success(r.unsubscribedAt ? "No more email." : "Email's back on.");
-			},
-		}),
-	);
-	const setTexts = useMutation(
-		orpc.account.setTexts.mutationOptions({
-			onSuccess: (r) => {
-				toast.success(r?.textsOn ? "Texts are on." : "No more texts.");
-			},
-		}),
-	);
-	const setPrefs = useMutation(orpc.account.setContactPrefs.mutationOptions());
-
 	const blocked = me.textBlock !== null;
-	const textsOn = me.textsOn && !blocked;
+	const saved = {
+		email: Boolean(me.email) && me.unsubscribedAt === null,
+		texts: me.textsOn && !blocked,
+		contactBy: me.contactBy,
+		alertsBy: me.alertsBy,
+	};
+	type Reach = typeof saved;
+	// Only what was touched, laid over what's saved, so a refetch shows
+	// through everything else and a Save clears it.
+	const [edits, setEdits] = useState<Partial<Reach>>({});
+	const draft: Reach = { ...saved, ...edits };
+	const patch = Object.fromEntries(
+		Object.entries(edits).filter(([k, v]) => saved[k as keyof Reach] !== v),
+	) as Partial<Reach>;
+	const edit = (change: Partial<Reach>) =>
+		setEdits((e) => ({ ...e, ...change }));
+	const save = useMutation(
+		orpc.account.setReach.mutationOptions({
+			onSuccess: () => {
+				setEdits({});
+				toast.success("Saved.");
+			},
+		}),
+	);
+
 	const textsHint = !me.textablePhone
 		? "Add a US mobile number above to get texts."
 		: me.textBlock === "stop"
 			? `You replied STOP from this phone. Text START to ${me.textingFrom} to turn texts back on.`
 			: blocked
 				? "Carriers say this number can't get texts."
-				: textsOn
+				: draft.texts
 					? "On. Below says which messages come this way."
 					: "Off. Invitations still show up on the site.";
+	const emailHint = draft.email
+		? "Invitations, reminders and changes land in your inbox."
+		: `${!saved.email && me.unsubscribeReason ? REASON[me.unsubscribeReason] : "Off."} Invitations still show up on the site.`;
 
 	// A channel is offered only if it can work; the one already chosen stays
 	// on the list so the picker never shows nothing selected.
-	const contactBy: Channel = me.contactBy ?? (emailOn ? "email" : "text");
+	const contactBy: Channel =
+		draft.contactBy ?? (draft.email ? "email" : "text");
 	const canUse = (c: Channel) =>
 		c === contactBy ||
-		(c === "email" ? emailOn : c === "text" ? textsOn : emailOn && textsOn);
+		(c === "email"
+			? draft.email
+			: c === "text"
+				? draft.texts
+				: draft.email && draft.texts);
 	const channels = (["email", "text", "both"] as const).filter(canUse);
 	const isHost = canHost(me);
-	const alertsBy = me.alertsBy ?? "same";
 
 	return (
-		<Panel className="gap-1">
+		<Panel
+			className="gap-1"
+			as="form"
+			onSubmit={(e) => {
+				e.preventDefault();
+				save.mutate(patch);
+			}}
+		>
 			<h2 className="m-0 mb-2 text-[20px]">How we reach you</h2>
 			{/* Somebody invited on paper by name alone has no email to switch. */}
 			{me.email ? (
-				<SettingRow
-					title="Email"
-					hint={
-						emailOn
-							? "Invitations, reminders and changes land in your inbox."
-							: `${me.unsubscribeReason ? REASON[me.unsubscribeReason] : "Off."} Invitations still show up on the site.`
-					}
-				>
+				<SettingRow title="Email" hint={emailHint}>
 					<Switch
 						label="Invitations by email"
-						checked={emailOn}
-						disabled={setEmail.isPending}
-						onChange={(value) => setEmail.mutate({ on: value })}
+						checked={draft.email}
+						onChange={(value) => edit({ email: value })}
 					/>
 				</SettingRow>
 			) : null}
@@ -368,16 +382,16 @@ function ReachPrefs() {
 			>
 				<Switch
 					label="Invitations by text"
-					checked={textsOn}
-					disabled={!me.textablePhone || blocked || setTexts.isPending}
-					onChange={(value) => setTexts.mutate({ on: value })}
+					checked={draft.texts}
+					disabled={!me.textablePhone || blocked}
+					onChange={(value) => edit({ texts: value })}
 				/>
 			</SettingRow>
 			{channels.length > 1 ? (
 				<SettingRow
 					title="Invitations and reminders by"
 					hint={
-						me.contactBy === null ? "Our pick for you, for now." : undefined
+						draft.contactBy === null ? "Our pick for you, for now." : undefined
 					}
 				>
 					<div className="w-full sm:w-auto sm:min-w-[260px]">
@@ -389,8 +403,7 @@ function ReachPrefs() {
 								label: CHANNEL_LABEL[c],
 							}))}
 							value={contactBy}
-							onChange={(value) => setPrefs.mutate({ contactBy: value })}
-							disabled={setPrefs.isPending}
+							onChange={(value) => edit({ contactBy: value })}
 						/>
 					</div>
 				</SettingRow>
@@ -411,11 +424,10 @@ function ReachPrefs() {
 									label: CHANNEL_LABEL[c],
 								})),
 							]}
-							value={alertsBy}
+							value={draft.alertsBy ?? "same"}
 							onChange={(value) =>
-								setPrefs.mutate({ alertsBy: value === "same" ? null : value })
+								edit({ alertsBy: value === "same" ? null : value })
 							}
-							disabled={setPrefs.isPending}
 						/>
 					</div>
 				</SettingRow>
@@ -423,6 +435,13 @@ function ReachPrefs() {
 			<p className="m-0 border-line border-t pt-3.5 text-[12px] text-haze">
 				Texts come from {me.textingFrom}. <TextsDisclosure />
 			</p>
+			<Button
+				type="submit"
+				className="mt-3 self-start"
+				disabled={save.isPending || Object.keys(patch).length === 0}
+			>
+				Save
+			</Button>
 		</Panel>
 	);
 }

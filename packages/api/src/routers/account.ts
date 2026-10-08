@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import { APIError } from "@rsvp-site/auth/errors";
 import type { Db } from "@rsvp-site/db";
-import { findPerson, type Person } from "@rsvp-site/db/people";
+import type { Person } from "@rsvp-site/db/people";
 import { formatPhone, textablePhone } from "@rsvp-site/db/phone";
 import { account, CONTACT_CHANNELS } from "@rsvp-site/db/schema/auth";
 import { blockOf, setContactPrefs, setTexts } from "@rsvp-site/db/sms-status";
@@ -95,50 +95,44 @@ export const accountRouter = {
 	),
 
 	/**
-	 * Email on or off. Turning it back on also lifts Brevo's blocklist, or the
-	 * account would read as subscribed and stay quietly undeliverable.
+	 * The account page's "How we reach you", saved together. Email and texts
+	 * stay separate permissions (a STOP reply must not touch email, an
+	 * unsubscribe must not touch texts); only the fields sent are written.
+	 * Turning email back on also lifts Brevo's blocklist, or the account
+	 * would read as subscribed and stay quietly undeliverable. Texts on is
+	 * the person's own consent, recorded as theirs; a STOP from the phone is
+	 * the number's and only START lifts it.
 	 */
-	setEmail: personProcedure
-		.input(z.object({ on: z.boolean() }))
-		.handler(async ({ context, input }) => {
-			if (input.on) {
-				await resubscribe(context.db, context.me.id);
-				// A name-only guest's address reads blank; there is nothing to unblock.
-				if (context.me.email) await getMailer().unblock(context.me.email);
-			} else {
-				await unsubscribe(context.db, { id: context.me.id }, "self");
-			}
-			const me = await findPerson(context.db, context.me.id);
-			return { unsubscribedAt: me?.unsubscribedAt ?? null };
-		}),
-
-	/**
-	 * Texts on or off. On is the person's own consent, recorded as theirs;
-	 * a STOP from the phone is the number's and only START lifts it.
-	 */
-	setTexts: personProcedure
-		.input(z.object({ on: z.boolean() }))
-		.handler(async ({ context, input }) => {
-			if (input.on && !textablePhone(context.me.phone)) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "Add a US mobile number first.",
-				});
-			}
-			await setTexts(context.db, context.me.id, input.on);
-			const me = await findPerson(context.db, context.me.id);
-			return me ? textingOf(context.db, me) : null;
-		}),
-
-	/** How invitations and reminders reach them, and (for hosts) reply alerts. */
-	setContactPrefs: personProcedure
+	setReach: personProcedure
 		.input(
 			z.object({
+				email: z.boolean().optional(),
+				texts: z.boolean().optional(),
 				contactBy: z.enum(CONTACT_CHANNELS).nullable().optional(),
 				alertsBy: z.enum(CONTACT_CHANNELS).nullable().optional(),
 			}),
 		)
 		.handler(async ({ context, input }) => {
-			await setContactPrefs(context.db, context.me.id, input);
+			// Refused before anything is written, so a Save is all or nothing here.
+			if (input.texts && !textablePhone(context.me.phone)) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Add a US mobile number first.",
+				});
+			}
+			if (input.email === true) {
+				await resubscribe(context.db, context.me.id);
+				// A name-only guest's address reads blank; there is nothing to unblock.
+				if (context.me.email) await getMailer().unblock(context.me.email);
+			} else if (input.email === false) {
+				await unsubscribe(context.db, { id: context.me.id }, "self");
+			}
+			if (input.texts !== undefined) {
+				await setTexts(context.db, context.me.id, input.texts);
+			}
+			await setContactPrefs(context.db, context.me.id, {
+				contactBy: input.contactBy,
+				alertsBy: input.alertsBy,
+			});
 			return { ok: true };
 		}),
 
