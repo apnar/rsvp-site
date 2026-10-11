@@ -10,6 +10,7 @@ import {
 	isComing,
 	notInvitedCount,
 	openSlots,
+	ownParty,
 	potluckLines,
 	relativeParty,
 	seenNoReply,
@@ -105,6 +106,58 @@ describe("clampParty", () => {
 		expect(
 			clampParty({ adults: 3, kids: 4 }, { maxPlusOnes: 0, askKids: false }),
 		).toEqual({ adults: 1, kids: 0 });
+	});
+
+	it("counts a family's child among the kids when the event asks about kids", () => {
+		const rules = { maxPlusOnes: 1, askKids: true };
+		expect(clampParty({ adults: 0, kids: 0 }, rules, true)).toEqual({
+			adults: 0,
+			kids: 1,
+		});
+		// Every adult is a plus-one: a child with a parent along.
+		expect(clampParty({ adults: 3, kids: 2 }, rules, true)).toEqual({
+			adults: 1,
+			kids: 2,
+		});
+		expect(
+			clampParty(
+				{ adults: 0, kids: 1 },
+				{ maxPlusOnes: 0, askKids: false },
+				true,
+			),
+		).toEqual({ adults: 1, kids: 0 });
+	});
+});
+
+describe("ownParty", () => {
+	it("starts a child's form with them as a kid", () => {
+		expect(ownParty({ adults: 1, kids: 0 }, true, true)).toEqual({
+			adults: 0,
+			kids: 1,
+		});
+		expect(ownParty({ adults: 0, kids: 1 }, true, true)).toEqual({
+			adults: 0,
+			kids: 1,
+		});
+		expect(ownParty({ adults: 1, kids: 2 }, true, true)).toEqual({
+			adults: 1,
+			kids: 2,
+		});
+	});
+
+	it("starts anybody else's with them as an adult", () => {
+		expect(ownParty({ adults: 0, kids: 1 }, false, true)).toEqual({
+			adults: 1,
+			kids: 0,
+		});
+		expect(ownParty({ adults: 2, kids: 1 }, false, true)).toEqual({
+			adults: 2,
+			kids: 1,
+		});
+		expect(ownParty({ adults: 0, kids: 1 }, true, false)).toEqual({
+			adults: 1,
+			kids: 0,
+		});
 	});
 });
 

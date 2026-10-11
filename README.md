@@ -314,8 +314,8 @@ app and the API share. Better Auth's admin plugin only knows `admin` and
   `/admin/families`; a person is in at most one. Anybody in a family may
   answer, from the invite page or their printed card, for relatives who are on
   the same event's list and nobody else, and hosts see who answered
-  (`event_guest.answered_by`). A member flagged a child counts as a kid when a
-  relative answers for them; a family may hold name-only people (young kids)
+  (`event_guest.answered_by`). A member flagged a child counts as a kid in the
+  totals, whether a relative answers for them or they answer themselves; a family may hold name-only people (young kids)
   who are never emailed. Only an admin or the person themselves edits a family
   member's details.
 - **Views.** Hosts see when each guest first opened their invitation

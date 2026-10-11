@@ -53,6 +53,7 @@ function previewGuest(data: Invite): NonNullable<Invite["me"]> {
 		response: null,
 		adults: 1,
 		kids: 0,
+		child: false,
 		partyDiet: "",
 		diet: { diets: [], note: "", confirmed: false },
 		userId: "",

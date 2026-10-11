@@ -172,7 +172,7 @@ export const familiesRouter = {
 			return { ok: true };
 		}),
 
-	/** A child counts as a kid when a relative answers for them. */
+	/** A child counts as a kid in the answers they and their relatives give. */
 	setChild: adminProcedure
 		.input(familyInput.extend({ userId: idSchema, child: z.boolean() }))
 		.handler(async ({ context, input }) => {

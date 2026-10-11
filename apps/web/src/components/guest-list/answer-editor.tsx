@@ -73,7 +73,7 @@ export function AnswerEditor({
 					<Stepper
 						label="Adults"
 						value={adults}
-						// A child a relative answered for is 0 adults and 1 kid.
+						// A family's child alone is 0 adults and 1 kid.
 						min={kids >= 1 ? 0 : 1}
 						max={50}
 						onChange={setAdults}

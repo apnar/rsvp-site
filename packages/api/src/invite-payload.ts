@@ -1,7 +1,7 @@
 import type { Db } from "@rsvp-site/db";
 import { contactGaps, type FilledBy, NO_GAPS } from "@rsvp-site/db/details";
 import type { DietId } from "@rsvp-site/db/diets";
-import { relativesOnEvent } from "@rsvp-site/db/families";
+import { isChild, relativesOnEvent } from "@rsvp-site/db/families";
 import { firstNameOf } from "@rsvp-site/db/names";
 import { answersOf } from "./answer-words";
 import {
@@ -34,14 +34,16 @@ export async function invitePayload(
 	const row = access.event;
 	// The card says the viewer's own name, which is the caller's: so the
 	// layout needs nothing from the other reads and runs beside them.
-	const [guests, potluck, hosts, card, relatives, missing] = await Promise.all([
-		guestsOf(db, row.id, { diets: row.askDietary }),
-		row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
-		hostsOf(db, row.id),
-		designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
-		access.guest ? relativesOnEvent(db, row.id, access.guest.userId) : [],
-		access.guest ? contactGaps(db, access.guest.userId, by) : NO_GAPS,
-	]);
+	const [guests, potluck, hosts, card, relatives, missing, child] =
+		await Promise.all([
+			guestsOf(db, row.id, { diets: row.askDietary }),
+			row.potluckEnabled ? potluckOf(db, row.id) : NO_POTLUCK,
+			hostsOf(db, row.id),
+			designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
+			access.guest ? relativesOnEvent(db, row.id, access.guest.userId) : [],
+			access.guest ? contactGaps(db, access.guest.userId, by) : NO_GAPS,
+			access.guest && row.askKids ? isChild(db, access.guest.userId) : false,
+		]);
 	const totals = tally(guests);
 	const mine = access.guest;
 	const myFriends = mine
@@ -104,6 +106,8 @@ export async function invitePayload(
 					response: mine.response,
 					adults: mine.adults,
 					kids: mine.kids,
+					/** Counted as a kid: the form starts them there (`ownParty`). */
+					child,
 					partyDiet: row.askDietary ? mine.partyDiet : "",
 					/** Their own diet, for the "still right?" after answering. */
 					diet: dietOf(myRow),

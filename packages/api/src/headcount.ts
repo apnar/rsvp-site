@@ -45,8 +45,8 @@ export function tally(guests: readonly GuestCounts[]): Totals {
 		}
 		t[g.response]++;
 		if (g.response === "yes") {
-			// A yes is at least one person. A child a relative answered for is
-			// stored as 0 adults and 1 kid, so the floor is on the sum.
+			// A yes is at least one person. A family's child alone is stored
+			// as 0 adults and 1 kid, so the floor is on the sum.
 			const adults = Math.max(0, g.adults);
 			const kids = Math.max(0, g.kids);
 			if (adults + kids < 1) t.adults += 1;
@@ -166,22 +166,50 @@ export function extraPeople(party: { adults: number; kids: number }): number {
 /**
  * Clamp what a guest sent to what the event allows. The form enforces the
  * same limits; this is what makes them true. `maxPlusOnes` 0 means the
- * guest comes alone; kids are dropped when the event does not ask. A child
- * answering on their own form counts as an adult here: only a relative's
- * answer (`relativeParty`) knows them as a kid.
+ * guest comes alone; kids are dropped when the event does not ask. A
+ * child of a family (`child`) is counted among the kids, not the adults,
+ * when the event asks about kids, as when a relative answers for them
+ * (`relativeParty`): then the adults are all plus-ones.
  */
 export function clampParty(
 	input: { adults: number; kids: number },
 	rules: { maxPlusOnes: number; askKids: boolean },
+	child = false,
 ): { adults: number; kids: number } {
-	const adults = Math.min(
-		Math.max(1, Math.trunc(input.adults)),
-		1 + Math.max(0, rules.maxPlusOnes),
-	);
+	const plusOnes = Math.max(0, rules.maxPlusOnes);
+	if (child && rules.askKids) {
+		return {
+			adults: Math.min(Math.max(0, Math.trunc(input.adults)), plusOnes),
+			kids: Math.min(Math.max(1, Math.trunc(input.kids)), 20),
+		};
+	}
+	const adults = Math.min(Math.max(1, Math.trunc(input.adults)), 1 + plusOnes);
 	const kids = rules.askKids
 		? Math.min(Math.max(0, Math.trunc(input.kids)), 20)
 		: 0;
 	return { adults, kids };
+}
+
+/**
+ * Where a guest's own form starts from what is stored, so the steppers
+ * count the guest once, in the right row. A child's row with no kid on it
+ * is the default (or an answer from before children counted as kids), so
+ * the adult in it is the child. Anybody else's row with no adult is a
+ * child a relative answered for, since moved out of their family.
+ */
+export function ownParty(
+	stored: { adults: number; kids: number },
+	child: boolean,
+	askKids: boolean,
+): { adults: number; kids: number } {
+	if (child && askKids) {
+		return stored.kids >= 1
+			? { adults: Math.max(0, stored.adults), kids: stored.kids }
+			: { adults: Math.max(0, stored.adults - 1), kids: 1 };
+	}
+	return stored.adults < 1
+		? { adults: 1, kids: 0 }
+		: { adults: stored.adults, kids: stored.kids };
 }
 
 /**

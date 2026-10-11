@@ -35,7 +35,7 @@ export const familyMember = sqliteTable(
 		familyId: text("family_id")
 			.notNull()
 			.references(() => family.id, { onDelete: "cascade" }),
-		/** Counted as a kid, not an adult, when a relative answers for them. */
+		/** Counted as a kid, not an adult, in their answers (when the event asks). */
 		child: integer("child", { mode: "boolean" }).notNull().default(false),
 		createdAt: integer("created_at", { mode: "timestamp_ms" })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)

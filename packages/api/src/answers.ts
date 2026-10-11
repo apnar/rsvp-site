@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import type { Db } from "@rsvp-site/db";
 import { built, rawBatch } from "@rsvp-site/db/batch";
-import { relativesOnEvent } from "@rsvp-site/db/families";
+import { isChild, relativesOnEvent } from "@rsvp-site/db/families";
 import {
 	type Arrival,
 	eventGuest,
@@ -46,7 +46,8 @@ export const answerInput = z.object({
  * Those answers are written in the same batch, stamped with who gave them
  * (`answered_by`), and only for people `relativesOnEvent` says are theirs:
  * any other id is ignored. A relative's party is fixed by `relativeParty`,
- * not by what the request says. The hosts get one alert for the lot.
+ * not by what the request says. A child of a family answering for
+ * themselves is one of their own party's kids (`clampParty`). The hosts get one alert for the lot.
  * Every answer written carries `via`, how the one answering came here.
  *
  * Potluck claims are guarded in the INSERT itself -- it only writes while
@@ -72,8 +73,6 @@ export async function answer(
 	if (!mayPick(row.allowMaybe, guest.response, input.response)) {
 		throw new ORPCError("BAD_REQUEST", { message: NO_MAYBE });
 	}
-	const party =
-		input.response === "no" ? { adults: 1, kids: 0 } : clampParty(input, row);
 	// A "no" brings nothing; otherwise keep exactly what was ticked.
 	const wanted = [
 		...new Set(
@@ -83,7 +82,7 @@ export async function answer(
 	// What this guest already holds: a claim insert that changes nothing
 	// is either "you have it" or "it's full", and only this tells them
 	// apart without a read per item.
-	const [heldRows, relatives] = await Promise.all([
+	const [heldRows, relatives, child] = await Promise.all([
 		db
 			.select({ itemId: potluckClaim.itemId })
 			.from(potluckClaim)
@@ -92,7 +91,12 @@ export async function answer(
 		input.family.length
 			? relativesOnEvent(db, row.id, guest.userId)
 			: Promise.resolve([]),
+		row.askKids ? isChild(db, guest.userId) : false,
 	]);
+	const party =
+		input.response === "no"
+			? { adults: 1, kids: 0 }
+			: clampParty(input, row, child);
 	const held = new Set(heldRows.map((c) => c.itemId));
 	// Last entry per id wins; an id that is not a relative is dropped
 	// silently, and one that would change nothing is not rewritten (or

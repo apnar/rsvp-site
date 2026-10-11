@@ -1,7 +1,7 @@
 /**
  * How many people a party or a total is, in words. Pure, and the one
  * place it is said, so the guest list, the emails and the texts agree.
- * A child a relative answered for is stored as 0 adults and 1 kid, so
+ * A family's child alone is stored as 0 adults and 1 kid, so
  * "0 adults" is never printed beside kids.
  */
 

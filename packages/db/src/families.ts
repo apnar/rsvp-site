@@ -97,6 +97,19 @@ export async function relativesOf(db: Db, userId: string) {
 	});
 }
 
+/**
+ * A child of their family: counted as a kid, not an adult, whoever gives
+ * their answer (`clampParty`, `relativeParty`).
+ */
+export async function isChild(db: Db, userId: string): Promise<boolean> {
+	const row = await db
+		.select({ child: familyMember.child })
+		.from(familyMember)
+		.where(eq(familyMember.userId, userId))
+		.get();
+	return row?.child === true;
+}
+
 /** In any family: then only an admin, or they themselves, edit their details. */
 export async function inAnyFamily(db: Db, userId: string): Promise<boolean> {
 	const row = await db

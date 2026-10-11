@@ -256,8 +256,9 @@ export const eventGuest = sqliteTable(
 		source: text("source", { enum: GUEST_SOURCES }).notNull().default("host"),
 		response: text("response", { enum: GUEST_RESPONSES }),
 		/**
-		 * Including the guest themselves. A child a relative answered for is
-		 * 0 adults and 1 kid; `tally` counts any yes as at least one person.
+		 * Including the guest themselves. A family's child is among the kids
+		 * (alone, 0 adults and 1 kid), whoever answered; `tally` counts any
+		 * yes as at least one person.
 		 */
 		adults: integer("adults").notNull().default(1),
 		kids: integer("kids").notNull().default(0),

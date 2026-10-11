@@ -400,16 +400,19 @@ designer).
   joiners are never remembered.
 - Families (`family`, `family_member`; `user_id` is the PK, so one family
   per person): `packages/db/src/families.ts` owns every read of membership
-  (`relativesOnEvent`, `relativesOf`, `inAnyFamily`, `pickable`,
-  `listFamilies`, `sharedGroups`). Admins keep them; `family.shared` puts
+  (`relativesOnEvent`, `relativesOf`, `inAnyFamily`, `isChild`,
+  `pickable`, `listFamilies`, `sharedGroups`). Admins keep them; `family.shared` puts
   one in every host's picker, and a contact group goes to the hosts an
   admin picks (`contact_group_share`), so `guests.add` picks go through
   `pickable`, not `inBook`. A family member answers for relatives on the
   same event's list, recorded in `event_guest.answered_by` (hosts see it;
-  the guest's own answer or a host's clears it). A child answered for is
-  stored as adults 0 / kids 1, and `tally` floors the sum at 1, not adults,
-  so never print "0 adults". Family members are editable only by admins and
-  themselves (`canEditDetails`'s `inFamily`).
+  the guest's own answer or a host's clears it). A child
+  (`family_member.child`) counts as a kid when the event asks about kids:
+  answered for, they are adults 0 / kids 1 (`relativeParty`); answering
+  themselves, they are one of their party's kids (`clampParty` with
+  `isChild`, the form starting from `ownParty`). `tally` floors the sum at
+  1, not adults, so never print "0 adults". Family members are editable
+  only by admins and themselves (`canEditDetails`'s `inFamily`).
 - Paper events (`event.paper`, fixed once published): guest email and texts
   of every kind are held while `emailsHeld(row)` (`schedule.ts`; paper and
   no `emails_released_at`). Check it before any guest-facing `deliver`;

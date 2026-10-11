@@ -53,8 +53,8 @@ function AdminFamiliesPage() {
 			<Panel title="Families">
 				<p className="m-0 text-[14px] text-haze">
 					A family is a household. Anybody in one may answer for the relatives
-					who are on the same invitation list, and a child they answer for
-					counts as a kid. A person is in one family at most. Shared families
+					who are on the same invitation list. A child counts as a kid, whoever
+					answers for them. A person is in one family at most. Shared families
 					show up in every host's guest picker; the rest are for you to keep.
 					Only admins (and the person) edit a family member's details; hosts who
 					add them can't.

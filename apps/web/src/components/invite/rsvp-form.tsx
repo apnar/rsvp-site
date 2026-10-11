@@ -1,5 +1,10 @@
 import { type AnswerSet, offered } from "@rsvp-site/api/answer-words";
-import { type Answer, extraPeople, isComing } from "@rsvp-site/api/headcount";
+import {
+	type Answer,
+	extraPeople,
+	isComing,
+	ownParty,
+} from "@rsvp-site/api/headcount";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
@@ -45,10 +50,8 @@ export function initialRsvp(
 			: null;
 	return {
 		answer: carried ?? me.response,
-		// A child's own row is 0 adults and 1 kid; the steppers are for a
-		// grown-up's party, and clampParty would count that kid twice.
-		adults: me.adults < 1 ? 1 : me.adults,
-		kids: me.adults < 1 ? 0 : me.kids,
+		// `child` already means "and the event asks about kids".
+		...ownParty(me, me.child, true),
 		partyDiet: me.partyDiet,
 		note: me.note,
 		claims: me.claims,
@@ -96,6 +99,9 @@ export function RsvpForm({
 	}));
 	const pending = answer !== null && answer !== saved;
 	const coming = isComing(answer);
+	// A family's child is one of the kids, and every adult a plus-one
+	// (`clampParty`); the payload says child only when the event asks kids.
+	const child = me.child;
 
 	return (
 		<form
@@ -161,16 +167,16 @@ export function RsvpForm({
 						<Stepper
 							label="Adults"
 							value={adults}
-							min={1}
-							max={1 + e.maxPlusOnes}
+							min={child ? 0 : 1}
+							max={child ? e.maxPlusOnes : 1 + e.maxPlusOnes}
 							onChange={setAdults}
 						/>
 					) : null}
 					{e.askKids ? (
 						<Stepper
-							label="Kids"
+							label={child ? "Kids, you included" : "Kids"}
 							value={kids}
-							min={0}
+							min={child ? 1 : 0}
 							max={20}
 							onChange={setKids}
 						/>
