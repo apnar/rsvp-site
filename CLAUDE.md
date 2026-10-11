@@ -407,10 +407,11 @@ designer).
   `pickable`, not `inBook`. A family member answers for relatives on the
   same event's list, recorded in `event_guest.answered_by` (hosts see it;
   the guest's own answer or a host's clears it). A child
-  (`family_member.child`) counts as a kid when the event asks about kids:
-  answered for, they are adults 0 / kids 1 (`relativeParty`); answering
-  themselves, they are one of their party's kids (`clampParty` with
-  `isChild`, the form starting from `ownParty`). `tally` floors the sum at
+  (`family_member.child`) counts as a kid whether or not the event asks
+  about kids (that question is how many a guest brings): answered for,
+  they are adults 0 / kids 1 (`relativeParty`); answering themselves, they
+  are one of their party's kids (`clampParty` with `isChild`, the form and
+  the host's answer editor starting from `ownParty`). `tally` floors the sum at
   1, not adults, so never print "0 adults". Family members are editable
   only by admins and themselves (`canEditDetails`'s `inFamily`).
 - Paper events (`event.paper`, fixed once published): guest email and texts

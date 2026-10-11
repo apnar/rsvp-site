@@ -243,7 +243,8 @@ const answerer = alias(user, "answerer");
  * `mailable` and `textable` say which channels can reach them (as
  * `mailableWhere` and `textableWhere` do), and `unreachable` that neither
  * can; `lastText` is how the latest text to them about this event fared; `addedBy` is who put them on the list; `answeredByName` the
- * relative who answered for them; `familyId` their family, if any;
+ * relative who answered for them; `familyId` their family, if any, and
+ * `child` whether it counts them as a kid;
  * `hasPaper` says their printed card has a QR code issued; `viewedAt`,
  * and how they came to view and to answer (`viewedVia`, `respondedVia`), are
  * for hosts only, so guest-facing payloads pick their fields by hand.
@@ -293,6 +294,7 @@ export async function guestsOf(
 			addedByName: adder.name,
 			answeredByName: answerer.name,
 			familyId: familyMember.familyId,
+			child: familyMember.child,
 			noEmail: user.noEmail,
 			paperToken: eventGuest.paperToken,
 			invitedVia: eventGuest.invitedVia,

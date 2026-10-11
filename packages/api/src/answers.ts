@@ -47,7 +47,8 @@ export const answerInput = z.object({
  * (`answered_by`), and only for people `relativesOnEvent` says are theirs:
  * any other id is ignored. A relative's party is fixed by `relativeParty`,
  * not by what the request says. A child of a family answering for
- * themselves is one of their own party's kids (`clampParty`). The hosts get one alert for the lot.
+ * themselves is one of their own party's kids (`clampParty`). The hosts
+ * get one alert for the lot.
  * Every answer written carries `via`, how the one answering came here.
  *
  * Potluck claims are guarded in the INSERT itself -- it only writes while
@@ -91,7 +92,7 @@ export async function answer(
 		input.family.length
 			? relativesOnEvent(db, row.id, guest.userId)
 			: Promise.resolve([]),
-		row.askKids ? isChild(db, guest.userId) : false,
+		isChild(db, guest.userId),
 	]);
 	const party =
 		input.response === "no"
@@ -105,7 +106,7 @@ export async function answer(
 	const kept = relatives.flatMap((rel) => {
 		const response = asked.get(rel.id);
 		if (!response) return [];
-		const theirs = relativeParty(rel.child, row.askKids);
+		const theirs = relativeParty(rel.child);
 		const same =
 			rel.response === response &&
 			rel.adults === theirs.adults &&

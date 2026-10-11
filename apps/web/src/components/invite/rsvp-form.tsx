@@ -50,8 +50,7 @@ export function initialRsvp(
 			: null;
 	return {
 		answer: carried ?? me.response,
-		// `child` already means "and the event asks about kids".
-		...ownParty(me, me.child, true),
+		...ownParty(me, me.child),
 		partyDiet: me.partyDiet,
 		note: me.note,
 		claims: me.claims,
@@ -100,7 +99,7 @@ export function RsvpForm({
 	const pending = answer !== null && answer !== saved;
 	const coming = isComing(answer);
 	// A family's child is one of the kids, and every adult a plus-one
-	// (`clampParty`); the payload says child only when the event asks kids.
+	// (`clampParty`).
 	const child = me.child;
 
 	return (

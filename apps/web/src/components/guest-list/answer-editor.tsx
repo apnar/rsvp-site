@@ -1,5 +1,5 @@
 import { type AnswerSet, offered, pickWord } from "@rsvp-site/api/answer-words";
-import { isComing } from "@rsvp-site/api/headcount";
+import { isComing, ownParty } from "@rsvp-site/api/headcount";
 import { Button } from "@rsvp-site/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
@@ -37,8 +37,13 @@ export function AnswerEditor({
 		label: pickWord(answers.words, value === "none" ? null : value),
 	}));
 	const [answer, setAnswer] = useState<EditedAnswer>(guest.response ?? "none");
-	const [adults, setAdults] = useState(guest.adults);
-	const [kids, setKids] = useState(guest.kids);
+	// Unanswered, a family's child starts as the kid they are.
+	const start =
+		guest.response === null
+			? ownParty(guest, guest.child === true)
+			: { adults: guest.adults, kids: guest.kids };
+	const [adults, setAdults] = useState(start.adults);
+	const [kids, setKids] = useState(start.kids);
 	const save = useMutation(
 		orpc.guests.setAnswer.mutationOptions({
 			onSuccess: () => {

@@ -168,8 +168,9 @@ export function extraPeople(party: { adults: number; kids: number }): number {
  * same limits; this is what makes them true. `maxPlusOnes` 0 means the
  * guest comes alone; kids are dropped when the event does not ask. A
  * child of a family (`child`) is counted among the kids, not the adults,
- * when the event asks about kids, as when a relative answers for them
- * (`relativeParty`): then the adults are all plus-ones.
+ * as when a relative answers for them (`relativeParty`): then the adults
+ * are all plus-ones. Asking about kids is asking how many a guest brings;
+ * a child the family names is a kid whether the event asks or not.
  */
 export function clampParty(
 	input: { adults: number; kids: number },
@@ -177,10 +178,12 @@ export function clampParty(
 	child = false,
 ): { adults: number; kids: number } {
 	const plusOnes = Math.max(0, rules.maxPlusOnes);
-	if (child && rules.askKids) {
+	if (child) {
 		return {
 			adults: Math.min(Math.max(0, Math.trunc(input.adults)), plusOnes),
-			kids: Math.min(Math.max(1, Math.trunc(input.kids)), 20),
+			kids: rules.askKids
+				? Math.min(Math.max(1, Math.trunc(input.kids)), 20)
+				: 1,
 		};
 	}
 	const adults = Math.min(Math.max(1, Math.trunc(input.adults)), 1 + plusOnes);
@@ -200,9 +203,8 @@ export function clampParty(
 export function ownParty(
 	stored: { adults: number; kids: number },
 	child: boolean,
-	askKids: boolean,
 ): { adults: number; kids: number } {
-	if (child && askKids) {
+	if (child) {
 		return stored.kids >= 1
 			? { adults: Math.max(0, stored.adults), kids: stored.kids }
 			: { adults: Math.max(0, stored.adults - 1), kids: 1 };
@@ -212,16 +214,12 @@ export function ownParty(
 		: { adults: stored.adults, kids: stored.kids };
 }
 
-/**
- * What a relative's answer stands for: that one person, no plus-ones. A
- * child is a kid when the event asks about kids, and otherwise counted like
- * everybody else.
- */
-export function relativeParty(
-	child: boolean,
-	askKids: boolean,
-): { adults: number; kids: number } {
-	return child && askKids ? { adults: 0, kids: 1 } : { adults: 1, kids: 0 };
+/** What a relative's answer stands for: that one person, no plus-ones. */
+export function relativeParty(child: boolean): {
+	adults: number;
+	kids: number;
+} {
+	return child ? { adults: 0, kids: 1 } : { adults: 1, kids: 0 };
 }
 
 /**

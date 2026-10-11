@@ -65,10 +65,9 @@ describe("tally", () => {
 });
 
 describe("relativeParty", () => {
-	it("is one person, a kid only when the event asks about kids", () => {
-		expect(relativeParty(false, true)).toEqual({ adults: 1, kids: 0 });
-		expect(relativeParty(true, true)).toEqual({ adults: 0, kids: 1 });
-		expect(relativeParty(true, false)).toEqual({ adults: 1, kids: 0 });
+	it("is one person, a kid when the family says so", () => {
+		expect(relativeParty(false)).toEqual({ adults: 1, kids: 0 });
+		expect(relativeParty(true)).toEqual({ adults: 0, kids: 1 });
 	});
 });
 
@@ -108,7 +107,7 @@ describe("clampParty", () => {
 		).toEqual({ adults: 1, kids: 0 });
 	});
 
-	it("counts a family's child among the kids when the event asks about kids", () => {
+	it("counts a family's child among the kids", () => {
 		const rules = { maxPlusOnes: 1, askKids: true };
 		expect(clampParty({ adults: 0, kids: 0 }, rules, true)).toEqual({
 			adults: 0,
@@ -119,44 +118,41 @@ describe("clampParty", () => {
 			adults: 1,
 			kids: 2,
 		});
+		// Not asked how many kids they bring, still one themselves.
 		expect(
 			clampParty(
-				{ adults: 0, kids: 1 },
+				{ adults: 2, kids: 4 },
 				{ maxPlusOnes: 0, askKids: false },
 				true,
 			),
-		).toEqual({ adults: 1, kids: 0 });
+		).toEqual({ adults: 0, kids: 1 });
 	});
 });
 
 describe("ownParty", () => {
 	it("starts a child's form with them as a kid", () => {
-		expect(ownParty({ adults: 1, kids: 0 }, true, true)).toEqual({
+		expect(ownParty({ adults: 1, kids: 0 }, true)).toEqual({
 			adults: 0,
 			kids: 1,
 		});
-		expect(ownParty({ adults: 0, kids: 1 }, true, true)).toEqual({
+		expect(ownParty({ adults: 0, kids: 1 }, true)).toEqual({
 			adults: 0,
 			kids: 1,
 		});
-		expect(ownParty({ adults: 1, kids: 2 }, true, true)).toEqual({
+		expect(ownParty({ adults: 1, kids: 2 }, true)).toEqual({
 			adults: 1,
 			kids: 2,
 		});
 	});
 
 	it("starts anybody else's with them as an adult", () => {
-		expect(ownParty({ adults: 0, kids: 1 }, false, true)).toEqual({
+		expect(ownParty({ adults: 0, kids: 1 }, false)).toEqual({
 			adults: 1,
 			kids: 0,
 		});
-		expect(ownParty({ adults: 2, kids: 1 }, false, true)).toEqual({
+		expect(ownParty({ adults: 2, kids: 1 }, false)).toEqual({
 			adults: 2,
 			kids: 1,
-		});
-		expect(ownParty({ adults: 0, kids: 1 }, true, false)).toEqual({
-			adults: 1,
-			kids: 0,
 		});
 	});
 });

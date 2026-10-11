@@ -42,7 +42,7 @@ export async function invitePayload(
 			designedCard(db, row, "web", access.guest ? me : YOUR_GUEST),
 			access.guest ? relativesOnEvent(db, row.id, access.guest.userId) : [],
 			access.guest ? contactGaps(db, access.guest.userId, by) : NO_GAPS,
-			access.guest && row.askKids ? isChild(db, access.guest.userId) : false,
+			access.guest ? isChild(db, access.guest.userId) : false,
 		]);
 	const totals = tally(guests);
 	const mine = access.guest;
