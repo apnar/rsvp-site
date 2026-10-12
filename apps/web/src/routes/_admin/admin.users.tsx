@@ -217,11 +217,13 @@ function PersonRow({ person: p, isYou }: { person: Person; isYou: boolean }) {
 				{p.phone ? (
 					<div className="truncate text-[13px] text-haze">
 						{formatPhone(p.phone)} ·{" "}
-						{p.textsOffAt
-							? "texts off"
-							: p.textsOkAt
-								? "texts on"
-								: "texts not agreed"}
+						{p.textBlock
+							? `texts blocked (${p.textBlock})`
+							: p.textsOffAt
+								? "texts off"
+								: p.textsOkAt
+									? "texts on"
+									: "texts not agreed"}
 					</div>
 				) : null}
 			</div>

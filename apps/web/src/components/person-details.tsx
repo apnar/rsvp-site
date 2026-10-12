@@ -14,6 +14,7 @@ import { AvatarField } from "@/components/avatar/avatar-field";
 import { Field } from "@/components/controls";
 import { DietFields } from "@/components/diet";
 import { Modal } from "@/components/modal";
+import { ReachFields } from "@/components/reach-fields";
 import {
 	changedDetails,
 	type DetailKey,
@@ -21,6 +22,7 @@ import {
 	draftOf,
 } from "@/lib/details-draft";
 import { type DietValue, sameDiet } from "@/lib/diet-value";
+import { type Reach, reachPatch } from "@/lib/reach-draft";
 
 type DetailsPerson = {
 	name: string;
@@ -175,6 +177,13 @@ type DetailsFormProps = {
 	onSaveEmail: (email: string) => Promise<unknown>;
 	/** Their picture's controls, for the callers allowed them (admins). */
 	picture?: Omit<ComponentProps<typeof AvatarField>, "name" | "mine">;
+	/** How they're reached, for the callers allowed it (admins). */
+	reach?: {
+		saved: Reach;
+		person: ComponentProps<typeof ReachFields>["person"];
+		isHost: boolean;
+		onSave: (patch: Partial<Reach>) => Promise<unknown>;
+	};
 };
 
 function DetailsForm({
@@ -186,6 +195,7 @@ function DetailsForm({
 	onSave,
 	onSaveEmail,
 	picture,
+	reach,
 	firstRef,
 	close,
 }: DetailsFormProps & {
@@ -207,13 +217,27 @@ function DetailsForm({
 		patch.dietNote = diet.note;
 	}
 	const emailChanged = email.trim().toLowerCase() !== person.email;
-	const dirty = Object.keys(patch).length > 0 || emailChanged;
+	const [reachEdits, setReachEdits] = useState<Partial<Reach>>({});
+	const reachDraft = reach ? { ...reach.saved, ...reachEdits } : null;
+	const reachChanges = reach ? reachPatch(reach.saved, reachEdits) : {};
+	// A new number clears consent given for the old one, so texts wait for
+	// the number to be saved rather than riding along with it.
+	const phoneChanged = patch.phone !== undefined;
+	if (phoneChanged) delete reachChanges.texts;
+	const dirty =
+		Object.keys(patch).length > 0 ||
+		emailChanged ||
+		Object.keys(reachChanges).length > 0;
 
 	async function submit() {
 		setBusy(true);
 		try {
 			if (Object.keys(patch).length > 0) await onSave(patch);
 			if (emailChanged && email.trim()) await onSaveEmail(email.trim());
+			// Last, so it is saved against the address and number just written.
+			if (reach && Object.keys(reachChanges).length > 0) {
+				await reach.onSave(reachChanges);
+			}
 			// Closing the dialog (not unmounting it) hands focus back to
 			// whatever opened it; its close handler tells the parent.
 			close();
@@ -278,6 +302,22 @@ function DetailsForm({
 					disabled={!editable}
 				/>
 			</fieldset>
+			{reach && reachDraft ? (
+				<fieldset className="m-0 flex flex-col border-0 p-0">
+					<legend className="mb-2 p-0 font-bold text-[14px]">
+						How we reach them
+					</legend>
+					<ReachFields
+						mine={false}
+						saved={reach.saved}
+						draft={reachDraft}
+						onEdit={(change) => setReachEdits((e) => ({ ...e, ...change }))}
+						person={reach.person}
+						isHost={reach.isHost}
+						phoneChanged={phoneChanged}
+					/>
+				</fieldset>
+			) : null}
 			<div className="flex flex-wrap justify-end gap-2">
 				<Button type="button" variant="ghost" onClick={close}>
 					{editable ? "Cancel" : "Close"}

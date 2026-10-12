@@ -43,14 +43,16 @@ export type StatusActor = (typeof STATUS_ACTORS)[number];
 
 /**
  * Why somebody stopped getting email: they said so (the footer link or the
- * account page), or Brevo told us through the webhook that mail to them
- * bounces, was reported as spam, or cannot be delivered.
+ * account page), Brevo told us through the webhook that mail to them
+ * bounces, was reported as spam, or cannot be delivered, or an admin
+ * switched it off for them.
  */
 export const UNSUBSCRIBE_REASONS = [
 	"self",
 	"bounce",
 	"spam",
 	"invalid",
+	"admin",
 ] as const;
 export type UnsubscribeReason = (typeof UNSUBSCRIBE_REASONS)[number];
 

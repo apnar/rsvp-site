@@ -228,7 +228,8 @@ for libraries; only `apps/web` builds. Import each module by its own subpath
   - answering: `answers.ts`, `guest-invites.ts`, `views.ts`, `diet.ts`,
     `contact-ask.ts`, `email-claim.ts`
   - people: `typed-people.ts` (pasted lines into people), `details.ts`,
-    `avatar.ts`, `endings.ts` (deletes)
+    `avatar.ts`, `reach-prefs.ts` (email, texts and channel choices),
+    `endings.ts` (deletes)
   - media and designs: `media.ts`, `image-type.ts`, `designs-store.ts`,
     `design-rules.ts` (`needsQr`), `invite-payload.ts`
   - plumbing: `limits.ts`, `inputs.ts`, `context.ts`
@@ -672,10 +673,13 @@ retry would send it twice. Telnyx's `postMessage` follows the same rule.
   `mailableWhere`: consent (`texts_ok_at`), texts on, a US number, not in
   `sms_block`. D1 refuses a long GLOB as "too complex", so the SQL checks
   the number's shape loosely and `textablePhone` exactly.
-- Consent is the host's tick ("they expect a text from me") or the person's
-  own switch, written only by `sms-status.ts`. A host's word only fills a
-  blank on an unclaimed record and is cleared when the number changes
-  (`updateDetails`).
+- Consent is the host's tick ("they expect a text from me"), the person's
+  own switch, or an admin's for them, written only by `sms-status.ts`;
+  `texts_ok_by` says whose word it was. A host's word only fills a blank on
+  an unclaimed record; anybody's but the person's own is cleared when the
+  number changes (`updateDetails`). "How we reach you" is saved by
+  `saveReach` (`api/src/reach-prefs.ts`) for both the account page and the
+  admin's editor (`people.setReach`), and drawn by `reach-fields.tsx`.
 - `sms_block` is per number, because STOP is: Telnyx blocks the number
   across the profile. Only START (`unblockNumber`) lifts a `stop`. Keywords
   match the whole message only, and YES is deliberately not one. Telnyx
@@ -698,7 +702,8 @@ retry would send it twice. Telnyx's `postMessage` follows the same rule.
 
 `user` is the accounts, the guests and the mailing list. A person is
 `active` or `deactivated`, and separately may be unsubscribed
-(`unsubscribed_at` + `unsubscribe_reason`: self, bounce, spam, invalid).
+(`unsubscribed_at` + `unsubscribe_reason`: self, bounce, spam, invalid,
+admin).
 
 - `listRecipients` is the only query behind list sends and excludes
   deactivated and unsubscribed people whatever ids are passed. Use it.
@@ -813,7 +818,7 @@ Where a new piece goes, so it lands beside its siblings:
   `confirm-action.tsx` (every inline "are you sure?", with a body when it
   needs one; it moves focus), `modal.tsx` (every dialog; closing it hands
   focus back), `person-details.tsx` (`DetailFields`, the name, phone and
-  address fields), `invite/answer-flow.tsx` (the answer form and the panel
+  address fields), `reach-fields.tsx` (the email, texts and channel rows), `invite/answer-flow.tsx` (the answer form and the panel
   after it), `texts-copy.tsx` (the texting consent wording, which carriers
   read: never write it out again), `brand.tsx` (wordmark, `Avatar`),
   `rename-input.tsx`, `tag.tsx`, `guest-picker.tsx`, `add-guests.tsx`,

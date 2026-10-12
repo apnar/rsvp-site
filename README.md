@@ -68,8 +68,8 @@ households, paper invitations, a card designer and texts.
 
 **For admins**
 
-- Manage people (add, roles, pictures, new sign-in links, deactivate,
-  delete), households (families), shared contact groups, and every event.
+- Manage people (add, roles, details, pictures, how they're reached, new
+  sign-in links, deactivate, delete), households (families), shared contact groups, and every event.
 - Write to everyone, see the email log and the text log, and send a test text.
 
 ## Stack
@@ -380,7 +380,7 @@ sign-in link or a deactivation ends the person's other sessions at once.
 
 **Two switches, not states.** A person is `active` or `deactivated`;
 separately, they may be **unsubscribed** (`unsubscribed_at`, with a reason:
-self, bounce, spam, invalid).
+self, bounce, spam, invalid, admin).
 
 - *Unsubscribed* stops the email and nothing else: they still sign in, and
   invitations still show up on the site and on the hosts' lists (marked "No

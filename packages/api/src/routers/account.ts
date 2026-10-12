@@ -1,15 +1,8 @@
 import { ORPCError } from "@orpc/server";
 import { createAuth } from "@rsvp-site/auth";
 import { APIError } from "@rsvp-site/auth/errors";
-import type { Db } from "@rsvp-site/db";
-import type { Person } from "@rsvp-site/db/people";
-import { formatPhone, textablePhone } from "@rsvp-site/db/phone";
-import { account, CONTACT_CHANNELS } from "@rsvp-site/db/schema/auth";
-import { blockOf, setContactPrefs, setTexts } from "@rsvp-site/db/sms-status";
-import { resubscribe, unsubscribe } from "@rsvp-site/db/status";
+import { account } from "@rsvp-site/db/schema/auth";
 import { rotateLinkToken } from "@rsvp-site/db/tokens";
-import { getMailer } from "@rsvp-site/email/worker";
-import { textingFrom } from "@rsvp-site/sms/worker";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
@@ -17,21 +10,7 @@ import { removePicture, setPicture } from "../avatar";
 import { detailsPatch, saveDetails } from "../details";
 import { personProcedure } from "../index";
 import { avatarFile } from "../media";
-
-/** Where the account page's texting settings stand. */
-async function textingOf(db: Db, me: Person) {
-	const phone = textablePhone(me.phone);
-	return {
-		contactBy: me.contactBy,
-		alertsBy: me.alertsBy,
-		/** Their number is one this site can text. */
-		textablePhone: phone !== null,
-		textsOn: me.textsOkAt !== null && me.textsOffAt === null,
-		textBlock: await blockOf(db, phone),
-		/** The number to text START to, after a STOP. */
-		textingFrom: formatPhone(textingFrom()),
-	};
-}
+import { reachInput, saveReach, textingOf } from "../reach-prefs";
 
 /**
  * Somebody's own account. Passwords are optional here: the emailed links are
@@ -94,45 +73,11 @@ export const accountRouter = {
 		removePicture(context.db, context.env, context.me.id),
 	),
 
-	/**
-	 * The account page's "How we reach you", saved together. Email and texts
-	 * stay separate permissions (a STOP reply must not touch email, an
-	 * unsubscribe must not touch texts); only the fields sent are written.
-	 * Turning email back on also lifts Brevo's blocklist, or the account
-	 * would read as subscribed and stay quietly undeliverable. Texts on is
-	 * the person's own consent, recorded as theirs; a STOP from the phone is
-	 * the number's and only START lifts it.
-	 */
+	/** The account page's "How we reach you", saved together. */
 	setReach: personProcedure
-		.input(
-			z.object({
-				email: z.boolean().optional(),
-				texts: z.boolean().optional(),
-				contactBy: z.enum(CONTACT_CHANNELS).nullable().optional(),
-				alertsBy: z.enum(CONTACT_CHANNELS).nullable().optional(),
-			}),
-		)
+		.input(reachInput)
 		.handler(async ({ context, input }) => {
-			// Refused before anything is written, so a Save is all or nothing here.
-			if (input.texts && !textablePhone(context.me.phone)) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "Add a US mobile number first.",
-				});
-			}
-			if (input.email === true) {
-				await resubscribe(context.db, context.me.id);
-				// A name-only guest's address reads blank; there is nothing to unblock.
-				if (context.me.email) await getMailer().unblock(context.me.email);
-			} else if (input.email === false) {
-				await unsubscribe(context.db, { id: context.me.id }, "self");
-			}
-			if (input.texts !== undefined) {
-				await setTexts(context.db, context.me.id, input.texts);
-			}
-			await setContactPrefs(context.db, context.me.id, {
-				contactBy: input.contactBy,
-				alertsBy: input.alertsBy,
-			});
+			await saveReach(context.db, context.me, input, context.me.id);
 			return { ok: true };
 		}),
 

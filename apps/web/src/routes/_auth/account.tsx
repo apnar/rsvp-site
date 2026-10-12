@@ -1,5 +1,4 @@
 import type { DietId } from "@rsvp-site/db/diets";
-import { formatPhone } from "@rsvp-site/db/phone";
 import { canHost } from "@rsvp-site/db/roles";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
@@ -17,15 +16,17 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AvatarField } from "@/components/avatar/avatar-field";
 import { ConfirmAction } from "@/components/confirm-action";
-import { Field, Segmented, SettingRow, Switch } from "@/components/controls";
+import { Field } from "@/components/controls";
 import { DietFields, DietSummaryRow } from "@/components/diet";
 import { Page, PageHead, Panel } from "@/components/page";
 import { DetailFields } from "@/components/person-details";
+import { ReachFields } from "@/components/reach-fields";
 import { TextsDisclosure } from "@/components/texts-copy";
 import { pageTitle } from "@/content/site";
 import { authClient } from "@/lib/auth-client";
 import { changedDetails, draftOf } from "@/lib/details-draft";
 import { type DietValue, sameDiet } from "@/lib/diet-value";
+import { type Reach, reachPatch, savedReach } from "@/lib/reach-draft";
 import { orpc } from "@/utils/orpc";
 
 const meQuery = () => orpc.account.me.queryOptions();
@@ -46,13 +47,6 @@ const ROLE_LINE = {
 	admin: "Admin: you can host, and manage people and roles.",
 	host: "Host: you can make events and keep contact groups.",
 	user: "Guest: you answer invitations. An admin can make you a host.",
-} as const;
-
-const REASON = {
-	self: "You unsubscribed.",
-	bounce: "Email to this address bounced, so it stopped.",
-	spam: "A message was reported as spam, so email stopped.",
-	invalid: "The address couldn't receive mail, so email stopped.",
 } as const;
 
 function AccountPage() {
@@ -284,38 +278,15 @@ function RelativeDiet({
 	);
 }
 
-type Channel = "email" | "text" | "both";
-const CHANNEL_LABEL: Record<Channel, string> = {
-	email: "Email",
-	text: "Text",
-	both: "Both",
-};
-
-/**
- * Email and texts are separate permissions (a STOP reply must not touch
- * email, an unsubscribe must not touch texts), and the choice of which one
- * carries invitations is a third thing, so each gets its own row. Like every
- * other panel here, changes wait for Save.
- */
+/** Like every other panel here, changes wait for Save. */
 function ReachPrefs() {
 	const { data: me } = useSuspenseQuery(meQuery());
-	const blocked = me.textBlock !== null;
-	const saved = {
-		email: Boolean(me.email) && me.unsubscribedAt === null,
-		texts: me.textsOn && !blocked,
-		contactBy: me.contactBy,
-		alertsBy: me.alertsBy,
-	};
-	type Reach = typeof saved;
+	const saved = savedReach(me);
 	// Only what was touched, laid over what's saved, so a refetch shows
 	// through everything else and a Save clears it.
 	const [edits, setEdits] = useState<Partial<Reach>>({});
 	const draft: Reach = { ...saved, ...edits };
-	const patch = Object.fromEntries(
-		Object.entries(edits).filter(([k, v]) => saved[k as keyof Reach] !== v),
-	) as Partial<Reach>;
-	const edit = (change: Partial<Reach>) =>
-		setEdits((e) => ({ ...e, ...change }));
+	const patch = reachPatch(saved, edits);
 	const save = useMutation(
 		orpc.account.setReach.mutationOptions({
 			onSuccess: () => {
@@ -324,33 +295,6 @@ function ReachPrefs() {
 			},
 		}),
 	);
-
-	const textsHint = !me.textablePhone
-		? "Add a US mobile number above to get texts."
-		: me.textBlock === "stop"
-			? `You replied STOP from this phone. Text START to ${me.textingFrom} to turn texts back on.`
-			: blocked
-				? "Carriers say this number can't get texts."
-				: draft.texts
-					? "On. Below says which messages come this way."
-					: "Off. Invitations still show up on the site.";
-	const emailHint = draft.email
-		? "Invitations, reminders and changes land in your inbox."
-		: `${!saved.email && me.unsubscribeReason ? REASON[me.unsubscribeReason] : "Off."} Invitations still show up on the site.`;
-
-	// A channel is offered only if it can work; the one already chosen stays
-	// on the list so the picker never shows nothing selected.
-	const contactBy: Channel =
-		draft.contactBy ?? (draft.email ? "email" : "text");
-	const canUse = (c: Channel) =>
-		c === contactBy ||
-		(c === "email"
-			? draft.email
-			: c === "text"
-				? draft.texts
-				: draft.email && draft.texts);
-	const channels = (["email", "text", "both"] as const).filter(canUse);
-	const isHost = canHost(me);
 
 	return (
 		<Panel
@@ -362,76 +306,15 @@ function ReachPrefs() {
 			}}
 		>
 			<h2 className="m-0 mb-2 text-[20px]">How we reach you</h2>
-			{/* Somebody invited on paper by name alone has no email to switch. */}
-			{me.email ? (
-				<SettingRow title="Email" hint={emailHint}>
-					<Switch
-						label="Invitations by email"
-						checked={draft.email}
-						onChange={(value) => edit({ email: value })}
-					/>
-				</SettingRow>
-			) : null}
-			<SettingRow
-				title={
-					me.phone && me.textablePhone
-						? `Texts to ${formatPhone(me.phone)}`
-						: "Texts"
-				}
-				hint={textsHint}
-			>
-				<Switch
-					label="Invitations by text"
-					checked={draft.texts}
-					disabled={!me.textablePhone || blocked}
-					onChange={(value) => edit({ texts: value })}
-				/>
-			</SettingRow>
-			{channels.length > 1 ? (
-				<SettingRow
-					title="Invitations and reminders by"
-					hint={
-						draft.contactBy === null ? "Our pick for you, for now." : undefined
-					}
-				>
-					<div className="w-full sm:w-auto sm:min-w-[260px]">
-						<Segmented
-							legend="Invitations and reminders by"
-							name="contact-by"
-							options={channels.map((c) => ({
-								value: c,
-								label: CHANNEL_LABEL[c],
-							}))}
-							value={contactBy}
-							onChange={(value) => edit({ contactBy: value })}
-						/>
-					</div>
-				</SettingRow>
-			) : null}
-			{isHost ? (
-				<SettingRow
-					title="Reply alerts by"
-					hint="When a guest answers an event you host. Same follows your choice above."
-				>
-					<div className="w-full sm:w-auto sm:min-w-[340px]">
-						<Segmented
-							legend="Reply alerts by"
-							name="alerts-by"
-							options={[
-								{ value: "same", label: "Same" },
-								...(["email", "text", "both"] as const).map((c) => ({
-									value: c,
-									label: CHANNEL_LABEL[c],
-								})),
-							]}
-							value={draft.alertsBy ?? "same"}
-							onChange={(value) =>
-								edit({ alertsBy: value === "same" ? null : value })
-							}
-						/>
-					</div>
-				</SettingRow>
-			) : null}
+			<ReachFields
+				mine
+				saved={saved}
+				draft={draft}
+				onEdit={(change) => setEdits((e) => ({ ...e, ...change }))}
+				person={me}
+				isHost={canHost(me)}
+				textingFrom={me.textingFrom}
+			/>
 			<p className="m-0 border-line border-t pt-3.5 text-[12px] text-haze">
 				Texts come from {me.textingFrom}. <TextsDisclosure />
 			</p>

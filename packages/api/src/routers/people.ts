@@ -11,12 +11,13 @@ import {
 	listPeople,
 } from "@rsvp-site/db/people";
 import { normalizePhone, textablePhone } from "@rsvp-site/db/phone";
-import { ROLES } from "@rsvp-site/db/schema/auth";
+import { ROLES, user } from "@rsvp-site/db/schema/auth";
 import { eventGuest, eventHost } from "@rsvp-site/db/schema/event";
+import { smsBlock } from "@rsvp-site/db/schema/sms";
 import { deactivate, reactivate, setRole } from "@rsvp-site/db/status";
 import { rotateLinkToken } from "@rsvp-site/db/tokens";
 import { getMailer } from "@rsvp-site/email/worker";
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { removePicture, setPicture } from "../avatar";
@@ -27,6 +28,7 @@ import { emailSchema, idSchema } from "../inputs";
 import { callerIp, requireUnderLimit } from "../limits";
 import { sendWelcome } from "../mail";
 import { avatarFile } from "../media";
+import { reachInput, saveReach } from "../reach-prefs";
 import { textSignIn } from "../texting";
 
 const nameSchema = z.string().trim().max(60, "Shorter name, please.");
@@ -42,9 +44,12 @@ async function requirePerson(db: Db, userId: string) {
 
 /** Everybody, managed by admins: who they are, what they may do, whether they're in. */
 export const peopleRouter = {
-	/** Everybody, with how many events they host and are invited to. */
+	/**
+	 * Everybody, with how many events they host and are invited to, and
+	 * whether their number may be texted at all.
+	 */
 	list: adminProcedure.handler(async ({ context }) => {
-		const [people, hosting, invited] = await Promise.all([
+		const [people, hosting, invited, blocks] = await Promise.all([
 			listPeople(context.db),
 			context.db
 				.select({ userId: eventHost.userId, n: count() })
@@ -56,14 +61,25 @@ export const peopleRouter = {
 				.from(eventGuest)
 				.groupBy(eventGuest.userId)
 				.all(),
+			context.db
+				.selectDistinct({ phone: smsBlock.phone, reason: smsBlock.reason })
+				.from(smsBlock)
+				.innerJoin(user, eq(user.phone, smsBlock.phone))
+				.all(),
 		]);
 		const h = new Map(hosting.map((r) => [r.userId, r.n]));
 		const g = new Map(invited.map((r) => [r.userId, r.n]));
-		return people.map((p) => ({
-			...p,
-			hosting: h.get(p.id) ?? 0,
-			invited: g.get(p.id) ?? 0,
-		}));
+		const blocked = new Map(blocks.map((r) => [r.phone, r.reason]));
+		return people.map((p) => {
+			const phone = textablePhone(p.phone);
+			return {
+				...p,
+				hosting: h.get(p.id) ?? 0,
+				invited: g.get(p.id) ?? 0,
+				textablePhone: phone !== null,
+				textBlock: (phone && blocked.get(phone)) || null,
+			};
+		});
 	}),
 
 	/**
@@ -160,6 +176,25 @@ export const peopleRouter = {
 					message: "Somebody else already has that address.",
 				});
 			}
+			return { ok: true };
+		}),
+
+	/**
+	 * Somebody's "How we reach you", as they would set it on their account
+	 * page. Texts switched on here are on the admin's word, recorded as the
+	 * admin's; email switched off reads as an admin's doing.
+	 */
+	setReach: adminProcedure
+		.input(reachInput.extend({ userId: idSchema }))
+		.handler(async ({ context, input }) => {
+			const { userId, ...reach } = input;
+			const person = await requirePerson(context.db, userId);
+			if (person.status === "deactivated") {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "They are deactivated. Reactivate them first.",
+				});
+			}
+			await saveReach(context.db, person, reach, context.me.id);
 			return { ok: true };
 		}),
 

@@ -50,20 +50,21 @@ export async function blockOf(
 }
 
 /**
- * The person's own texts switch. On records their consent (by them) and
- * clears an earlier off; off keeps the consent on record but wins over it.
- * Like every self-service write, never a deactivated row.
+ * The texts switch, the person's own or an admin's for them. On records
+ * whose word the consent is (`by`) and clears an earlier off; off keeps the
+ * consent on record but wins over it. Never a deactivated row.
  */
 export async function setTexts(
 	db: Db,
 	userId: string,
 	on: boolean,
+	by: string = userId,
 ): Promise<boolean> {
 	const result = await db
 		.update(user)
 		.set(
 			on
-				? { textsOkAt: new Date(), textsOkBy: userId, textsOffAt: null }
+				? { textsOkAt: new Date(), textsOkBy: by, textsOffAt: null }
 				: { textsOffAt: new Date() },
 		)
 		.where(and(eq(user.id, userId), stillIn()))
