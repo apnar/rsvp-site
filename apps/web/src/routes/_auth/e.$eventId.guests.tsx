@@ -402,20 +402,29 @@ function GuestListPage() {
 								{section.label}{" "}
 								<span className="tnum text-haze">{section.guests.length}</span>
 							</h2>
-							{section.guests.map((g) => (
-								<GuestRow
-									familyOnList={
-										g.familyId !== null && sharedFamilies.has(g.familyId)
-									}
-									key={g.id}
-									guest={g}
-									isYou={g.userId === session.user.id}
-									event={rowEvent}
-									nudging={nudge.isPending}
-									onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
-									onRemove={() => remove.mutate({ eventId, guestId: g.id })}
-									removing={remove.isPending}
-								/>
+							{section.groups.map((group) => (
+								// A household sits closer together than the rows around it.
+								<div
+									key={group.key}
+									className="flex flex-col gap-1 md:col-span-full md:grid md:grid-cols-subgrid"
+								>
+									{group.rows.map(({ guest: g, indent }) => (
+										<GuestRow
+											familyOnList={
+												g.familyId !== null && sharedFamilies.has(g.familyId)
+											}
+											indent={indent}
+											key={g.id}
+											guest={g}
+											isYou={g.userId === session.user.id}
+											event={rowEvent}
+											nudging={nudge.isPending}
+											onNudge={() => nudge.mutate({ eventId, guestId: g.id })}
+											onRemove={() => remove.mutate({ eventId, guestId: g.id })}
+											removing={remove.isPending}
+										/>
+									))}
+								</div>
 							))}
 						</section>
 					))}

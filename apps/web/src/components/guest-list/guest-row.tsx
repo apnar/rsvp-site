@@ -82,6 +82,7 @@ export function GuestRow({
 	onRemove,
 	removing,
 	familyOnList = false,
+	indent = false,
 }: {
 	guest: Guest;
 	isYou: boolean;
@@ -92,6 +93,8 @@ export function GuestRow({
 	removing: boolean;
 	/** Another guest on this list is in the same family (see `rowSubtitle`). */
 	familyOnList?: boolean;
+	/** A child under a grown-up of their family (see `guestSections`). */
+	indent?: boolean;
 }) {
 	const { nowMs, canNudge, paper, potluck, print } = event;
 	const eventId = event.id;
@@ -118,6 +121,11 @@ export function GuestRow({
 				// The columns are the list's (`GUEST_COLUMNS`), so they line up
 				// down it whatever each row holds.
 				"relative flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-[20px] px-5 py-4 max-md:pr-12 md:col-span-full md:grid md:grid-cols-subgrid",
+				// Nudged right, not given a left margin: in the subgrid a margin
+				// would widen the avatar column on every row of the list. The
+				// right margin is what keeps the shifted row inside it, and it
+				// lands in the actions column, which already sits right.
+				indent && "left-4 mr-4",
 				waiting && "border border-line-strong border-dashed",
 				out && "bg-panel-dim text-haze",
 				!waiting && !out && "bg-panel",

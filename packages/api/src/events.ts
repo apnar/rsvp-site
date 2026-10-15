@@ -244,7 +244,8 @@ const answerer = alias(user, "answerer");
  * `mailableWhere` and `textableWhere` do), and `unreachable` that neither
  * can; `lastText` is how the latest text to them about this event fared; `addedBy` is who put them on the list; `answeredByName` the
  * relative who answered for them; `familyId` their family, if any, and
- * `child` whether it counts them as a kid;
+ * `child` whether it counts them as a kid; `firstName` and `lastName` are
+ * for sorting the host's list;
  * `hasPaper` says their printed card has a QR code issued; `viewedAt`,
  * and how they came to view and to answer (`viewedVia`, `respondedVia`), are
  * for hosts only, so guest-facing payloads pick their fields by hand.
@@ -268,6 +269,8 @@ export async function guestsOf(
 			id: eventGuest.id,
 			userId: eventGuest.userId,
 			name: user.name,
+			firstName: user.firstName,
+			lastName: user.lastName,
 			image: user.image,
 			email: user.email,
 			source: eventGuest.source,
