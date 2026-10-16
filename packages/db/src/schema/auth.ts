@@ -85,6 +85,17 @@ export const user = sqliteTable(
 		email: text("email").notNull().unique(),
 		/** Normalized by `normalizePhone`: `+13015551212`. */
 		phone: text("phone"),
+		/**
+		 * The host who typed the number, or null when the person (or an
+		 * admin) set it. "Text me my link" sends a way in to this number, so
+		 * one a host put on a record nobody has signed in to gets no link on
+		 * request: the host who typed it could otherwise type their own and
+		 * ask. A host's word that they expect texts counts only for a number
+		 * that host typed, for the same reason.
+		 */
+		phoneBy: text("phone_by").references((): AnySQLiteColumn => user.id, {
+			onDelete: "set null",
+		}),
 		addressLine1: text("address_line1").notNull().default(""),
 		addressLine2: text("address_line2").notNull().default(""),
 		city: text("city").notNull().default(""),

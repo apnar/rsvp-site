@@ -47,6 +47,7 @@ function PaperInvitePage() {
 			aside={
 				data.me && data.event.status !== "canceled" ? (
 					<AnswerFlow
+						noTexts
 						data={{ ...data, me: data.me }}
 						preselect={null}
 						respond={(values, options) =>

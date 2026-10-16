@@ -12,25 +12,20 @@ const where = (guard: ReturnType<typeof editable>) =>
 
 describe("editable", () => {
 	it("lets an admin or the person themselves write by id alone", () => {
-		const q = where(editable("u1", null, true));
+		const q = where(editable("u1", null));
 		expect(q.sql).toMatch(/where "user"\."id" = \?$/);
 		expect(q.params.at(-1)).toBe("u1");
 	});
 
-	it("holds a host to an unclaimed, active, plain guest outside any family", () => {
-		const q = where(editable("u1", "h1", false));
+	it("holds a host to an unclaimed, active, plain guest they typed in, outside any family", () => {
+		const q = where(editable("u1", "h1"));
 		expect(q.sql).toContain('"claimed_at" is null');
 		expect(q.sql).toContain(`"status" = ?`);
 		expect(q.sql).toContain('"role" is null');
 		expect(q.sql).toContain("not exists (select 1 from family_member");
-		expect(q.sql).not.toContain('"created_by"');
-		expect(q.params).toContain("active");
-	});
-
-	it("also needs the host to have typed them in for an address or number", () => {
-		const q = where(editable("u1", "h1", true));
 		expect(q.sql).toContain(`"created_by" = ?`);
-		expect(q.params.at(-1)).toBe("h1");
+		expect(q.params).toContain("active");
+		expect(q.params).toContain("h1");
 	});
 });
 

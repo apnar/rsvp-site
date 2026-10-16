@@ -58,7 +58,6 @@ export async function typedPeople(db: Db, raw: string, opts: TypedOptions) {
 				),
 	]);
 	const people = found.filter((p) => p.status !== "deactivated");
-	const phoned = new Set(emailed.flatMap((t) => (t.phone ? [t.email] : [])));
 	return {
 		people,
 		named,
@@ -68,12 +67,16 @@ export async function typedPeople(db: Db, raw: string, opts: TypedOptions) {
 		refused: found.length - people.length,
 		/** Lines that became somebody, or would have: none of a non-empty paste means nothing parsed. */
 		lineCount: emailed.length + names.length,
-		/** The host's word that people they typed a number for expect a text. */
+		/**
+		 * The host's word that people they typed a number for expect a text:
+		 * only where this paste wrote the number. A line's number beside a
+		 * known address whose record already had one is not that number.
+		 */
 		vouch: (hostId: string) =>
 			vouchForTexts(
 				db,
 				[
-					...people.filter((p) => phoned.has(p.email)).map((p) => p.id),
+					...people.filter((p) => p.phoneWritten).map((p) => p.id),
 					...named.filter((p) => p.phone).map((p) => p.id),
 				],
 				hostId,

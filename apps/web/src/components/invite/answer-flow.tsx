@@ -23,6 +23,7 @@ export function AnswerFlow({
 	addContact,
 	pending,
 	children,
+	noTexts = false,
 }: {
 	/** An invitation with a guest to answer for (a preview one counts). */
 	data: Invite & { me: NonNullable<Invite["me"]> };
@@ -35,6 +36,8 @@ export function AnswerFlow({
 	pending: { respond: boolean; after: boolean };
 	/** Whatever the page keeps under the form. */
 	children?: ReactNode;
+	/** The card page: a number may be given, a yes to texts may not. */
+	noTexts?: boolean;
 }) {
 	// Opened by an answer: the answer it was, which decides whose diets to check.
 	const [asking, setAsking] = useState<RsvpValues | null>(null);
@@ -64,6 +67,7 @@ export function AnswerFlow({
 					submitContact={addContact}
 					pending={pending.after}
 					onClose={() => setAsking(null)}
+					noTexts={noTexts}
 				/>
 			) : null}
 			{children}

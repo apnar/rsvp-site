@@ -9,7 +9,7 @@ import {
 } from "@rsvp-site/db/details";
 import { findPerson } from "@rsvp-site/db/people";
 import { normalizePhone, textablePhone } from "@rsvp-site/db/phone";
-import { alsoByText, setTexts, vouchForTexts } from "@rsvp-site/db/sms-status";
+import { alsoByText, setTexts } from "@rsvp-site/db/sms-status";
 import { confirmEmailEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { siteUrl } from "@rsvp-site/env/server";
@@ -38,10 +38,11 @@ type ContactInput = z.infer<typeof contactInput>;
  * only sent a link, and is added when its owner presses the button there
  * (`confirmClaim`). Checked whole before anything is written, so a bad
  * number doesn't leave a confirmation email behind it.
+
  *
- * `voucher` is whose word a card's yes to texts counts as: the card holder
- * is taken to be the guest, but the key is the host's, so it is recorded
- * the way a host's tick is, and goes if the number later changes.
+ * A card (`by` is a host's) fills a number but records no yes to texts: the
+ * holder is anybody with the card, and the yes would be entered as the
+ * host's word. Texts are switched on from the account page.
  */
 export async function fillContact(
 	db: Db,
@@ -49,7 +50,6 @@ export async function fillContact(
 	userId: string,
 	input: ContactInput,
 	by: FilledBy,
-	voucher: string | null,
 ): Promise<{ phone: boolean; emailTo: string | null }> {
 	const number = input.phone ? normalizePhone(input.phone) : null;
 	if (input.phone && !number) {
@@ -78,13 +78,10 @@ export async function fillContact(
 	let phone = false;
 	if (number) {
 		phone = await fillPhone(db, userId, number, by);
-		if (phone && input.texts) {
-			const consented =
-				by === "self"
-					? await setTexts(db, userId, true)
-					: voucher !== null &&
-						(await vouchForTexts(db, [userId], voucher)).length > 0;
-			if (consented) await alsoByText(db, userId);
+		// A card records no consent: anybody holding it could give a number
+		// and say yes, and the yes would be entered as the host's word.
+		if (phone && input.texts && by === "self") {
+			if (await setTexts(db, userId, true)) await alsoByText(db, userId);
 		}
 	}
 

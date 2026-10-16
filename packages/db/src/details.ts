@@ -52,12 +52,13 @@ export const dietColumns = {
 /**
  * Whether the caller may change somebody's details. Signing in claims the
  * record: from then on it is theirs, and only they and an admin change it.
- * Before that, a host who has them in their address book may -- the host
- * typed most of it in the first place -- but only for a plain guest who is
- * still in. An unclaimed host's or admin's address is a way to their role,
- * so no other host gets to move it. Nor does a host edit anybody in a
- * family: families are shared across hosts and kept by admins, and a
- * name-only child never signs in to take their record back.
+ * Before that, the host who typed them in may (`created_by`; any host can
+ * put anybody in their book by typing an address, so the book alone says
+ * nothing), but only for a plain guest who is still in. An unclaimed
+ * host's or admin's address is a way to their role, so no other host gets
+ * to move it. Nor does a host edit anybody in a family: families are
+ * shared across hosts and kept by admins, and a name-only child never
+ * signs in to take their record back.
  */
 export function canEditDetails(
 	me: { id: string; role: string | null },
@@ -66,6 +67,7 @@ export function canEditDetails(
 		role: string | null;
 		status: string;
 		claimedAt: Date | null;
+		createdBy: string | null;
 		inFamily: boolean;
 	},
 	inMyBook: boolean,
@@ -73,6 +75,7 @@ export function canEditDetails(
 	if (isAdmin(me) || me.id === target.id) return true;
 	return (
 		inMyBook &&
+		target.createdBy === me.id &&
 		!target.inFamily &&
 		target.claimedAt === null &&
 		target.status !== "deactivated" &&
@@ -115,42 +118,35 @@ export const HIDDEN_DETAILS = {
 
 /**
  * Whether the caller may change somebody's address or number. Those are
- * where sign-in links go ("email me my link", "text me my link"), so a
- * host needs more than `canEditDetails`: being the one who typed the
- * person in. Being in a host's book is not enough, since any host can put
- * anybody in theirs by typing an address they know.
+ * where sign-in links go ("email me my link", "text me my link"), which
+ * is why every host edit now needs `created_by`; this is the same rule
+ * under the name the pages use for those two fields.
  */
 export function canEditReach(
 	me: { id: string; role: string | null },
-	target: Parameters<typeof canEditDetails>[1] & { createdBy: string | null },
+	target: Parameters<typeof canEditDetails>[1],
 	inMyBook: boolean,
 ): boolean {
-	if (isAdmin(me) || me.id === target.id) return true;
-	return canEditDetails(me, target, inMyBook) && target.createdBy === me.id;
+	return canEditDetails(me, target, inMyBook);
 }
 
 /**
  * Where an edit may land. A host's write (`host` is their id; null is an
  * admin or the person themselves) carries the conditions of
- * `canEditDetails` into the UPDATE, and those of `canEditReach` when it
- * touches an address or number, so somebody signing in between the check
- * and the write keeps their record.
+ * `canEditDetails` into the UPDATE, so somebody signing in between the
+ * check and the write keeps their record.
  */
-export function editable(
-	id: string,
-	host: string | null,
-	reach: boolean,
-): SQL | undefined {
+export function editable(id: string, host: string | null): SQL | undefined {
 	return host !== null
 		? and(
 				eq(user.id, id),
+				eq(user.createdBy, host),
 				isNull(user.claimedAt),
 				eq(user.status, "active"),
 				// Null is a plain guest too: see `roleOf`.
 				or(isNull(user.role), eq(user.role, "user")),
 				// Plain names: a raw subquery on a single-table update (CLAUDE.md).
 				sql`not exists (select 1 from family_member where family_member.user_id = ${id})`,
-				reach ? eq(user.createdBy, host) : undefined,
 			)
 		: eq(user.id, id);
 }
@@ -194,6 +190,9 @@ export async function updateDetails(
 		.update(user)
 		.set({
 			...patch,
+			// Who typed this number (`phone_by`): a host, or nobody for the
+			// person themselves and an admin.
+			...(patch.phone !== undefined ? { phoneBy: opts.host } : {}),
 			...(newNumber ? { textsOkAt: null, textsOkBy: null } : {}),
 			...(dieted ? { dietAt: new Date() } : {}),
 			...(named
@@ -205,7 +204,7 @@ export async function updateDetails(
 					}
 				: {}),
 		})
-		.where(editable(id, opts.host, patch.phone !== undefined))
+		.where(editable(id, opts.host))
 		.run();
 	return result.meta.changes === 1;
 }
@@ -281,45 +280,57 @@ export async function fillBlanks(
 		typed: { firstName?: string; lastName?: string; phone?: string | null };
 	}[],
 	host: string | null,
-): Promise<void> {
-	const statements = people.flatMap(({ id, email, typed }) => {
-		const out = [];
-		if (typed.firstName) {
-			const lastName = typed.lastName ?? "";
-			out.push(
-				db
-					.update(user)
-					.set({
-						firstName: typed.firstName,
-						lastName,
-						name: nameFor(typed.firstName, lastName, email),
-					})
-					.where(
-						and(
-							editable(id, host, false),
-							isNull(user.claimedAt),
-							eq(user.firstName, ""),
-						),
+): Promise<Set<string>> {
+	const names = people.flatMap(({ id, email, typed }) => {
+		if (!typed.firstName) return [];
+		const lastName = typed.lastName ?? "";
+		return [
+			db
+				.update(user)
+				.set({
+					firstName: typed.firstName,
+					lastName,
+					name: nameFor(typed.firstName, lastName, email),
+				})
+				.where(
+					and(
+						editable(id, host),
+						isNull(user.claimedAt),
+						eq(user.firstName, ""),
 					),
-			);
-		}
-		if (typed.phone) {
-			out.push(
-				db
-					.update(user)
-					.set({ phone: typed.phone })
-					.where(
-						and(
-							editable(id, host, true),
-							isNull(user.claimedAt),
-							isNull(user.phone),
-						),
-					),
-			);
-		}
-		return out;
+				),
+		];
 	});
-	await batchAll(db, statements);
+	const phones = people.flatMap(({ id, typed }) =>
+		typed.phone
+			? [
+					{
+						id,
+						statement: db
+							.update(user)
+							.set({ phone: typed.phone, phoneBy: host })
+							.where(
+								and(
+									editable(id, host),
+									isNull(user.claimedAt),
+									isNull(user.phone),
+								),
+							),
+					},
+				]
+			: [],
+	);
+	const results = await batchAll(db, [
+		...names,
+		...phones.map((p) => p.statement),
+	]);
+	// The people whose number this paste wrote: the only ones the host's
+	// word about texts can be about.
+	return new Set(
+		phones.flatMap((p, i) =>
+			results[names.length + i]?.meta.changes === 1 ? [p.id] : [],
+		),
+	);
 }
 
 /**
@@ -396,7 +407,7 @@ export async function changeEmail(
 	opts: { host: string | null },
 ): Promise<"ok" | "same" | "taken" | "refused"> {
 	return writeEmail(db, id, raw, {
-		where: editable(id, opts.host, true),
+		where: editable(id, opts.host),
 		set: (row) => ({
 			emailVerified: false,
 			...(row.noEmail
@@ -446,7 +457,7 @@ export function gapsOf(row: {
 /** Where a blank may be filled. Never a deactivated row, like every self-service write. */
 export function fillable(id: string, by: FilledBy): SQL | undefined {
 	if (by !== "self" && by.card === null) return sql`0`;
-	return and(editable(id, by === "self" ? null : by.card, true), stillIn());
+	return and(editable(id, by === "self" ? null : by.card), stillIn());
 }
 
 /** The blanks this caller may fill on somebody's record; none if they may fill nothing. */
@@ -485,6 +496,9 @@ export async function fillPhone(
 		.update(user)
 		.set({
 			phone,
+			// A card's number is the host's, as far as "text me my link" is
+			// concerned: whoever holds the card could type their own.
+			phoneBy: by === "self" ? null : by.card,
 			...(row.textsOkBy !== id ? { textsOkAt: null, textsOkBy: null } : {}),
 		})
 		.where(and(fillable(id, by), isNull(user.phone)))

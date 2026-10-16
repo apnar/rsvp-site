@@ -94,8 +94,8 @@ export const paperRouter = {
 
 	/**
 	 * Fill the blanks on the card's guest: only those a host could fill,
-	 * on a record nobody has signed in to (`contactGaps` with "card"). A
-	 * yes to texts counts as the word of whoever put them on the list.
+	 * on a record nobody has signed in to (`contactGaps` with "card"). No
+	 * yes to texts from a card: anybody holding it could give one.
 	 */
 	addContact: publicProcedure
 		.input(tokenInput.merge(contactInput))
@@ -116,7 +116,6 @@ export const paperRouter = {
 				who.id,
 				details,
 				{ card: host },
-				host,
 			);
 		}),
 

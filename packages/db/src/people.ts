@@ -39,6 +39,7 @@ export async function createNameOnlyPeople(
 			firstName,
 			lastName,
 			phone: p.phone ?? null,
+			phoneBy: p.phone ? createdBy : null,
 			email: `${crypto.randomUUID()}@${NO_EMAIL_DOMAIN}`,
 			emailVerified: false,
 			noEmail: true,
@@ -260,6 +261,8 @@ export async function markLinkSent(db: Db, id: string): Promise<void> {
 
 type FoundPerson = Awaited<ReturnType<typeof selectByEmail>>[number] & {
 	created: boolean;
+	/** The number on the line went onto this record: it is the typer's. */
+	phoneWritten: boolean;
 };
 
 /** What somebody typed about a person, all of it optional. */
@@ -317,6 +320,8 @@ export async function findOrCreatePeople(
 			firstName,
 			lastName,
 			phone: t?.phone ?? null,
+			// A host's number, where sign-in texts are concerned (`phone_by`).
+			phoneBy: t?.phone && by?.host ? by.id : null,
 			emailVerified: false,
 			role: "user",
 			source,
@@ -337,8 +342,9 @@ export async function findOrCreatePeople(
 				.onConflictDoNothing({ target: user.email }),
 		),
 	);
+	let filled = new Set<string>();
 	if (by) {
-		await fillBlanks(
+		filled = await fillBlanks(
 			db,
 			before.flatMap((p) => {
 				const t = typed.get(p.email);
@@ -352,7 +358,13 @@ export async function findOrCreatePeople(
 	const after = missing.length ? await selectByEmail(db, wanted) : before;
 	const order = new Map(wanted.map((email, i) => [email, i]));
 	return after
-		.map((p) => ({ ...p, created: !known.has(p.email) }))
+		.map((p) => ({
+			...p,
+			created: !known.has(p.email),
+			phoneWritten:
+				(!known.has(p.email) && Boolean(typed.get(p.email)?.phone)) ||
+				filled.has(p.id),
+		}))
 		.sort((a, b) => (order.get(a.email) ?? 0) - (order.get(b.email) ?? 0));
 }
 

@@ -8,6 +8,7 @@ const guest = {
 	role: "user",
 	status: "active",
 	claimedAt: null as Date | null,
+	createdBy: "h" as string | null,
 	inFamily: false,
 };
 
@@ -57,6 +58,12 @@ describe("canEditDetails", () => {
 
 	it("keeps a host out of strangers, the deactivated and other hosts", () => {
 		expect(canEditDetails(host, guest, false)).toBe(false);
+		expect(canEditDetails(host, { ...guest, createdBy: "g2" }, true)).toBe(
+			false,
+		);
+		expect(canEditDetails(host, { ...guest, createdBy: null }, true)).toBe(
+			false,
+		);
 		expect(
 			canEditDetails(host, { ...guest, status: "deactivated" }, true),
 		).toBe(false);

@@ -29,7 +29,6 @@ export const contactRouter = {
 				context.me.id,
 				input,
 				"self",
-				null,
 			);
 		}),
 

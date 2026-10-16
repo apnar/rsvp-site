@@ -41,6 +41,7 @@ export function AfterAnswer({
 	submitContact,
 	pending,
 	onClose,
+	noTexts = false,
 }: {
 	missing: { email: boolean; phone: boolean };
 	people: DietPerson[];
@@ -51,6 +52,12 @@ export function AfterAnswer({
 	) => void;
 	pending: boolean;
 	onClose: () => void;
+	/**
+	 * No yes-to-texts switch: a printed card's holder is anybody with the
+	 * card, so the server records no consent from one; texts are switched
+	 * on from the account page after signing in.
+	 */
+	noTexts?: boolean;
 }) {
 	const [diets, setDiets] = useState<Record<string, DietValue>>(() =>
 		Object.fromEntries(
@@ -80,7 +87,7 @@ export function AfterAnswer({
 	if (!askDiets && !askContact && sentTo === null) return null;
 
 	const contactValues = (): ContactValues => ({
-		texts: askPhone && phone.trim() !== "" && texts,
+		texts: askPhone && !noTexts && phone.trim() !== "" && texts,
 		...(askPhone && phone.trim() ? { phone } : {}),
 		...(askEmail && email.trim() ? { email } : {}),
 	});
@@ -227,21 +234,23 @@ export function AfterAnswer({
 							onChange={(ev) => setPhone(ev.target.value)}
 						/>
 					</Field>
-					<div className="flex flex-col gap-1">
-						<Switch
-							checked={texts}
-							disabled={phone.trim() === ""}
-							onChange={setTexts}
-							className="w-fit text-[14px]"
-						>
-							Text me invitations and reminders too
-						</Switch>
-						{/* Carriers read what people saw when they said yes. Kept out of
+					{noTexts ? null : (
+						<div className="flex flex-col gap-1">
+							<Switch
+								checked={texts}
+								disabled={phone.trim() === ""}
+								onChange={setTexts}
+								className="w-fit text-[14px]"
+							>
+								Text me invitations and reminders too
+							</Switch>
+							{/* Carriers read what people saw when they said yes. Kept out of
 						    the switch's label so it isn't the switch's name. */}
-						<span className="pl-[62px] text-[12px] text-haze">
-							<TextsDisclosure />
-						</span>
-					</div>
+							<span className="pl-[62px] text-[12px] text-haze">
+								<TextsDisclosure />
+							</span>
+						</div>
+					)}
 				</>
 			) : null}
 

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { mapChunks } from "./batch";
 import type { Db } from "./index";
@@ -9,17 +9,30 @@ import { type SmsBlockReason, smsBlock } from "./schema/sms";
 /**
  * Stop texting a number. A repeat keeps the first reason: a STOP followed
  * by Telnyx refusing the next send (40300) is still a STOP.
+ *
+ * A STOP comes from whoever texts our number, so it is recorded only for a
+ * number somebody on the site has: otherwise any phone could grow the table
+ * without limit. The check is in the INSERT itself. The other reasons come
+ * from Telnyx's answer to our own sends, so those numbers are ours already.
  */
 export async function blockNumber(
 	db: Db,
 	phone: string,
 	reason: SmsBlockReason,
 ): Promise<boolean> {
-	const result = await db
-		.insert(smsBlock)
-		.values({ phone, reason })
-		.onConflictDoNothing()
-		.run();
+	if (reason !== "stop") {
+		const result = await db
+			.insert(smsBlock)
+			.values({ phone, reason })
+			.onConflictDoNothing()
+			.run();
+		return result.meta.changes === 1;
+	}
+	const result = await db.run(
+		sql`insert or ignore into sms_block (phone, reason)
+			select ${phone}, ${reason}
+			where exists (select 1 from user where phone = ${phone} and status is not 'deactivated')`,
+	);
 	return result.meta.changes === 1;
 }
 
@@ -75,7 +88,9 @@ export async function setTexts(
 /**
  * A host vouching that these people expect a text from them. Only fills a
  * blank: it never overrides somebody who switched texts off, and a person
- * who has signed in speaks for themselves.
+ * who has signed in speaks for themselves. And only for a number this
+ * host typed (`phone_by`): a host's word is about the number they know,
+ * not one another host, or a card, put there.
  */
 export async function vouchForTexts(
 	db: Db,
@@ -93,6 +108,7 @@ export async function vouchForTexts(
 					isNull(user.textsOkAt),
 					isNull(user.textsOffAt),
 					isNull(user.claimedAt),
+					eq(user.phoneBy, hostId),
 					stillIn(),
 				),
 			)

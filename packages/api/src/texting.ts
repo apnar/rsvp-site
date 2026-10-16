@@ -21,7 +21,7 @@ import {
 	textLinkUrl,
 } from "@rsvp-site/sms";
 import { getTexter } from "@rsvp-site/sms/worker";
-import { and, asc, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 
 import { type EventRow, labelsOf } from "./events";
 
@@ -208,31 +208,41 @@ const SIGN_IN_COOLDOWN_MS = 10 * 60_000;
 /**
  * "Text me my link": one text to the number with a sign-in link for each
  * active person who has it (a household may share one phone), unless the
- * number is blocked or had one in the last ten minutes. Consent isn't
- * asked: the person asked. Says nothing about what it found; the caller
- * answers the same either way.
+ * number is blocked or had one in the last ten minutes. Says nothing about
+ * what it found; the caller answers the same either way.
+ *
+ * Nobody who switched texts off gets one: this is the one text that is
+ * not an invitation, and still a text. And a number a host typed on a
+ * record nobody has signed in to (`phone_by`) gets none, because the host
+ * who typed it could have typed their own: that person's way in is the
+ * invitation the host sends, which carries its own link.
+ *
+ * The ten minutes are claimed, not checked: the UPDATE stamps
+ * `link_sent_at` and returns only the rows it stamped, so two requests at
+ * once cannot both send. Plain names, not drizzle columns: a single-table
+ * update with a subquery (CLAUDE.md).
  */
 export async function textSignIn(db: Db, phone: string): Promise<void> {
 	if (await blockOf(db, phone)) return;
-	const recent = await db
-		.select({ id: smsSend.id })
-		.from(smsSend)
-		.where(
-			and(
-				eq(smsSend.phone, phone),
-				eq(smsSend.kind, "sign_in"),
-				gt(smsSend.createdAt, new Date(Date.now() - SIGN_IN_COOLDOWN_MS)),
-			),
+	const now = Date.now();
+	const people = await db.all<{
+		id: string;
+		name: string;
+		linkToken: string | null;
+	}>(sql`
+		update user set link_sent_at = ${now}
+		where id in (
+			select id from user
+			where phone = ${phone}
+				and status is not 'deactivated'
+				and texts_off_at is null
+				and (phone_by is null or claimed_at is not null)
+				and (link_sent_at is null or link_sent_at < ${now - SIGN_IN_COOLDOWN_MS})
+			order by created_at
+			limit ${SIGN_IN_MAX}
 		)
-		.get();
-	if (recent) return;
-	const people = await db
-		.select({ id: user.id, name: user.name, linkToken: user.linkToken })
-		.from(user)
-		.where(and(eq(user.phone, phone), notDeactivated()))
-		.orderBy(asc(user.createdAt))
-		.limit(SIGN_IN_MAX)
-		.all();
+		returning id, name, link_token as "linkToken"
+	`);
 	if (people.length === 0) return;
 	const codes = await textLinksFor(db, people, "/events");
 	const links = people.flatMap((p) => {
