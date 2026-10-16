@@ -305,6 +305,7 @@ export async function guestsOf(
 			textsOkAt: user.textsOkAt,
 			textsOffAt: user.textsOffAt,
 			claimedAt: user.claimedAt,
+			createdBy: user.createdBy,
 			textBlock: smsBlock.reason,
 		})
 		.from(eventGuest)

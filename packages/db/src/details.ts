@@ -81,6 +81,39 @@ export function canEditDetails(
 }
 
 /**
+ * Whether a host may see somebody's number, mailing address, diets and
+ * picture. Any host can put anybody in their book by typing an address,
+ * and on a draft nobody is told, so being in the book or on a list is no
+ * reason to show what a person gave the site about themselves. A host
+ * sees those of the people they typed in (it was their typing), and of
+ * anybody who has been invited to one of their events (`invited`: the
+ * email or card has gone out, so the person knows this host has them).
+ * Name and address stay: the host typed the address to find them.
+ */
+export function canSeeDetails(
+	me: { id: string; role: string | null },
+	target: { id: string; createdBy: string | null },
+	invited: boolean,
+): boolean {
+	if (isAdmin(me) || me.id === target.id) return true;
+	return target.createdBy === me.id || invited;
+}
+
+/** What `canSeeDetails` hides: the same shape as the columns, blanked. */
+export const HIDDEN_DETAILS = {
+	phone: null,
+	addressLine1: "",
+	addressLine2: "",
+	city: "",
+	region: "",
+	postalCode: "",
+	country: "",
+	diets: null,
+	dietNote: "",
+	image: null,
+} as const;
+
+/**
  * Whether the caller may change somebody's address or number. Those are
  * where sign-in links go ("email me my link", "text me my link"), so a
  * host needs more than `canEditDetails`: being the one who typed the

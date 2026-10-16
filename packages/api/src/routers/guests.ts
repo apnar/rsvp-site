@@ -1,7 +1,8 @@
 import { ORPCError } from "@orpc/server";
-import { remember } from "@rsvp-site/db/address-book";
+import { inBook, remember } from "@rsvp-site/db/address-book";
 import { arrivalOf } from "@rsvp-site/db/arrival";
 import { batchAll, built, insertChunks, rawBatch } from "@rsvp-site/db/batch";
+import { canSeeDetails } from "@rsvp-site/db/details";
 import { pickable } from "@rsvp-site/db/families";
 import { findOrCreatePeople } from "@rsvp-site/db/people";
 import { isAdmin } from "@rsvp-site/db/roles";
@@ -48,7 +49,7 @@ export const guestsRouter = {
 		.use(withHostEvent)
 		.handler(async ({ context }) => {
 			const row = context.event;
-			const [guests, potluck, designFormat] = await Promise.all([
+			const [listed, potluck, designFormat] = await Promise.all([
 				guestsOf(context.db, row.id, {
 					diets: row.askDietary,
 					texts: true,
@@ -56,6 +57,28 @@ export const guestsRouter = {
 				potluckOf(context.db, row.id),
 				designFormatOf(context.db, row),
 			]);
+			// A draft shows a host only what they typed: putting somebody on a
+			// list nobody has been told about is not a way to read their number
+			// or diets (`canSeeDetails`). Once the invitation has gone out, or a
+			// co-host put them here, the list is the host's to plan from.
+			const guests = listed.map((g) =>
+				canSeeDetails(
+					context.me,
+					{ id: g.userId, createdBy: g.createdBy },
+					g.invitedAt !== null || g.addedBy !== context.me.id,
+				)
+					? g
+					: {
+							...g,
+							phone: null,
+							image: null,
+							diets: [],
+							dietNote: "",
+							dietConfirmed: false,
+							textable: false,
+							canVouch: false,
+						},
+			);
 			const totals = tally(guests);
 			return {
 				now: new Date().toISOString(),
@@ -160,8 +183,14 @@ export const guestsRouter = {
 				),
 			);
 			const added = inserted.flat().length;
-			// Whoever the host chose is in their book from now on.
-			await remember(context.db, context.me.id, unique);
+			// Whoever the host typed is in their book from now on. A pick from a
+			// shared group or family is not: those are lent by name to invite
+			// from, and the book would keep them after the event is gone.
+			const own = await inBook(context.db, context.me.id, [...picked]);
+			await remember(context.db, context.me.id, [
+				...typed.ids,
+				...[...picked].filter((id) => own.has(id)),
+			]);
 			if (input.textsOk) await typed.vouch(context.me.id);
 			return {
 				added,

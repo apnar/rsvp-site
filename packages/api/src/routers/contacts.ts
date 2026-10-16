@@ -5,8 +5,10 @@ import { batchAll, insertChunks } from "@rsvp-site/db/batch";
 import {
 	canEditDetails,
 	canEditReach,
+	canSeeDetails,
 	detailColumns,
 	dietColumns,
+	HIDDEN_DETAILS,
 } from "@rsvp-site/db/details";
 import { dietsOf } from "@rsvp-site/db/diets";
 import {
@@ -25,7 +27,7 @@ import {
 	contactGroupShare,
 } from "@rsvp-site/db/schema/contact";
 import { familyMember } from "@rsvp-site/db/schema/family";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 
@@ -178,6 +180,14 @@ export const contactsRouter = {
 					claimedAt: user.claimedAt,
 					createdBy: user.createdBy,
 					familyMember: familyMember.userId,
+					// Has an invitation from this host reached them (`canSeeDetails`).
+					invited: sql<number>`exists (
+						select 1 from event_guest eg
+						join event_host eh on eh.event_id = eg.event_id
+						where eg.user_id = ${user.id}
+							and eh.user_id = ${context.me.id}
+							and eg.invited_at is not null
+					)`,
 				})
 				.from(contact)
 				.innerJoin(user, eq(user.id, contact.userId))
@@ -216,6 +226,7 @@ export const contactsRouter = {
 					claimedAt,
 					createdBy,
 					familyMember,
+					invited,
 					dietAt: _,
 					...p
 				}) => {
@@ -227,9 +238,14 @@ export const contactsRouter = {
 						createdBy,
 						inFamily: familyMember !== null,
 					};
+					// Typing a known address puts its owner in the book; it must
+					// not also hand over what they told the site about themselves.
+					const shown = canSeeDetails(context.me, target, invited === 1)
+						? p
+						: { ...p, ...HIDDEN_DETAILS };
 					return {
-						...p,
-						diets: dietsOf(p.diets),
+						...shown,
+						diets: dietsOf(shown.diets),
 						// Who could be a co-host: hosts and admins who are still in.
 						canHost: canHost({ role }) && status !== "deactivated",
 						claimed: claimedAt !== null,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canEditDetails, canEditReach, gapsOf } from "./details";
+import { canEditDetails, canEditReach, canSeeDetails, gapsOf } from "./details";
 
 const host = { id: "h", role: "host" };
 const guest = {
@@ -10,6 +10,41 @@ const guest = {
 	claimedAt: null as Date | null,
 	inFamily: false,
 };
+
+describe("canSeeDetails", () => {
+	it("shows a host the people they typed in, and the people they have invited", () => {
+		expect(canSeeDetails(host, { id: "g", createdBy: "h" }, false)).toBe(true);
+		expect(canSeeDetails(host, { id: "g", createdBy: "other" }, true)).toBe(
+			true,
+		);
+	});
+
+	it("hides somebody another host typed and nobody has invited, claimed or not", () => {
+		expect(canSeeDetails(host, { id: "g", createdBy: "other" }, false)).toBe(
+			false,
+		);
+		expect(canSeeDetails(host, { id: "g", createdBy: null }, false)).toBe(
+			false,
+		);
+	});
+
+	it("always shows the person themselves and an admin", () => {
+		expect(
+			canSeeDetails(
+				{ id: "g", role: null },
+				{ id: "g", createdBy: "x" },
+				false,
+			),
+		).toBe(true);
+		expect(
+			canSeeDetails(
+				{ id: "a", role: "admin" },
+				{ id: "g", createdBy: "x" },
+				false,
+			),
+		).toBe(true);
+	});
+});
 
 describe("canEditDetails", () => {
 	it("lets a host edit a guest in their book until the guest signs in", () => {
