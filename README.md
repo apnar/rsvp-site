@@ -347,14 +347,17 @@ a household like "The Parks", is a first name), and also reads a mail client's
 **A person's details are theirs once they sign in.** First and last name,
 mobile number and mailing address live on the `user` row, one copy every host
 sees. Until somebody first signs in (`claimed_at`, stamped by the session
-hook in `packages/auth`), a host who has them in their address book may
-correct their name and address on `/contacts`. A pasted list only fills blanks
+hook in `packages/auth`), the host who typed them in may correct their
+name and address on `/contacts`. A pasted list only fills blanks
 on people who already exist. After the first sign-in only the person (on
 `/account`) and an admin (on `/admin/users`) can change anything. Hosts never
 edit another host's or an admin's record. An address or a number is more than
 a detail ("email me my link" and "text me my link" send a way in there), so
 before the first sign-in only the host who typed the person in may change
-those two (`canEditReach` in `packages/db/src/details.ts`). Changing a real
+anything (`canEditDetails` in `packages/db/src/details.ts`). A host sees
+somebody's number, mailing address, diets and picture only when they typed
+them in or have invited them to an event; everybody else in the book is a
+name and an address. Changing a real
 address replaces both of the person's tokens; changing it to an address that
 is already somebody's moves that host's book entry and groups to that person
 instead.
@@ -669,7 +672,11 @@ they can get it and a text when they can't.
   the number not in `sms_block`, and consent on record (`texts_ok_at`).
   Consent is a host ticking "they expect a text from me" when adding numbers,
   or the person switching texts on. A host's word only fills a blank on a
-  record nobody has claimed, and goes when the number changes.
+  record nobody has claimed, only for a number that host typed, and goes
+  when the number changes. A printed card can give a number but not a yes
+  to texts. "Text me my link" never texts a number a host typed on a record
+  nobody has signed in to; the invitation the host sends is that person's
+  way in.
 - **Guests by phone.** "Pat Smith 301-555-0101" on its own line makes a guest
   with that number. A number already in the host's book is that person.
 - **Links.** Each text carries `/t/<code>` (`text_link`), a 12-character

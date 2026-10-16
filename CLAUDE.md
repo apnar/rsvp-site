@@ -30,10 +30,10 @@ the setup runbooks; this file is the rules for changing the code.
 | What | Value |
 |---|---|
 | Worker | `rsvp-site`, custom domain `rsvp.botch.com` (botch.com zone); `rsvp-site.jlukens.workers.dev` 301s to it |
-| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0027 applied (CI applies new ones on push) |
+| D1 | `rsvp-site-db`, id `d0cd9e71-cbed-41f0-bb6a-667c63bfdeb3`, migrations 0000-0032 applied (CI applies new ones on push) |
 | R2 | `rsvp-site-media` (binding `MEDIA`): cover photos under `covers/`, design images and card pictures under `designs/<event id>/`, profile pictures under `avatars/` |
 | Cron | `0,30 * * * *`: `runEventMail` and `pruneTelnyxEvents` (`apps/web/src/server.ts`) |
-| Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute: per path and IP on password sign-in, resets, password change and the `/link` and `/paper` doors; per IP on `/t/` codes, "email/text me my link" (one shared bucket) and a printed card's contact form; per person on guests inviting friends and giving us their address or number. All of it through `requireUnderLimit` / `callerIp` (`api/src/limits.ts`) or `throttleKey` (`server/throttle.ts`) |
+| Rate limits | `JOIN_LIMITER`, namespace 4207, 5 a minute per IP on the share-link email form; `AUTH_LIMITER`, namespace 4208, 10 a minute: per path and IP on password sign-in, resets, password change and the `/link` and `/paper` doors; per IP on `/t/` codes, "email/text me my link" (one shared bucket) and a printed card's contact form; per IP on `/api/unsubscribe/*`; per person on guests inviting friends, answering (`respond`), giving us their address or number, and on a host's bulk adds (`add:<id>`). Better Auth's own limiter is off (it only runs under `NODE_ENV=production`, which Workers never set). All of it through `requireUnderLimit` / `callerIp` (`api/src/limits.ts`) or `throttleKey` (`server/throttle.ts`) |
 | Secrets | `BETTER_AUTH_SECRET`, `BREVO_WEBHOOK_SECRET`, `BREVO_API_KEY`, `TELNYX_API_KEY` |
 | Vars | `BETTER_AUTH_URL`, `TELNYX_FROM`, `TELNYX_PUBLIC_KEY` (`wrangler.jsonc`) |
 | GitHub | `apnar/rsvp-site`, public; CI secret `CLOUDFLARE_API_TOKEN` is set, so a push to `main` migrates and deploys |
@@ -176,11 +176,16 @@ text links, then the TanStack server entry, plus the `scheduled` handler. A
 Hono app (`apps/web/src/server/app.ts`) is mounted at `/api/*` by the
 catch-all route `apps/web/src/routes/api/$.ts`, so pages and API share an
 origin: no CORS, ordinary same-site cookies. Hono serves `/api/auth/*`
-(Better Auth, with the throttle), `/api/rpc/*` (oRPC), the R2 pictures
+(Better Auth, with the throttle), `/api/rpc/*` (oRPC, after refusing a
+body with no `content-length` or over 6 MB, since oRPC buffers the body
+before any schema or session check), the R2 pictures
 (`/api/covers`, `/api/designs`, `/api/avatars`, names checked by regex,
 immutable caching, `nosniff`), `/api/unsubscribe`, the two webhooks (bodies
 capped at 64 KB by `readCapped` in `server/body.ts` before any signature
-check) and `/api/health`.
+check) and `/api/health`. `withSecurityHeaders` in `server.ts` puts the
+frame, sniff and referrer headers and (over https) HSTS on every Worker
+response; files under `public/` are served by the assets binding first and
+carry none of them.
 
 ### Packages
 
@@ -350,14 +355,18 @@ designer).
   additional user field -- those get base64'd into a browser-readable
   cookie.
 - The `email-link` plugin (`packages/auth/src/link.ts`) checks
-  `status === "deactivated"` itself (it mints its own session, so the admin
-  plugin's ban check never runs), marks the address verified only when the
-  link was emailed (not `via=text`, not a placeholder address), keeps any
-  password, creates the session with no second argument (passing one means
-  "don't remember me", a one-day session), and sets the two-hour
-  `arrived_via` cookie (`arrival.ts`; a forged value only mislabels the
-  forger's own row). Its own `rateLimit` is per isolate and barely counts;
-  `AUTH_LIMITER` in `app.ts` is the real limit.
+  `status === "deactivated"` itself (it mints its own session; the admin
+  plugin's ban check is a `session.create.before` hook in 1.7 and runs
+  too), marks the address verified only when the link was emailed (not
+  `via=text`, not a placeholder address; `via` is forgeable, and nothing
+  gates on the flag), keeps any password, creates the session with no
+  second argument (passing one means "don't remember me", a one-day
+  session), and sets the two-hour `arrived_via` cookie (`arrival.ts`; a
+  forged value only mislabels the forger's own row). A link opened
+  cross-site (`sec-fetch-site`) over another person's session gets a
+  "switch accounts?" page with a same-origin link to itself, not a silent
+  sign-in as the link's owner. `AUTH_LIMITER` in `app.ts` is the only
+  limit on the door: Better Auth's `rateLimit` is off.
 - `safeReturnPath` sanitizes `to` by resolving it as a browser would and
   keeping it only if it stays on the site; don't go back to string checks,
   which the URL parser's quirks (a tab, a backslash) walk straight past.
@@ -371,7 +380,14 @@ designer).
   or number and do the work under `waitUntil`, so a known one is not
   measurably slower.
 - A sign-in token can be replaced (`people.newLink` for admins,
-  `account.signOutEverywhere` for anyone), which also ends every session.
+  `account.signOutEverywhere` for anyone, and every password reset through
+  `onPasswordReset`): `rotateLinkToken` rotates the footer token, deletes
+  the `/t/` codes and the `session` rows in one batch, so nothing goes
+  through `auth.api.revoke*`. Deactivating runs `endSessions` first, then
+  the status write. Better Auth's HTTP endpoints are down to the ones the
+  app calls (`disabledPaths`); `createAuth` refuses to run without a real
+  `BETTER_AUTH_SECRET`, since Better Auth's own default-secret guard is
+  `NODE_ENV`-gated like its limiter.
 
 ### Events, guests and roles
 
@@ -393,12 +409,24 @@ designer).
   NULL RETURNING`) before sending and gives back what nothing reached
   (`releaseGuestClaim`, keyed on the claim's own stamp, so it never hands
   back a concurrent send's rows). Send cannot invite anybody twice; nudges
-  claim `nudged_at` the same way, twelve hours apart.
-- Address book: `contact` (owner_id, user_id). Every path where a host adds
-  people (`guests.add`, `contacts.*`) calls `remember`; a pick by user id
-  must pass `inBook` for the caller, and group membership requires the
-  person to be in the group owner's book. Guest-added friends and link
-  joiners are never remembered.
+  claim `nudged_at` the same way, twelve hours apart. Everything else
+  that sends claims a cooldown stamp in the statement that decides to
+  send: `alertHosts` on `event_guest.alerted_at` (five minutes, so an
+  answer toggled back and forth alerts once), `events.update` on
+  `event.change_notice_at` (ten minutes; the editor reports
+  `noticeHeld`), `contact.add` on `email_ask` per address (ten minutes,
+  pruned by the cron). Add a stamp before adding a send.
+- Address book: `contact` (owner_id, user_id). Every path where a host
+  types people (`guests.add`, `contacts.*`) calls `remember`; a pick by
+  user id must pass `inBook` for the caller, and group membership requires
+  the person to be in the group owner's book. Picks from a shared group or
+  family, guest-added friends and link joiners are never remembered. Being
+  in a book shows a host nothing by itself: `canSeeDetails`
+  (`db/details.ts`) hands a host somebody's number, mailing address,
+  diets and picture only when the host typed them in (`created_by`) or
+  has invited them to one of their events (`invited_at`); `contacts.book`
+  and `guests.list` blank the rest (`HIDDEN_DETAILS`), so a draft is no
+  way to read a stranger's record.
 - Families (`family`, `family_member`; `user_id` is the PK, so one family
   per person): `packages/db/src/families.ts` owns every read of membership
   (`relativesOnEvent`, `relativesOf`, `inAnyFamily`, `isChild`,
@@ -441,8 +469,9 @@ designer).
   the tokens: texted links copy them). A card (`paper.addContact`) fills
   only blanks the host who put its guest on the list could (`FilledBy`'s
   `card` is that host, carried in the claim too): a record nobody has
-  signed in to, that host typed in. Its yes to texts is recorded as that
-  host's.
+  signed in to, that host typed in. A card records no yes to texts (the
+  holder is anybody with the card), and a number it gives is `phone_by`
+  that host, so "text me my link" never sends it a way in.
 - Guests inviting guests: only `source` host/group may (`canInviteOthers`
   in `api/src/guest-invites.ts`), only when the event's `guest_invites` is
   on, up to `guest_invite_limit` each. The cap is on
@@ -502,7 +531,8 @@ designer).
   refuses a new maybe, but one already given stays, still counts, and stays
   on the guest's picker (`offered`).
 - `events.update` sends a change notice only when the event is published,
-  "tell guests" is on, the change `movesGuestFacts`, and email isn't held;
+  "tell guests" is on, the change `movesGuestFacts`, email isn't held, and
+  the ten-minute `change_notice_at` claim wins;
   it nulls the schedule stamps that belonged to a moved date or deadline.
   Paper vs email can't change after sending, nor can the date be cleared.
 - The CSV (`events.exportCsv`) goes through `csvCell`, which prefixes `'`
@@ -624,7 +654,8 @@ decide → claim → send.
   March's missing 2:30 an hour later). Tested; do not "simplify" it to one
   pass. `addDays` works in UTC dates on purpose.
 - Host alerts for each reply are sent inline from `answer()`
-  (`alertHosts`, skipping the replier), awaited, and never fail the answer.
+  (`alertHosts`, skipping the replier), awaited, never fail the answer,
+  and go only when the guest row's `alerted_at` claim wins.
 - A notice about a change already saved (an update, a cancellation) goes
   through `notice()` in `api/src/mail.ts`: a failure is logged and
   reported as `noticeFailed`, never thrown, since thrown it would tell the
@@ -676,12 +707,18 @@ retry would send it twice. Telnyx's `postMessage` follows the same rule.
 - Consent is the host's tick ("they expect a text from me"), the person's
   own switch, or an admin's for them, written only by `sms-status.ts`;
   `texts_ok_by` says whose word it was. A host's word only fills a blank on
-  an unclaimed record; anybody's but the person's own is cleared when the
-  number changes (`updateDetails`). "How we reach you" is saved by
+  an unclaimed record, and only for a number that host typed
+  (`user.phone_by`, stamped by every phone writer; `vouchForTexts` checks
+  it in the UPDATE, and `typedPeople.vouch` only offers the people whose
+  number the paste wrote); anybody's but the person's own is cleared when
+  the number changes (`updateDetails`), and a host's vouching goes with
+  the host when they are erased. "How we reach you" is saved by
   `saveReach` (`api/src/reach-prefs.ts`) for both the account page and the
   admin's editor (`people.setReach`), and drawn by `reach-fields.tsx`.
 - `sms_block` is per number, because STOP is: Telnyx blocks the number
-  across the profile. Only START (`unblockNumber`) lifts a `stop`. Keywords
+  across the profile. A `stop` is recorded only for a number somebody on
+  the site has (in the INSERT), so strangers can't grow the table. Only
+  START (`unblockNumber`) lifts a `stop`. Keywords
   match the whole message only, and YES is deliberately not one. Telnyx
   codes 40300 / 40001 / 40310-11 block as stop / landline / invalid.
 - Text bodies are folded to GSM-7 (`toGsm`): one curly quote would make a
@@ -689,11 +726,15 @@ retry would send it twice. Telnyx's `postMessage` follows the same rule.
   the sign-in text end "Reply STOP to opt out."
 - `text_link` codes are bearer credentials like `link_token`, which they
   copy; `redeemTextLink` requires the copy to match, so `rotateLinkToken`
-  retires them. `/t/<code>` is served in `server.ts` before TanStack
-  (GET only, throttled) and 302s to `/api/auth/link?...&via=text`. Never log
-  one.
+  retires them, and a code over ninety days old opens nothing. `/t/<code>`
+  is served in `server.ts` before TanStack (GET only, throttled) and 302s
+  to `/api/auth/link?...&via=text`. Never log one.
 - Sign-in by text: `textSignIn` texts at most three people per number, ten
-  minutes apart (read from `sms_send`), and checks `sms_block` first.
+  minutes apart, and checks `sms_block` first. It skips anybody with texts
+  off and any number a host typed (`phone_by`) on a record nobody has
+  signed in to: that person's way in is the invitation the host sends.
+  The cooldown is claimed by the UPDATE that stamps `link_sent_at` and
+  picks the people, never checked and then written.
 - `telnyx_event` claims inbound webhook ids so a redelivery is a no-op; the
   cron prunes rows over a week old on every pass.
 - Log phones as their last four digits, never whole (`redactPhone`).
@@ -719,21 +760,23 @@ admin).
   the person's own, written only through `details.ts` and
   `findOrCreatePeople`; `name` is always rewritten beside the pair
   (`nameFor`), since Better Auth and every email read it. `claimed_at` is
-  the first sign-in (the session-create hook): before it a host with them
-  in their book may edit a plain guest's details, after it only they and
-  an admin. `canEditDetails` decides and the UPDATE repeats the condition
+  the first sign-in (the session-create hook): before it the host who
+  typed a plain guest in (`user.created_by`; being in a book proves
+  nothing, since any host can put anybody in theirs by typing an address)
+  may edit their details, after it only they and an admin.
+  `canEditDetails` decides and the UPDATE repeats the condition
   (`editable`), so a sign-in, a role change or a family move between the
   check and the write can't slip through; `details-guards.test.ts` tests
-  the SQL. An address or a number is where sign-in links go, and any host
-  can put anybody in their book by typing an address they know, so
-  changing those two also needs `canEditReach`: the host is the one who
-  typed them in (`user.created_by`). Every write of an address goes
+  the SQL. `canEditReach` is the same rule under the name the pages use
+  for the address and number, where sign-in links go. Every write of an address goes
   through `writeEmail` in `details.ts`; `changeEmail` answers `ok`, `same`,
   `taken` or `refused` and never guesses at merging two people. Pastes only
   fill blanks (`fillBlanks`, `fillPhone`), under the same guards. Phones
   are stored by `normalizePhone` and shown by `formatPhone`.
 - `link_token` and `unsubscribe_token` are stamped at insert by
-  `findOrCreatePeople`, and by the Better Auth hook for rows it makes.
+  `findOrCreatePeople`, and by the Better Auth hook for rows it makes;
+  `rotateLinkToken` replaces both. `/api/unsubscribe/*` is throttled and
+  names the address redacted before anything is done.
 - Workers' per-request (invocation) logs are off in `wrangler.jsonc`:
   sign-in and unsubscribe URLs carry their tokens. Log addresses through
   `redactEmail` (`@rsvp-site/email`) and numbers through `redactPhone`
