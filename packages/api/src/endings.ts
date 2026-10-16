@@ -141,6 +141,15 @@ export async function erasePerson(
 		.where(eq(user.id, userId))
 		.get();
 	await db.batch([
+		// The delete would leave their vouching (`texts_ok_by` is SET NULL)
+		// as consent nobody can attribute. A person's own yes is recorded
+		// with their own id, so this only clears consent given on somebody
+		// else's behalf (a host's tick, an admin's switch), never anyone's
+		// own word; they can say yes again themselves.
+		db
+			.update(user)
+			.set({ textsOkAt: null, textsOkBy: null })
+			.where(and(eq(user.textsOkBy, userId), ne(user.id, userId))),
 		db.delete(user).where(eq(user.id, userId)),
 		...plan.handOff.map((h) =>
 			db

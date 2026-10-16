@@ -377,7 +377,10 @@ type ParseResult =
 
 /** Parse a stored or submitted document, size limit included. */
 export function parseDesign(doc: unknown): ParseResult {
-	if (JSON.stringify(doc).length > LIMITS.bytes) {
+	// An absent document stringifies to undefined, which has no length.
+	const json = JSON.stringify(doc);
+	if (json === undefined) return { ok: false, message: "Nothing to save." };
+	if (json.length > LIMITS.bytes) {
 		return { ok: false, message: "That design is too large to save." };
 	}
 	const parsed = design.safeParse(doc);

@@ -9,7 +9,7 @@ import { createDb, type Db } from "@rsvp-site/db";
 import { logError } from "@rsvp-site/db/errors";
 import { formatPhone } from "@rsvp-site/db/phone";
 import { blockNumber, unblockNumber } from "@rsvp-site/db/sms-status";
-import { escapeHtml, SENDER } from "@rsvp-site/email";
+import { email, SENDER } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import {
 	inboundAction,
@@ -119,14 +119,22 @@ async function forward(
 	const who = people.length > 0 ? people.map((p) => p.name).join(" or ") : "";
 	const shown = formatPhone(from);
 	const subject = `Text from ${who ? `${who}, ` : ""}${shown}`;
-	const said = text.slice(0, 2000);
+	// Through the shared builder, so what the texter typed is escaped and
+	// defused: a `{{ params.key }}` in a text must not become a live Brevo tag.
+	const rendered = email({
+		subject,
+		heading: subject,
+		blocks: [
+			{ kind: "typed", text: text.slice(0, 2000) },
+			{
+				kind: "muted",
+				text: "Replies to this email go nowhere; text them back from your own phone.",
+			},
+		],
+	});
 	const outcome = await getMailer().sendOne(
 		{ email: SENDER.email, name: SENDER.name },
-		{
-			subject,
-			text: `${subject}:\n\n${said}\n\nReplies to this email go nowhere; text them back from your own phone.`,
-			html: `<p><strong>${escapeHtml(subject)}:</strong></p><p style="white-space:pre-wrap">${escapeHtml(said)}</p><p>Replies to this email go nowhere; text them back from your own phone.</p>`,
-		},
+		rendered,
 		{ tags: ["sms-inbound"] },
 	);
 	if (!outcome.ok) console.error("forwarding a text failed", outcome.error);

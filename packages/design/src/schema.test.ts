@@ -39,6 +39,13 @@ const text = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("parseDesign", () => {
+	it("refuses a missing document instead of throwing", () => {
+		expect(parseDesign(undefined)).toEqual({
+			ok: false,
+			message: "Nothing to save.",
+		});
+	});
+
 	it("accepts every template, paper or not, with or without a cover", () => {
 		for (const t of TEMPLATES) {
 			for (const paper of [true, false]) {
