@@ -1,6 +1,5 @@
 import { formatPhone } from "@rsvp-site/db/phone";
 import { canHost } from "@rsvp-site/db/roles";
-import { possessive } from "@rsvp-site/design/placeholders";
 import { Button } from "@rsvp-site/ui/components/button";
 import { Input } from "@rsvp-site/ui/components/input";
 import { Textarea } from "@rsvp-site/ui/components/textarea";
@@ -274,7 +273,7 @@ function BookRow({ person: p, groups }: { person: Person; groups: Group[] }) {
 			onSuccess: (r) => {
 				if (r.moved) {
 					toast.success(
-						`That address is ${possessive(r.name)}, so this entry is theirs now.`,
+						"That address already belongs to somebody, so this entry is theirs now.",
 					);
 				}
 			},

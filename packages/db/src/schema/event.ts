@@ -178,6 +178,13 @@ export const event = sqliteTable(
 		}),
 		dayBeforeAt: integer("day_before_at", { mode: "timestamp_ms" }),
 		digestAt: integer("digest_at", { mode: "timestamp_ms" }),
+		/**
+		 * When a change notice last went to the guests. Claimed by
+		 * `events.update` with a cooldown: a notice is a text and an email to
+		 * everybody coming, and any host on the site can be made a co-host
+		 * without asking, so saves are not a way to send them one per minute.
+		 */
+		changeNoticeAt: integer("change_notice_at", { mode: "timestamp_ms" }),
 		canceledAt: integer("canceled_at", { mode: "timestamp_ms" }),
 
 		createdBy: text("created_by").references(() => user.id, {
@@ -295,6 +302,12 @@ export const eventGuest = sqliteTable(
 		/** How they came to it that first time, written with `viewed_at`. */
 		viewedVia: text("viewed_via", { enum: ARRIVALS }),
 		nudgedAt: integer("nudged_at", { mode: "timestamp_ms" }),
+		/**
+		 * When this guest's answer last alerted the hosts. Claimed by
+		 * `alertHosts` with a cooldown, so changing an answer back and forth
+		 * is not a way to send every host an email and a text per change.
+		 */
+		alertedAt: integer("alerted_at", { mode: "timestamp_ms" }),
 		addedBy: text("added_by").references(() => user.id, {
 			onDelete: "set null",
 		}),

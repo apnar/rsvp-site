@@ -225,6 +225,13 @@
 			"when": 1792160506288,
 			"tag": "0031_phone_by",
 			"breakpoints": true
+		},
+		{
+			"idx": 32,
+			"version": "6",
+			"when": 1792160735891,
+			"tag": "0032_cooldown_stamps",
+			"breakpoints": true
 		}
 	]
 }

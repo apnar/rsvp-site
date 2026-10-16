@@ -9,10 +9,12 @@ import {
 } from "@rsvp-site/db/details";
 import { findPerson } from "@rsvp-site/db/people";
 import { normalizePhone, textablePhone } from "@rsvp-site/db/phone";
+import { emailAsk } from "@rsvp-site/db/schema/email";
 import { alsoByText, setTexts } from "@rsvp-site/db/sms-status";
 import { confirmEmailEmail } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { siteUrl } from "@rsvp-site/env/server";
+import { lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { CLAIM_TTL_MS, readEmailClaim, signEmailClaim } from "./email-claim";
@@ -88,6 +90,15 @@ export async function fillContact(
 	let emailTo: string | null = null;
 	if (input.email) {
 		emailTo = normalizeEmail(input.email);
+		// One link per address per ten minutes, claimed in the INSERT: any
+		// guest holds a session, and this would otherwise mail whatever
+		// address they type, as often as they like.
+		if (!(await claimEmailAsk(db, emailTo, new Date()))) {
+			throw new ORPCError("BAD_REQUEST", {
+				message:
+					"A link went to that address a few minutes ago. Check there, or try again in a bit.",
+			});
+		}
 		const token = await signEmailClaim(secret, {
 			userId,
 			email: emailTo,
@@ -110,6 +121,33 @@ export async function fillContact(
 		}
 	}
 	return { phone, emailTo };
+}
+
+const ASK_COOLDOWN_MS = 10 * 60_000;
+
+/**
+ * Claim the right to mail this address a confirmation link now. Plain
+ * SQL: an upsert that only moves the stamp once the cooldown has passed,
+ * so two requests at once get one send.
+ */
+export async function claimEmailAsk(
+	db: Db,
+	email: string,
+	now: Date,
+): Promise<boolean> {
+	const result = await db.run(sql`
+		insert into email_ask (email, asked_at) values (${email}, ${now.getTime()})
+		on conflict (email) do update set asked_at = excluded.asked_at
+		where email_ask.asked_at < ${now.getTime() - ASK_COOLDOWN_MS}
+	`);
+	return result.meta.changes === 1;
+}
+
+/** Stamps older than a day say nothing; the cron drops them. */
+export async function pruneEmailAsks(db: Db, now: Date): Promise<void> {
+	await db
+		.delete(emailAsk)
+		.where(lt(emailAsk.askedAt, new Date(now.getTime() - 24 * 60 * 60_000)));
 }
 
 /** Where a confirmation link stands, for the page it opens. */

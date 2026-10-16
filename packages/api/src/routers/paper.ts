@@ -88,6 +88,12 @@ export const paperRouter = {
 	respond: publicProcedure
 		.input(tokenInput.merge(answerInput))
 		.handler(async ({ context, input }) => {
+			// As on guests.respond: alertHosts claims a cooldown, this keeps a
+			// card holder's script from trying all night.
+			await requireUnderLimit(
+				context.env.AUTH_LIMITER,
+				`respond:${callerIp(context.headers)}`,
+			);
 			const { access, who } = await paperAccess(context.db, input.token);
 			return answer(context.db, access, who, input, "paper");
 		}),

@@ -15,7 +15,7 @@ import { newToken } from "@rsvp-site/db/tokens";
 import { updateEmail } from "@rsvp-site/email";
 import { siteUrl } from "@rsvp-site/env/server";
 import { updateText } from "@rsvp-site/sms";
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, isNull, lt, notInArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { answersOf, answerWordsInput, toStored } from "../../answer-words";
 import { callOff, deleteEventMedia } from "../../endings";
@@ -55,6 +55,9 @@ const timeSchema = z.iso
 	.nullable();
 
 /** Everything a host can set on the editor. All optional on update. */
+/** How often the guests may be told about a change. */
+const NOTICE_COOLDOWN_MS = 10 * 60_000;
+
 const eventFields = z.object({
 	title: z.string().trim().min(1, "Give it a name.").max(120),
 	hostLine: z.string().trim().max(120),
@@ -216,7 +219,36 @@ export const editorRouter = {
 					? describeChanges(before, after)
 					: [];
 			if (changes.length === 0) {
-				return { ok: true, notified: 0, noticeFailed: false };
+				return {
+					ok: true,
+					notified: 0,
+					noticeFailed: false,
+					noticeHeld: false,
+				};
+			}
+			// A notice is a text and an email to everybody coming. Claimed with
+			// a cooldown on the event, so repeated saves (or a co-host nobody
+			// asked for) cannot send one per save; the change is saved either
+			// way, and the editor says the guests were not told this time.
+			const now = new Date();
+			const claimed = await context.db
+				.update(event)
+				.set({ changeNoticeAt: now })
+				.where(
+					and(
+						eq(event.id, after.id),
+						or(
+							isNull(event.changeNoticeAt),
+							lt(
+								event.changeNoticeAt,
+								new Date(now.getTime() - NOTICE_COOLDOWN_MS),
+							),
+						),
+					),
+				)
+				.run();
+			if (claimed.meta.changes !== 1) {
+				return { ok: true, notified: 0, noticeFailed: false, noticeHeld: true };
 			}
 			const told = await notice(`update ${after.id}`, async () => {
 				const facts = await textFactsFor(context.db, after);
@@ -230,7 +262,7 @@ export const editorRouter = {
 					sentBy: context.me.id,
 				});
 			});
-			return { ok: true, ...told };
+			return { ok: true, ...told, noticeHeld: false };
 		}),
 
 	/**
@@ -279,7 +311,8 @@ export const editorRouter = {
 
 	/**
 	 * Make somebody a co-host by address. They must already be a host: being
-	 * able to run events is an admin's call, not another host's.
+	 * able to run events is an admin's call, not another host's. Answers
+	 * the same either way.
 	 */
 	addCohost: hostProcedure
 		.input(idInput.extend({ email: emailSchema }))
@@ -291,11 +324,11 @@ export const editorRouter = {
 				.from(user)
 				.where(eq(user.email, normalizeEmail(input.email)))
 				.get();
+			// The same answer whether or not the address is a host's: the hosts
+			// list refreshes and shows them if it was, and a different answer
+			// would say which addresses on the site can host.
 			if (!person || person.status === "deactivated" || !canHost(person)) {
-				throw new ORPCError("BAD_REQUEST", {
-					message:
-						"Co-hosts have to be hosts on the site. Ask an admin to make them one.",
-				});
+				return { ok: true };
 			}
 			await context.db
 				.insert(eventHost)

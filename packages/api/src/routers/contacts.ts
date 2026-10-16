@@ -30,7 +30,7 @@ import { familyMember } from "@rsvp-site/db/schema/family";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
-
+import type { Context } from "../context";
 import {
 	CLAIMED,
 	detailsPatch,
@@ -42,6 +42,7 @@ import {
 import { groupBy } from "../events";
 import { adminProcedure, hostProcedure } from "../index";
 import { emailSchema, idSchema, nameSchema } from "../inputs";
+import { requireUnderLimit } from "../limits";
 import { typedPeople } from "../typed-people";
 
 const groupInput = z.object({ groupId: idSchema });
@@ -75,11 +76,14 @@ async function ownGroup(
  * a paper event: an address book is for everybody a host invites.
  */
 async function addToBook(
-	context: { db: Db; me: Pick<Person, "id" | "role"> },
+	context: Pick<Context, "db" | "env"> & { me: Pick<Person, "id" | "role"> },
 	ownerId: string,
 	raw: string,
 	textsOk = false,
 ): Promise<string[]> {
+	// Every new address is an account row with tokens, made on a host's
+	// say-so and never announced; this keeps the rate human.
+	await requireUnderLimit(context.env.AUTH_LIMITER, `add:${context.me.id}`);
 	const typed = await typedPeople(context.db, raw, {
 		source: "host",
 		by: { id: context.me.id, host: !isAdmin(context.me) },
@@ -314,7 +318,7 @@ export const contactsRouter = {
 				input.email,
 				hostOf(context.me),
 			);
-			if (outcome !== "taken") return { moved: false, name: "" };
+			if (outcome !== "taken") return { moved: false };
 			const [other] = await findOrCreatePeople(
 				context.db,
 				[input.email],
@@ -332,7 +336,8 @@ export const contactsRouter = {
 				});
 			}
 			await repointEntry(context.db, context.me.id, input.userId, other.id);
-			return { moved: true, name: other.name };
+			// No name: the book refetch shows it if the host may see them.
+			return { moved: true };
 		}),
 
 	/**

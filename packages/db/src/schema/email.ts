@@ -63,3 +63,14 @@ export const emailSend = sqliteTable(
 	},
 	(table) => [index("email_send_event_idx").on(table.eventId)],
 );
+
+/**
+ * The last time somebody asked for a confirmation link at an address (a
+ * guest giving theirs after answering, `contact.add`). Claimed with a
+ * cooldown per address, so a session is not a way to send a stranger's
+ * inbox a branded email a minute. Pruned by the cron once a day old.
+ */
+export const emailAsk = sqliteTable("email_ask", {
+	email: text("email").primaryKey(),
+	askedAt: integer("asked_at", { mode: "timestamp_ms" }).notNull(),
+});

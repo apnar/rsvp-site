@@ -132,6 +132,8 @@ export const guestsRouter = {
 		.use(withLiveHostEvent)
 		.handler(async ({ context, input }) => {
 			const row = context.event;
+			// As on the book: new addresses are accounts, kept to a human rate.
+			await requireUnderLimit(context.env.AUTH_LIMITER, `add:${context.me.id}`);
 			// Picks only count from what the caller can see -- their book,
 			// families they can see, their own or shared groups -- so a guessed
 			// user id adds nobody, and nobody deactivated is added.
@@ -298,6 +300,12 @@ export const guestsRouter = {
 	respond: personProcedure
 		.input(idInput.merge(answerInput))
 		.handler(async ({ context, input }) => {
+			// Each answer may alert the hosts; the claim in alertHosts is the
+			// real bound, this keeps a script from even trying all night.
+			await requireUnderLimit(
+				context.env.AUTH_LIMITER,
+				`respond:${context.me.id}`,
+			);
 			const access = await accessTo(context.db, context.me, input.eventId);
 			return answer(
 				context.db,
@@ -443,16 +451,13 @@ export const guestsRouter = {
 				"guest",
 				{ id: context.me.id, host: true },
 			);
-			if (!friend || friend.status === "deactivated") {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "That address can't be invited.",
-				});
-			}
-			if (friend.id === context.me.id) {
-				throw new ORPCError("BAD_REQUEST", {
-					message: "You're already on the list.",
-				});
-			}
+			// One refusal for a deactivated account, their own address and an
+			// address already on the list: which it was would say who is here.
+			const refused = new ORPCError("BAD_REQUEST", {
+				message: "That address can't be invited to this one.",
+			});
+			if (!friend || friend.status === "deactivated") throw refused;
+			if (friend.id === context.me.id) throw refused;
 			const id = crypto.randomUUID();
 			// Plain names, not drizzle columns: see the potluck claim in `answers.ts`. The
 			// counter moves only if the friend's row went in, and D1 runs a
@@ -473,21 +478,16 @@ export const guestsRouter = {
 				`),
 			]);
 			if (inserted?.meta.changes !== 1) {
-				const already = await context.db
-					.select({ id: eventGuest.id })
+				const mine = await context.db
+					.select({ invitesSent: eventGuest.invitesSent })
 					.from(eventGuest)
-					.where(
-						and(
-							eq(eventGuest.eventId, row.id),
-							eq(eventGuest.userId, friend.id),
-						),
-					)
+					.where(eq(eventGuest.id, guest.id))
 					.get();
-				throw new ORPCError("BAD_REQUEST", {
-					message: already
-						? "They're already on the list."
-						: `You've invited ${row.guestInviteLimit}, the most this party allows.`,
-				});
+				throw (mine?.invitesSent ?? 0) >= row.guestInviteLimit
+					? new ORPCError("BAD_REQUEST", {
+							message: `You've invited ${row.guestInviteLimit}, the most this party allows.`,
+						})
+					: refused;
 			}
 			const sent = await sendInvites(context.db, row, context.me.id, {
 				onlyGuestIds: [id],

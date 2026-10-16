@@ -69,7 +69,7 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 			);
 		}
 		let id = eventId ?? createdId.current ?? undefined;
-		let told = { notified: 0, noticeFailed: false };
+		let told = { notified: 0, noticeFailed: false, noticeHeld: false };
 		if (!id) {
 			id = (await client.events.create(fields)).id;
 			createdId.current = id;
@@ -123,6 +123,10 @@ export function useSaveEvent(loaded: Loaded | undefined, draft: EventDraft) {
 		}
 		if (told.noticeFailed) {
 			toast.warning("Saved, but the message about the change didn't go.");
+		} else if (told.noticeHeld) {
+			toast.warning(
+				"Saved. Guests were told about a change a few minutes ago, so not about this one; save again later to tell them.",
+			);
 		} else if (told.notified > 0) {
 			toast.success(`Told ${plural(told.notified, "guest")} about the change.`);
 		}

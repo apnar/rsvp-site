@@ -39,7 +39,7 @@ import { partyLabel } from "@rsvp-site/email/party";
 import { getMailer } from "@rsvp-site/email/worker";
 import { siteUrl } from "@rsvp-site/env/server";
 import { hostAlertText, inviteText } from "@rsvp-site/sms";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 
 import { answersOf } from "./answer-words";
 import { channelsFor, type Purpose, type Via, viaOf } from "./channels";
@@ -493,20 +493,48 @@ export async function releaseGuestClaim(
 	}
 }
 
+/** How often one guest's changing answer may alert the hosts. */
+const ALERT_COOLDOWN_MS = 5 * 60_000;
+
 /**
  * One reply, straight to the event's hosts, when they asked for each one.
  * Awaited by the RSVP mutation: nothing plumbs an ExecutionContext through
  * oRPC to defer it, and one small send is quick. A failure is logged, not
  * thrown -- the guest's answer is saved either way.
+ *
+ * Claimed on the guest's row first (`alerted_at`, like a nudge): each
+ * alert is an email and a text to every host, and an answer can be
+ * changed as fast as a script likes. Within the cooldown the change is
+ * saved and shown on the list, and no alert goes.
  */
 export async function alertHosts(
 	db: Db,
 	row: EventRow,
+	guestId: string,
 	reply: AlertReply,
 	replierId: string,
 ): Promise<void> {
 	if (row.hostAlerts !== "each") return;
 	try {
+		const now = new Date();
+		const claim = await db
+			.update(eventGuest)
+			.set({ alertedAt: now })
+			.where(
+				and(
+					eq(eventGuest.id, guestId),
+					eq(eventGuest.eventId, row.id),
+					or(
+						isNull(eventGuest.alertedAt),
+						lt(
+							eventGuest.alertedAt,
+							new Date(now.getTime() - ALERT_COOLDOWN_MS),
+						),
+					),
+				),
+			)
+			.run();
+		if (claim.meta.changes !== 1) return;
 		const [allHostIds, counts] = await Promise.all([
 			hostIdsOf(db, row.id),
 			guestCountsOf(db, row.id),

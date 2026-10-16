@@ -203,6 +203,7 @@ export async function answer(
 		await alertHosts(
 			db,
 			row,
+			guest.id,
 			{
 				name: who.name,
 				response: input.response,

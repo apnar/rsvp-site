@@ -1,3 +1,4 @@
+import { pruneEmailAsks } from "@rsvp-site/api/contact-ask";
 import { runEventMail } from "@rsvp-site/api/jobs/event-mail";
 import { callerIp } from "@rsvp-site/api/limits";
 import { pruneTelnyxEvents } from "@rsvp-site/api/texting";
@@ -102,6 +103,11 @@ export default {
 		ctx.waitUntil(
 			pruneTelnyxEvents(db, now).catch((error) =>
 				logError("telnyx event prune failed", error),
+			),
+		);
+		ctx.waitUntil(
+			pruneEmailAsks(db, now).catch((error) =>
+				logError("email ask prune failed", error),
 			),
 		);
 		ctx.waitUntil(
