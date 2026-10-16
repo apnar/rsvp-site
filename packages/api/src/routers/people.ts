@@ -1,6 +1,5 @@
 import { waitUntil } from "cloudflare:workers";
 import { ORPCError } from "@orpc/server";
-import { createAuth } from "@rsvp-site/auth";
 import type { Db } from "@rsvp-site/db";
 import { logError } from "@rsvp-site/db/errors";
 import { splitName } from "@rsvp-site/db/names";
@@ -15,7 +14,8 @@ import { ROLES, user } from "@rsvp-site/db/schema/auth";
 import { eventGuest, eventHost } from "@rsvp-site/db/schema/event";
 import { smsBlock } from "@rsvp-site/db/schema/sms";
 import { deactivate, reactivate, setRole } from "@rsvp-site/db/status";
-import { rotateLinkToken } from "@rsvp-site/db/tokens";
+import { endSessions, rotateLinkToken } from "@rsvp-site/db/tokens";
+import { scrubEmails } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { count, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -227,34 +227,34 @@ export const peopleRouter = {
 			}
 			const outcome = await sendWelcome(context.db, person.id, person);
 			if (!outcome.ok) {
+				// Brevo's body echoes the address it refused; the message ends
+				// up in a log line.
 				throw new ORPCError("INTERNAL_SERVER_ERROR", {
-					message: `Brevo said no: ${outcome.error}`,
+					message: `Brevo said no: ${scrubEmails(outcome.error)}`,
 				});
 			}
 			return { ok: true, dryRun: getMailer().dryRun };
 		}),
 
 	/**
-	 * Replace somebody's sign-in token and end their sessions: every link
-	 * already emailed to them stops working. For a leaked or forwarded
-	 * email. They get back in with a new link (`sendLink`). Says nothing of
-	 * the token itself.
+	 * Replace somebody's sign-in token and end their sessions, in one batch:
+	 * every link already emailed to them stops working. For a leaked or
+	 * forwarded email. They get back in with a new link (`sendLink`). Says
+	 * nothing of the token itself.
 	 */
 	newLink: adminProcedure
 		.input(z.object({ userId: idSchema }))
 		.handler(async ({ context, input }) => {
 			await requirePerson(context.db, input.userId);
 			await rotateLinkToken(context.db, input.userId);
-			await createAuth().api.revokeUserSessions({
-				body: { userId: input.userId },
-				headers: context.headers,
-			});
 			return { ok: true };
 		}),
 
 	/**
 	 * Out: no email of any kind, no way in, every session killed. The only
 	 * thing that sets Better Auth's `banned`, which closes the password door.
+	 * The sessions go first: if the status write then fails, what is left is
+	 * an active person signed out, not a deactivated one still signed in.
 	 */
 	deactivate: adminProcedure
 		.input(z.object({ userId: idSchema, reason: reasonSchema }))
@@ -265,11 +265,8 @@ export const peopleRouter = {
 				});
 			}
 			await requirePerson(context.db, input.userId);
+			await endSessions(context.db, input.userId);
 			await deactivate(context.db, input);
-			await createAuth().api.revokeUserSessions({
-				body: { userId: input.userId },
-				headers: context.headers,
-			});
 			return { ok: true };
 		}),
 

@@ -28,9 +28,9 @@ const entry = createServerEntry({
 		}
 		const code = /^\/t\/([0-9A-Za-z]{12})\/?$/.exec(url.pathname)?.[1];
 		if (code && request.method === "GET") {
-			return withSecurityHeaders(await textLink(request, code));
+			return withSecurityHeaders(await textLink(request, code), url);
 		}
-		return withSecurityHeaders(await handler.fetch(request, requestOpts));
+		return withSecurityHeaders(await handler.fetch(request, requestOpts), url);
 	},
 });
 
@@ -65,14 +65,25 @@ async function textLink(request: Request, code: string): Promise<Response> {
 /**
  * Nothing here is meant to be framed (the RSVP buttons and the admin pages
  * would be clickjacking bait), sniffed into another type, or announced in
- * a Referer to other sites.
+ * a Referer to other sites. Over https the browser is also told to stop
+ * trying http for a year: a sign-in link typed or pasted without the
+ * scheme would otherwise go out in clear once before the redirect. Only on
+ * https, since browsers ignore the header on http and the dev server is
+ * http. Files under public/ are served by the assets binding before this
+ * Worker runs and carry none of these.
  */
-function withSecurityHeaders(response: Response): Response {
+function withSecurityHeaders(response: Response, url: URL): Response {
 	const out = new Response(response.body, response);
 	out.headers.set("x-frame-options", "DENY");
 	out.headers.set("content-security-policy", "frame-ancestors 'none'");
 	out.headers.set("x-content-type-options", "nosniff");
 	out.headers.set("referrer-policy", "same-origin");
+	if (url.protocol === "https:") {
+		out.headers.set(
+			"strict-transport-security",
+			"max-age=31536000; includeSubDomains",
+		);
+	}
 	return out;
 }
 

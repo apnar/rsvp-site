@@ -5,6 +5,7 @@ import { user } from "@rsvp-site/db/schema/auth";
 import { emailSend } from "@rsvp-site/db/schema/email";
 import { event } from "@rsvp-site/db/schema/event";
 import { smsSend } from "@rsvp-site/db/schema/sms";
+import { scrubEmails } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
 import { describeCode } from "@rsvp-site/sms";
 import { getTexter, textingFrom } from "@rsvp-site/sms/worker";
@@ -118,8 +119,10 @@ export const mailRouter = {
 					},
 				);
 				if (!outcome.ok) {
+					// Brevo's body echoes the address it refused; the message ends
+					// up in a log line.
 					throw new ORPCError("INTERNAL_SERVER_ERROR", {
-						message: `Brevo said no: ${outcome.error}`,
+						message: `Brevo said no: ${scrubEmails(outcome.error)}`,
 					});
 				}
 				return {

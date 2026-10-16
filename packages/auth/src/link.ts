@@ -5,11 +5,44 @@ import {
 	LINK_ARRIVALS,
 } from "@rsvp-site/db/arrival";
 import { findPersonByLinkToken } from "@rsvp-site/db/tokens";
-import { safeReturnPath } from "@rsvp-site/email";
+import { escapeHtml, safeReturnPath } from "@rsvp-site/email";
 import type { BetterAuthPlugin } from "better-auth";
-import { createAuthEndpoint } from "better-auth/api";
+import { createAuthEndpoint, getSessionFromCtx } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import * as z from "zod";
+
+/**
+ * The page shown instead of signing somebody in over a session they already
+ * hold (see the endpoint). Plain HTML with nothing but the two names and a
+ * link back to this same URL: no script, no new parameter, nothing an
+ * attacker could add to skip it. Not cached, because it names people.
+ */
+function switchPage(input: {
+	linkName: string;
+	currentName: string;
+	href: string;
+}): Response {
+	const body = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Switch accounts?</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem;line-height:1.5;">
+<h1 style="font-size:1.25rem;">Switch accounts?</h1>
+<p>This link signs you in as <strong>${escapeHtml(input.linkName)}</strong>. You're currently signed in as <strong>${escapeHtml(input.currentName)}</strong>.</p>
+<p><a href="${escapeHtml(input.href)}">Continue as ${escapeHtml(input.linkName)}</a></p>
+</body>
+</html>`;
+	return new Response(body, {
+		status: 200,
+		headers: {
+			"content-type": "text/html; charset=utf-8",
+			"cache-control": "no-store",
+		},
+	});
+}
 
 /**
  * Sign-in by link. Every link we email somebody carries their `link_token`;
@@ -52,6 +85,33 @@ export function emailLink({ db }: { db: Db }) {
 					// the party.
 					if (person.status === "deactivated") {
 						throw ctx.redirect(`${site}/login?error=revoked`);
+					}
+
+					// Login CSRF: anybody with an account could put their own link
+					// on another site, and whoever followed it would be signed in
+					// as them without noticing, then answer or type an address into
+					// the attacker's account. A link opened from a mail client
+					// arrives with no session, or the reader's own, and goes
+					// straight through; one that arrives cross-site over somebody
+					// else's session gets a page that says so and a same-origin
+					// link to this very URL, which the browser then sends as
+					// same-origin. Only the lookup is done here: the current
+					// session is neither refreshed nor touched.
+					if (ctx.headers?.get("sec-fetch-site") === "cross-site") {
+						const current = await getSessionFromCtx(ctx, {
+							disableRefresh: true,
+						});
+						if (current && current.user.id !== person.id) {
+							const here = new URL(`${ctx.context.baseURL}/link`);
+							here.searchParams.set("k", ctx.query.k);
+							if (ctx.query.to) here.searchParams.set("to", ctx.query.to);
+							if (ctx.query.via) here.searchParams.set("via", ctx.query.via);
+							return switchPage({
+								linkName: person.name,
+								currentName: current.user.name,
+								href: here.toString(),
+							});
+						}
 					}
 
 					// The token proved who they are; the session needs Better
@@ -113,9 +173,9 @@ export function emailLink({ db }: { db: Db }) {
 				},
 			),
 		},
-		rateLimit: [
-			{ pathMatcher: (path: string) => path === "/link", window: 60, max: 10 },
-			{ pathMatcher: (path: string) => path === "/paper", window: 60, max: 10 },
-		],
+		// No `rateLimit` entry: Better Auth's limiter is switched off in
+		// createAuth (it would only run under NODE_ENV=production, and per
+		// isolate at that). Both doors are throttled by AUTH_LIMITER in
+		// apps/web/src/server/app.ts, which is the only limit on them.
 	} satisfies BetterAuthPlugin;
 }

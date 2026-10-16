@@ -84,12 +84,12 @@ export const accountRouter = {
 	/**
 	 * Lock everybody else out of this account: the sign-in token in every
 	 * email already sent stops working and every session, this one included,
-	 * ends. For a forwarded email or a lost phone. The caller signs back in
-	 * with a fresh link, so the page must send them to the login screen.
+	 * ends, all in `rotateLinkToken`'s one batch. For a forwarded email or a
+	 * lost phone. The caller signs back in with a fresh link, so the page
+	 * must send them to the login screen.
 	 */
 	signOutEverywhere: personProcedure.handler(async ({ context }) => {
 		await rotateLinkToken(context.db, context.me.id);
-		await createAuth().api.revokeSessions({ headers: context.headers });
 		return { ok: true };
 	}),
 

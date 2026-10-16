@@ -11,6 +11,7 @@ import {
 	layout,
 	muted,
 	paraHtml,
+	redactEmail,
 	SITE_LABEL,
 } from "@rsvp-site/email";
 import { getMailer } from "@rsvp-site/email/worker";
@@ -72,11 +73,16 @@ unsubscribe.get("/:token", async (c) => {
 		);
 	}
 	const base = `/api/unsubscribe/${token}`;
+	// Before anything is done, the page only hints at the address: the token
+	// is in every email's footer, and a forwarded message or a mail log must
+	// not turn into a lookup of whose address it is. The person who got the
+	// email knows which one it was.
+	const who = escapeHtml(redactEmail(person.email));
 	if (person.unsubscribedAt) {
 		return html(
 			page({
 				heading: "You're already unsubscribed.",
-				body: `${escapeHtml(person.email)} gets no email from ${SITE_LABEL}. Want invitations by email again?`,
+				body: `${who} gets no email from ${SITE_LABEL}. Want invitations by email again?`,
 				formHtml: button(`${base}/back`, "Email me again"),
 				home,
 			}),
@@ -85,7 +91,7 @@ unsubscribe.get("/:token", async (c) => {
 	return html(
 		page({
 			heading: "No more email?",
-			body: `${escapeHtml(person.email)} will stop getting invitations and reminders by email. Your account stays, and anything you're invited to still shows up on the site.`,
+			body: `${who} will stop getting invitations and reminders by email. Your account stays, and anything you're invited to still shows up on the site.`,
 			formHtml: button(base, "Unsubscribe"),
 			home,
 		}),
@@ -113,7 +119,7 @@ unsubscribe.post("/:token", async (c) => {
 	return html(
 		page({
 			heading: "Unsubscribed.",
-			body: `${escapeHtml(person.email)} won't get email from ${SITE_LABEL}. Changed your mind? One tap undoes it.`,
+			body: `${escapeHtml(redactEmail(person.email))} won't get email from ${SITE_LABEL}. Changed your mind? One tap undoes it.`,
 			formHtml: button(`/api/unsubscribe/${token}/back`, "Email me again"),
 			home,
 		}),
@@ -142,7 +148,7 @@ unsubscribe.post("/:token/back", async (c) => {
 	return html(
 		page({
 			heading: "You're back on.",
-			body: `${escapeHtml(person.email)} will get invitations by email again.`,
+			body: `${escapeHtml(redactEmail(person.email))} will get invitations by email again.`,
 			home,
 		}),
 	);

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 
 import { inChunks, insertChunks, mapChunks } from "./batch";
 import type { Db } from "./index";
@@ -85,13 +85,28 @@ export async function textLinksFor(
 }
 
 /**
+ * How long a `/t/` code works. A text sits on a phone for good, and the
+ * code in it is a bearer credential nobody can revoke without replacing the
+ * person's sign-in link; an old phone's backups should not open the account
+ * years later. Ninety days covers every event's texts, invitation to
+ * day-before.
+ */
+export const TEXT_LINK_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** The oldest `created_at` a code may have and still be redeemed at `now`. */
+export function textLinkCutoff(now: Date): Date {
+	return new Date(now.getTime() - TEXT_LINK_MAX_AGE_MS);
+}
+
+/**
  * What a `/t/` code opens: the person's current sign-in token and the
- * path, or null when the code is unknown or was minted under a token that
- * has since been replaced.
+ * path, or null when the code is unknown, was minted under a token that
+ * has since been replaced, or is older than `TEXT_LINK_MAX_AGE_MS`.
  */
 export async function redeemTextLink(
 	db: Db,
 	code: string,
+	now = new Date(),
 ): Promise<{ linkToken: string; path: string } | null> {
 	if (!isCode(code)) return null;
 	const row = await db
@@ -101,7 +116,9 @@ export async function redeemTextLink(
 			user,
 			and(eq(user.id, textLink.userId), eq(user.linkToken, textLink.linkToken)),
 		)
-		.where(eq(textLink.code, code))
+		.where(
+			and(eq(textLink.code, code), gt(textLink.createdAt, textLinkCutoff(now))),
+		)
 		.get();
 	return row?.linkToken ? { linkToken: row.linkToken, path: row.path } : null;
 }

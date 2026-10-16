@@ -52,14 +52,18 @@ app.onError((error, c) => {
 
 /**
  * The doors somebody could knock on all night: guessing passwords, mailing
- * resets to strangers, trying sign-in keys. Better Auth limits these too,
- * but in memory, and every Worker isolate has its own.
+ * resets to strangers, trying sign-in keys. Better Auth's own limiter is
+ * off (`rateLimit` in packages/auth: it would only run under
+ * NODE_ENV=production, which Workers never set, and per isolate at that),
+ * so this is the only limit on them. `/verify-password` is 404 through
+ * `disabledPaths` as well; it is here in case that list ever shrinks.
  */
 const THROTTLED = new Set([
 	"/api/auth/sign-in/email",
 	"/api/auth/request-password-reset",
 	"/api/auth/reset-password",
 	"/api/auth/change-password",
+	"/api/auth/verify-password",
 	"/api/auth/link",
 	"/api/auth/paper",
 ]);
@@ -78,7 +82,26 @@ app.on(["GET", "POST"], "/auth/*", async (c) => {
 	return createAuth().handler(c.req.raw);
 });
 
+/**
+ * The biggest body a procedure legitimately takes: a 5 MB picture
+ * (`imageFile` in packages/api media.ts) plus its fields. oRPC buffers the
+ * whole body before any schema's `.max()` or the session check sees it, so
+ * the declared length is the one thing that can refuse an oversize, or an
+ * unsized stream, before it is read. Browsers always set content-length
+ * on a fetch with a string or FormData body, so the client is unaffected.
+ */
+const MAX_RPC_BODY = 6 * 1024 * 1024;
+
 app.all("/rpc/*", async (c, next) => {
+	if (["POST", "PUT", "PATCH"].includes(c.req.method)) {
+		const declared = c.req.header("content-length");
+		if (declared === undefined || !/^\d+$/.test(declared)) {
+			return c.text("Length required.", 411);
+		}
+		if (Number(declared) > MAX_RPC_BODY) {
+			return c.text("Too big.", 413);
+		}
+	}
 	const result = await rpcHandler.handle(c.req.raw, {
 		prefix: "/api/rpc",
 		context: await createContext({ req: c.req.raw }),
@@ -139,6 +162,18 @@ app.get("/avatars/:name", async (c) => {
 	return media(`avatars/${name}`, c.req.header("if-none-match"));
 });
 
+// A footer token is a credential of sorts (it switches somebody's email
+// off), and the page names its owner, so guessing at them is throttled
+// like the sign-in doors. One bucket per caller for the GET and both POSTs.
+app.use("/unsubscribe/*", async (c, next) => {
+	const { success } = await env.AUTH_LIMITER.limit({
+		key: `unsubscribe:${callerIp(c.req.raw.headers)}`,
+	});
+	if (!success) {
+		return c.text("Too many tries. Wait a minute and try again.", 429);
+	}
+	await next();
+});
 app.route("/unsubscribe", unsubscribe);
 app.route("/brevo/webhook", brevoWebhook);
 app.route("/telnyx/webhook", telnyxWebhook);

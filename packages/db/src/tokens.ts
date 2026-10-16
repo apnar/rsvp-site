@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import type { Db } from "./index";
-import { user } from "./schema/auth";
+import { session, user } from "./schema/auth";
 import { textLink } from "./schema/sms";
 
 /** A fresh token: 32 hex characters, unguessable. */
@@ -78,23 +78,41 @@ export async function stampTokens(db: Db, userId: string): Promise<void> {
 }
 
 /**
- * Replace the sign-in token. It sits in every list email, so a forwarded
- * message or a mail log is a way in until it changes; every link already
- * sent stops working. The caller revokes the person's sessions too, or the
- * old token would only be dead for the next sign-in.
+ * Lock everybody who holds this person's credentials out: a fresh sign-in
+ * token and a fresh footer token, every `/t/` code gone, every session
+ * ended. The sign-in token sits in every list email, so a forwarded message
+ * or a mail log is a way in until it changes; the footer token is in the
+ * same emails and would still unsubscribe them after the rest was retired.
+ *
+ * One batch, atomic on D1. The sessions used to be revoked by the caller
+ * afterwards through Better Auth, which left a window where the second
+ * step failing kept somebody signed in on a token that was already dead.
+ * A `/t/` code copies the token, and `redeemTextLink` would refuse a stale
+ * one anyway, but a dead bearer credential has no business sitting in the
+ * table.
  */
 export async function rotateLinkToken(
 	db: Db,
 	userId: string,
 ): Promise<boolean> {
-	// One batch, so a code never outlives the token it copies: `redeemTextLink`
-	// would refuse it anyway, but a dead bearer credential has no business
-	// sitting in the table.
 	const [result] = await db.batch([
-		db.update(user).set({ linkToken: newToken() }).where(eq(user.id, userId)),
+		db
+			.update(user)
+			.set({ linkToken: newToken(), unsubscribeToken: newToken() })
+			.where(eq(user.id, userId)),
 		db.delete(textLink).where(eq(textLink.userId, userId)),
+		db.delete(session).where(eq(session.userId, userId)),
 	]);
 	return result.meta.changes === 1;
+}
+
+/**
+ * End every session this person has, on its own. For a deactivation, which
+ * writes the status through `status.ts`: run first, so if the status write
+ * then fails the person is still active rather than out with live sessions.
+ */
+export async function endSessions(db: Db, userId: string): Promise<void> {
+	await db.delete(session).where(eq(session.userId, userId));
 }
 
 /** Who a sign-in link belongs to. Null when the token means nothing. */
